@@ -1,0 +1,37 @@
+name: Build Android APK
+
+# این فایل به‌صورت خودکار APK می‌سازه
+on:
+  # وقتی فایل‌ها رو آپلود/تغییر بدید، خودش اجرا می‌شه
+  push:
+    branches: [ main, master ]
+  # می‌تونید دستی هم اجرا کنید
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ساخت APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # مرحله ۱: گرفتن کد
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # مرحله ۲: نصب پیش‌نیازها
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev build-essential ccache
+          pip install buildozer cython==0.29.36
+
+      # مرحله ۳: ساخت APK (حدود ۱۵-۳۰ دقیقه)
+      - name: Build with Buildozer
+        run: buildozer android debug
+
+      # مرحله ۴: آماده کردن فایل برای دانلود
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tapgame-apk
+          path: bin/*.apk
