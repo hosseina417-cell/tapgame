@@ -1,9 +1,9 @@
 [app]
 
 # نام و مشخصات برنامه
-title = شکار هدف
-package.name = tapgame
-package.domain = org.mygame
+title = اسکنر کریپتو و سیگنال
+package.name = cryptoscanner
+package.domain = org.crypto
 
 # کد منبع (فایل اصلی)
 source.dir = .
@@ -18,7 +18,7 @@ requirements = python3,kivy
 # تنظیمات نمایش
 orientation = portrait
 
-# آیکون و تصویر بارگذاری (اختیاری - فعلاً خالی)
+# آیکون و تصویر بارگذاری (اختیاری)
 # icon.filename = icon.png
 # presplash.filename = presplash.png
 
