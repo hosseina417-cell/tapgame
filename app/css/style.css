@@ -1,0 +1,402 @@
+/* ============================================================
+ * اسکنر کریپتو — استایل تیره (RTL)
+ * ============================================================ */
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('../fonts/Vazirmatn-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('../fonts/Vazirmatn-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  --bg: #0b1220;
+  --bg2: #101a2e;
+  --card: #131c2e;
+  --card2: #1a2540;
+  --border: #223052;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --green: #22c55e;
+  --red: #ef4444;
+  --amber: #f59e0b;
+  --blue: #38bdf8;
+  --purple: #a78bfa;
+  --radius: 14px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+  font-size: 15px;
+  overscroll-behavior: none;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding-bottom: 66px; /* فضای نوار پایین */
+}
+
+/* ---------- هدر ---------- */
+header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  padding-top: calc(12px + env(safe-area-inset-top));
+  background: rgba(11, 18, 32, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+.header-title { font-weight: 700; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+.header-status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #64748b; display: inline-block; }
+.dot.online { background: var(--green); box-shadow: 0 0 8px rgba(34,197,94,.6); }
+.dot.offline { background: var(--red); box-shadow: 0 0 8px rgba(239,68,68,.6); }
+.dot.loading { background: var(--blue); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* نمودار تعاملی */
+.chart { touch-action: none; }
+.chart-overlay {
+  position: absolute;
+  top: 6px; right: 62px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 10.5px;
+  color: var(--muted);
+  display: flex;
+  gap: 8px;
+  direction: ltr;
+  pointer-events: none;
+  z-index: 5;
+  max-width: 90%;
+  flex-wrap: wrap;
+}
+
+/* ---------- ناوبری پایین ---------- */
+nav {
+  position: fixed;
+  bottom: 0; right: 0; left: 0;
+  display: flex;
+  background: rgba(16, 26, 46, 0.97);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 50;
+}
+.nav-btn {
+  flex: 1;
+  padding: 12px 4px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color .15s;
+}
+.nav-btn.active { color: var(--blue); font-weight: 700; }
+
+/* ---------- اجزای عمومی ---------- */
+main { flex: 1; padding: 12px; }
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.panel-title { font-weight: 700; font-size: 15px; margin-bottom: 10px; color: var(--text); }
+
+.badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.badge-buy { background: rgba(34,197,94,.16); color: var(--green); border: 1px solid rgba(34,197,94,.4); }
+.badge-sell { background: rgba(239,68,68,.16); color: var(--red); border: 1px solid rgba(239,68,68,.4); }
+.badge-neutral { background: rgba(148,163,184,.14); color: var(--muted); border: 1px solid rgba(148,163,184,.35); }
+.badge-pump { background: rgba(245,158,11,.16); color: var(--amber); border: 1px solid rgba(245,158,11,.45); }
+.badge-dump { background: rgba(168,85,247,.16); color: var(--purple); border: 1px solid rgba(168,85,247,.45); }
+.badge-watch { background: rgba(56,189,248,.14); color: var(--blue); border: 1px solid rgba(56,189,248,.4); }
+
+.btn {
+  background: var(--blue);
+  color: #062033;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.btn-danger { background: var(--red); color: #fff; }
+.btn-row { display: flex; gap: 10px; margin-top: 14px; }
+
+.empty { color: var(--muted); text-align: center; padding: 24px 8px; font-size: 13.5px; }
+.err-msg { color: var(--red); font-size: 12px; margin: 8px 0; direction: ltr; }
+.disclaimer {
+  color: var(--muted); font-size: 11.5px; text-align: center;
+  padding: 10px; line-height: 1.8;
+}
+
+/* ---------- صفحه بازار ---------- */
+.search-wrap { margin-bottom: 10px; }
+.search {
+  width: 100%;
+  padding: 11px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+}
+.search:focus { border-color: var(--blue); }
+
+.coin-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: transform .1s;
+}
+.coin-row:active { transform: scale(0.985); }
+.coin-img { width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0; background: var(--card2); }
+.coin-img-ph {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--blue); font-weight: 700; font-size: 15px;
+}
+.coin-main { flex: 1; min-width: 0; }
+.coin-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coin-sym { color: var(--muted); font-size: 11.5px; direction: ltr; text-align: right; }
+.coin-price { font-weight: 700; font-size: 14px; direction: ltr; text-align: left; }
+.coin-price-val { font-size: 14px; }
+.sig-cell { min-width: 58px; display: flex; justify-content: flex-end; }
+
+.stale-banner {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: var(--amber);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.scan-btns { display: flex; gap: 8px; }
+
+.gauge-sub { color: var(--muted); font-size: 10.5px; margin-bottom: 10px; }
+
+/* توست */
+.toast {
+  position: fixed;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all .25s;
+  z-index: 100;
+  max-width: 85vw;
+  text-align: center;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* چیپ‌های اطلاعاتی جزئیات */
+.chips-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.chip-info {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.chip-info.pos { color: var(--green); border-color: rgba(34,197,94,.35); }
+.chip-info.neg { color: var(--red); border-color: rgba(239,68,68,.35); }
+
+/* دقت تجربی (بکتست) */
+.backtest-box {
+  background: var(--card2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 8px;
+}
+.backtest-title { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+.backtest-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 3px 0; }
+.chg { font-size: 12.5px; font-weight: 700; direction: ltr; }
+.chg.pos { color: var(--green); }
+.chg.neg { color: var(--red); }
+.chg.big { font-size: 16px; }
+.star { color: #475569; font-size: 18px; cursor: pointer; }
+.star.on { color: var(--amber); }
+.star.large { font-size: 24px; }
+
+/* ---------- صفحه جزئیات ---------- */
+.detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.back {
+  background: var(--card);
+  color: var(--blue);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.detail-title { flex: 1; display: flex; align-items: center; gap: 10px; }
+
+.price-box { display: flex; align-items: baseline; gap: 12px; padding: 4px 2px 12px; }
+.price-big { font-size: 30px; font-weight: 800; direction: ltr; }
+
+.tf-bar { display: flex; gap: 8px; margin-bottom: 10px; }
+.tf-btn {
+  flex: 1;
+  padding: 8px 0;
+  background: var(--card);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tf-btn.active { background: var(--blue); color: #062033; font-weight: 700; border-color: var(--blue); }
+
+.chart-box { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px; margin-bottom: 12px; }
+.chart { width: 100%; height: 230px; display: block; border-radius: 8px; }
+
+/* پنل سیگنال */
+.gauge { text-align: center; padding: 8px 0 12px; }
+.gauge-prob { font-size: 40px; font-weight: 800; direction: ltr; }
+.gauge.buy .gauge-prob { color: var(--green); }
+.gauge.sell .gauge-prob { color: var(--red); }
+.gauge.neutral .gauge-prob { color: var(--muted); }
+.gauge-label { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+.gauge.buy .gauge-label { color: var(--green); }
+.gauge.sell .gauge-label { color: var(--red); }
+.gauge-bar { height: 8px; background: var(--card2); border-radius: 99px; overflow: hidden; }
+.gauge-fill { height: 100%; border-radius: 99px; transition: width .4s; }
+
+.sig-score { text-align: center; color: var(--muted); font-size: 12.5px; margin-bottom: 10px; direction: ltr; }
+
+.factor-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.factor-name { width: 74px; font-size: 12px; color: var(--muted); }
+.factor-bar { flex: 1; height: 6px; background: var(--card2); border-radius: 99px; overflow: hidden; }
+.factor-fill { height: 100%; border-radius: 99px; }
+.factor-fill.pos { background: var(--green); }
+.factor-fill.neg { background: var(--red); }
+.factor-val { width: 42px; font-size: 11.5px; direction: ltr; text-align: left; }
+.factor-notes { margin-top: 8px; }
+.note { font-size: 12px; color: var(--muted); line-height: 1.9; }
+
+/* اندیکاتورها */
+.ind-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ind-card { background: var(--card2); border-radius: 10px; padding: 9px 8px; text-align: center; }
+.ind-card.pos { outline: 1px solid rgba(34,197,94,.35); }
+.ind-card.neg { outline: 1px solid rgba(239,68,68,.35); }
+.ind-label { font-size: 10.5px; color: var(--muted); margin-bottom: 4px; }
+.ind-value { font-size: 13px; font-weight: 700; direction: ltr; }
+
+/* پامپ/دامپ */
+.pump-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.pump-row:last-child { border-bottom: none; }
+.pump-row.pos { border-right: 3px solid var(--amber); padding-right: 8px; }
+.pump-row.neg { border-right: 3px solid var(--purple); padding-right: 8px; }
+.pump-msg { flex: 1; font-size: 12.5px; }
+.pump-tf { color: var(--muted); font-size: 11px; direction: ltr; }
+
+/* آمار */
+.stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.stat { background: var(--card2); border-radius: 10px; padding: 10px; }
+.stat-label { font-size: 11px; color: var(--muted); }
+.stat-value { font-size: 14px; font-weight: 700; margin-top: 3px; direction: ltr; }
+
+/* ---------- صفحه اسکنر ---------- */
+.scan-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.scan-status { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+.scan-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 11px 12px; margin-bottom: 8px; cursor: pointer;
+}
+.scan-main { flex: 1; min-width: 0; }
+.scan-msg { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.scan-meta { text-align: left; }
+.scan-sev { font-size: 12px; font-weight: 700; }
+.scan-time { font-size: 11px; color: var(--muted); direction: ltr; }
+.scan-foot { color: var(--muted); font-size: 11.5px; text-align: center; padding: 8px; }
+
+/* ---------- تنظیمات ---------- */
+.setting { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.setting.col { flex-direction: column; align-items: stretch; }
+.setting-label { flex: 1; font-size: 13.5px; min-width: 150px; }
+.btn-on { background: var(--green); color: #052e16; }
+.btn.small { padding: 6px 12px; font-size: 12px; }
+.setting-input.grow { flex: 1; width: auto; }
+.custom-add { display: flex; gap: 8px; }
+.custom-results { margin-top: 6px; }
+.custom-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: var(--card2); border-radius: 10px; margin-bottom: 6px; }
+.setting-input {
+  width: 110px; padding: 9px 10px;
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text); font-family: inherit; font-size: 14px;
+  direction: ltr; text-align: center;
+}
+.setting-unit { color: var(--muted); font-size: 12px; }
+.fav-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: 999px; padding: 5px 11px; font-size: 12px; cursor: pointer;
+}
+.chip.dim { color: var(--muted); cursor: default; }
+.about-text { font-size: 12.5px; line-height: 2; color: var(--muted); }
+.about-text b { color: var(--text); }
+
+/* ---------- واکنش‌گرایی ---------- */
+@media (min-width: 700px) {
+  main { max-width: 640px; margin: 0 auto; width: 100%; }
+}
+
+/* بخش‌های اسکنر */
+.scan-section {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+  margin: 12px 2px 8px;
+}
+.scan-row.watch { opacity: 0.85; }
