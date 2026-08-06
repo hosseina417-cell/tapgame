@@ -1,5 +1,6 @@
 .buildozer/
 bin/
 apk-release/
+build_apk_tmp/
 __pycache__/
 *.pyc
