@@ -111,6 +111,46 @@ code += `
         btn.click();
         if (window.__clicked !== 1) errors.push('رویداد on* با U.el بسته نمی‌شود');
 
+        // تست دسته‌بندی: برگرد به بازار، نوار فیلتر + فیلتر کردن ردیف‌ها
+        App.setScreen('market');
+        // جستجوی قبلی را پاک کن تا همه ردیف‌ها دیده شوند
+        App.state.marketSearch = '';
+        const searchInp = document.getElementById('marketSearch');
+        if (searchInp) searchInp.value = '';
+        document.querySelectorAll('.coin-row').forEach(r => UI.applyRowFilters(r, App.state));
+        // سیگنال‌های مصنوعی برای شمارنده‌ها
+        App.state.listSignals = {
+          bitcoin: { score: 60, category: 'strong-buy', signal: 'BUY', probability: 85 },
+          ethereum: { score: -30, category: 'sell', signal: 'SELL', probability: 40 }
+        };
+        const filterBar = document.getElementById('filterBar');
+        if (!filterBar) errors.push('دسته‌بندی: نوار فیلتر ساخته نشد');
+        const allRows = document.querySelectorAll('.coin-row');
+        if (allRows.length >= 2) {
+          // ردیف اول → صعودی قوی، ردیف دوم → نزولی
+          const r1 = allRows[0], r2 = allRows[1];
+          r1.setAttribute('data-cat', 'strong-buy');
+          r1.className = 'coin-row cat-strong-buy';
+          r2.setAttribute('data-cat', 'sell');
+          r2.className = 'coin-row cat-sell';
+          // کلیک روی «صعودی قوی»
+          const strongBuyBtn = filterBar.querySelector('[data-cat="strong-buy"]');
+          strongBuyBtn.click();
+          const vis = [...document.querySelectorAll('.coin-row')].filter(r => r.style.display !== 'none');
+          if (vis.length !== 1 || vis[0] !== r1) errors.push('دسته‌بندی: فیلتر صعودی قوی درست کار نکرد');
+          // کلیک روی «همه»
+          filterBar.querySelector('[data-cat="all"]').click();
+          if ([...document.querySelectorAll('.coin-row')].some(r => r.style.display === 'none'))
+            errors.push('دسته‌بندی: فیلتر «همه» همه را نشان نمی‌دهد');
+          // شمارنده‌ها
+          UI.refreshFilterCounts(App.state);
+          const cnt = strongBuyBtn.querySelector('.cnt');
+          if (cnt && cnt.textContent !== '1') errors.push('دسته‌بندی: شمارنده صعودی قوی (' + (cnt && cnt.textContent) + ')');
+          const sellBtn = filterBar.querySelector('[data-cat="sell"]');
+          const sellCnt = sellBtn.querySelector('.cnt');
+          if (sellCnt && sellCnt.textContent !== '1') errors.push('دسته‌بندی: شمارنده نزولی (' + (sellCnt && sellCnt.textContent) + ')');
+        }
+
         window.__done = true;
       }, 300);
     } catch (e) {

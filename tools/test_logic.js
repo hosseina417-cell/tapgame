@@ -296,3 +296,43 @@ section('V1.1.1: buildCoin و افزودن سکه');
   // addCoin با ورودی ناقص
   ok(P.addCoin({}) === false, 'addCoin ورودی ناقص را رد می‌کند');
 }
+
+/* ============ دسته‌بندی روند ============ */
+section('دسته‌بندی صعودی/نزولی');
+{
+  const S = require('../app/js/strategy.js');
+  ok(S.categoryOf({ score: 60 }) === 'strong-buy', 'امتیاز +۶۰ → صعودی قوی');
+  ok(S.categoryOf({ score: 30 }) === 'buy', 'امتیاز +۳۰ → صعودی');
+  ok(S.categoryOf({ score: 0 }) === 'neutral', 'امتیاز صفر → خنثی');
+  ok(S.categoryOf({ score: -30 }) === 'sell', 'امتیاز -۳۰ → نزولی');
+  ok(S.categoryOf({ score: -60 }) === 'strong-sell', 'امتیاز -۶۰ → نزولی قوی');
+  ok(S.categoryOf(null) === 'neutral', 'بدون امتیاز → خنثی');
+  ok(S.CATEGORY_LABELS['strong-buy'] === 'صعودی قوی' && S.CATEGORY_LABELS['strong-sell'] === 'نزولی قوی', 'برچسب فارسی دسته‌ها');
+
+  // مولد ضربی واقعی‌تر: بازده روزانه درصدی
+  function gen(n, dailyPct, seed) {
+    let p = 100; const out = []; let s = seed || 42;
+    function rnd() { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; }
+    const stepMs = 60 * 60 * 1000; const t0 = Date.now() - n * stepMs;
+    const perCandle = dailyPct / 24;
+    for (let i = 0; i < n; i++) {
+      const o = p;
+      const ret = perCandle / 100 + (rnd() - 0.5) * 0.008;
+      const c = Math.max(0.0001, p * (1 + ret));
+      const h = Math.max(o, c) * (1 + rnd() * 0.004);
+      const l = Math.min(o, c) * (1 - rnd() * 0.004);
+      out.push({ t: t0 + i * stepMs, o, h, l, c, v: 100 * (0.5 + rnd()) });
+      p = c;
+    }
+    return out;
+  }
+
+  const upStrong = S.categoryFromAnalysis(TA.analyze(gen(400, 3, 71)));
+  ok(upStrong === 'strong-buy', 'روند صعودی قوی (+۳٪ روزانه) → صعودی قوی (' + upStrong + ')');
+  const upMild = S.categoryFromAnalysis(TA.analyze(gen(400, 0.5, 72)));
+  ok(upMild === 'buy' || upMild === 'strong-buy', 'روند صعودی ملایم → صعودی (' + upMild + ')');
+  const dnMild = S.categoryFromAnalysis(TA.analyze(gen(400, -0.5, 74)));
+  ok(dnMild === 'sell' || dnMild === 'strong-sell', 'روند نزولی ملایم → نزولی (' + dnMild + ')');
+  const dnStrong = S.categoryFromAnalysis(TA.analyze(gen(400, -3, 76)));
+  ok(dnStrong === 'strong-sell', 'روند نزولی قوی (-۳٪ روزانه) → نزولی قوی (' + dnStrong + ')');
+}

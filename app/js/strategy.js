@@ -22,6 +22,15 @@ const Strategy = (function () {
   };
 
   /* هر عامل: مقدار ‎-1..+1 + توضیح */
+  /* جهت روند قوی: +1 صعودی قوی، -1 نزولی قوی، 0 نامشخص */
+  function strongTrend(a) {
+    if (a.ema9 !== null && a.ema21 !== null && a.ema50 !== null) {
+      if (a.ema9 > a.ema21 && a.ema21 > a.ema50) return 1;
+      if (a.ema9 < a.ema21 && a.ema21 < a.ema50) return -1;
+    }
+    return 0;
+  }
+
   function factorTrend(a) {
     let score = 0; const notes = [];
     if (a.ema21 !== null && a.ema50 !== null) {
@@ -110,8 +119,15 @@ const Strategy = (function () {
   function factorStoch(a) {
     if (!a.stoch) return { score: 0, notes: ['داده کافی نیست'] };
     const { k, d } = a.stoch; let score = 0; const notes = [];
-    if (k < 20) { score += 0.55; notes.push('استوکاستیک اشباع فروش'); }
-    else if (k > 80) { score -= 0.55; notes.push('استوکاستیک اشباع خرید'); }
+    const st = strongTrend(a);
+    if (k < 20) {
+      if (st < 0) { score += 0.15; notes.push('اشباع فروش اما روند نزولی — ریسک ادامه'); }
+      else { score += 0.55; notes.push('استوکاستیک اشباع فروش'); }
+    }
+    else if (k > 80) {
+      if (st > 0) { score -= 0.15; notes.push('اشباع خرید اما روند صعودی — ادامه محتمل'); }
+      else { score -= 0.55; notes.push('استوکاستیک اشباع خرید'); }
+    }
     if (k > d) { score += 0.45; notes.push('K بالای D (تقاطع مثبت)'); }
     else { score -= 0.45; notes.push('K زیر D (تقاطع منفی)'); }
     return { score: Math.max(-1, Math.min(1, score)), notes: notes };
@@ -120,9 +136,16 @@ const Strategy = (function () {
   function factorBollinger(a) {
     if (!a.bb || a.bbPct === null || a.bbPct === undefined) return { score: 0, notes: ['داده کافی نیست'] };
     let score = 0; const notes = [];
-    if (a.bbPct < 0.05) { score += 0.75; notes.push('قیمت روی باند پایین (احتمال بازگشت)'); }
+    const st = strongTrend(a);
+    if (a.bbPct < 0.05) {
+      if (st < 0) { score += 0.25; notes.push('باند پایین اما روند نزولی — ریسک ادامه'); }
+      else { score += 0.75; notes.push('قیمت روی باند پایین (احتمال بازگشت)'); }
+    }
     else if (a.bbPct < 0.25) { score += 0.35; notes.push('قیمت نزدیک باند پایین'); }
-    else if (a.bbPct > 0.95) { score -= 0.75; notes.push('قیمت روی باند بالا (احتمال اصلاح)'); }
+    else if (a.bbPct > 0.95) {
+      if (st > 0) { score -= 0.25; notes.push('باند بالا اما روند صعودی — فشار خرید قوی'); }
+      else { score -= 0.75; notes.push('قیمت روی باند بالا (احتمال اصلاح)'); }
+    }
     else if (a.bbPct > 0.75) { score -= 0.35; notes.push('قیمت نزدیک باند بالا'); }
     else { notes.push('قیمت میانه باند'); }
     return { score: Math.max(-1, Math.min(1, score)), notes: notes };
@@ -205,6 +228,75 @@ const Strategy = (function () {
     };
   }
 
+  /* ============================================================
+   * دسته‌بندی روند بر اساس امتیاز سیگنال
+   * strong-buy (صعودی قوی) ≥ +۵۰ ← buy (صعودی) ≥ +۲۵
+   * strong-sell (نزولی قوی) ≤ -۵۰ ← sell (نزولی) ≤ -۲۵
+   * ============================================================ */
+  const CATEGORY_LABELS = {
+    'strong-buy': 'صعودی قوی',
+    'buy': 'صعودی',
+    'sell': 'نزولی',
+    'strong-sell': 'نزولی قوی',
+    'neutral': 'خنثی'
+  };
+  const CATEGORY_ORDER = ['strong-buy', 'buy', 'neutral', 'sell', 'strong-sell'];
+
+  function categoryOf(ev) {
+    if (!ev || ev.score === null || ev.score === undefined) return 'neutral';
+    const s = ev.score;
+    if (s >= 40) return 'strong-buy';
+    if (s >= 25) return 'buy';
+    if (s <= -40) return 'strong-sell';
+    if (s <= -25) return 'sell';
+    return 'neutral';
+  }
+
+  /* ============================================================
+   * امتیاز روند مستقل (برای دسته‌بندی صعودی/نزولی)
+   * فقط جهت و قدرت روند را می‌سنجد — نه بازگشت به میانگین
+   * ============================================================ */
+  function trendScore(a) {
+    if (!a) return 0;
+    let s = 0;
+    // آرایش EMA
+    if (a.ema9 !== null && a.ema21 !== null && a.ema50 !== null) {
+      if (a.ema9 > a.ema21 && a.ema21 > a.ema50) s += 1.5;
+      else if (a.ema9 > a.ema21) s += 0.75;
+      else if (a.ema21 > a.ema50) s += 0.5;
+      if (a.ema9 < a.ema21 && a.ema21 < a.ema50) s -= 1.5;
+      else if (a.ema9 < a.ema21) s -= 0.75;
+      else if (a.ema21 < a.ema50) s -= 0.5;
+    }
+    // قیمت نسبت به EMA50
+    if (a.last && a.ema50 !== null) s += (a.last.c > a.ema50 ? 0.75 : -0.75);
+    // MACD
+    if (a.macd) {
+      if (a.macd.hist > 0) s += 0.5; else s -= 0.5;
+      if (a.macd.macd > 0) s += 0.25; else s -= 0.25;
+    }
+    // قدرت حرکت (ROC)
+    if (a.roc) {
+      const r24 = a.roc[24], r96 = a.roc[96];
+      if (r24 !== null) {
+        if (r24 > 3) s += 1; else if (r24 > 1) s += 0.5; else if (r24 < -3) s -= 1; else if (r24 < -1) s -= 0.5;
+      }
+      if (r96 !== null) {
+        if (r96 > 8) s += 1; else if (r96 > 3) s += 0.5; else if (r96 < -8) s -= 1; else if (r96 < -3) s -= 0.5;
+      }
+    }
+    return s; // حدود ‎-6.5 .. +6.5
+  }
+
+  function categoryFromAnalysis(a) {
+    const s = trendScore(a);
+    if (s >= 3.2) return 'strong-buy';
+    if (s >= 1.3) return 'buy';
+    if (s <= -3.2) return 'strong-sell';
+    if (s <= -1.3) return 'sell';
+    return 'neutral';
+  }
+
   /* ---------- ترکیب چند تایم‌فریم ---------- */
   function evaluateMulti(analyses) {
     // analyses: [{ tf, a }] — وزن بیشتر برای تایم‌فریم بالاتر (روند) + میان‌مدت (زمان‌بندی)
@@ -226,7 +318,9 @@ const Strategy = (function () {
     return { score, probability: Math.max(1, Math.min(99, prob)), signal, parts };
   }
 
-  return { evaluate, evaluateMulti, backtest, WEIGHTS, factorTrend, factorMacd, factorRsi, factorStoch, factorBollinger, factorVolume };
+  return { evaluate, evaluateMulti, backtest, categoryOf, categoryFromAnalysis, trendScore,
+           CATEGORY_LABELS, CATEGORY_ORDER,
+           WEIGHTS, factorTrend, factorMacd, factorRsi, factorStoch, factorBollinger, factorVolume };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = Strategy;

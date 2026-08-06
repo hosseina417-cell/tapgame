@@ -6,12 +6,17 @@
 const UI = (function () {
 
   /* ---------- نشان سیگنال ---------- */
-  function signalBadge(signal, probability) {
+  function signalBadge(signal, probability, category) {
+    const strong = category === 'strong-buy' || category === 'strong-sell';
     if (signal === 'BUY') {
-      return U.el('span', { class: 'badge badge-buy', text: 'خرید' + (probability ? '  ' + Math.round(probability) + '٪' : '') });
+      const cls = strong ? 'badge-buy strong' : 'badge-buy';
+      const txt = (strong ? 'خرید قوی' : 'خرید') + (probability ? '  ' + Math.round(probability) + '٪' : '');
+      return U.el('span', { class: 'badge ' + cls, text: txt });
     }
     if (signal === 'SELL') {
-      return U.el('span', { class: 'badge badge-sell', text: 'فروش' + (probability ? '  ' + Math.round(probability) + '٪' : '') });
+      const cls = strong ? 'badge-sell strong' : 'badge-sell';
+      const txt = (strong ? 'فروش قوی' : 'فروش') + (probability ? '  ' + Math.round(probability) + '٪' : '');
+      return U.el('span', { class: 'badge ' + cls, text: txt });
     }
     return U.el('span', { class: 'badge badge-neutral', text: 'خنثی' });
   }
@@ -31,11 +36,87 @@ const UI = (function () {
     return { mild: 'ملایم', high: 'شدید', extreme: 'بسیار شدید' }[s] || s;
   }
 
-  /* قرار دادن نشان سیگنال در ردیف فهرست */
+  /* قرار دادن نشان سیگنال در ردیف فهرست + دسته‌بندی */
   function setRowSignal(cell, ev) {
     if (!cell) return;
     U.clear(cell);
-    cell.appendChild(signalBadge(ev.signal, ev.probability));
+    const cat = ev.category || Strategy.categoryOf(ev);
+    cell.appendChild(signalBadge(ev.signal, ev.probability, cat));
+    const row = cell.closest('.coin-row');
+    if (row) {
+      row.setAttribute('data-cat', cat);
+      row.className = 'coin-row' + (cat !== 'neutral' ? ' cat-' + cat : '');
+      applyRowFilters(row, App.state);
+    }
+    refreshFilterCounts(App.state);
+  }
+
+  /* ---------- دسته‌بندی فهرست ---------- */
+
+  /* فیلترهای دسته‌بندی: همه / صعودی قوی / صعودی / نزولی / نزولی قوی */
+  const FILTERS = [
+    { cat: 'all', label: 'همه' },
+    { cat: 'strong-buy', label: 'صعودی قوی' },
+    { cat: 'buy', label: 'صعودی' },
+    { cat: 'sell', label: 'نزولی' },
+    { cat: 'strong-sell', label: 'نزولی قوی' }
+  ];
+
+  /* نمایش/مخفی‌کردن یک ردیف بر اساس جستجو + دسته فعال */
+  function applyRowFilters(row, state) {
+    const q = (state.marketSearch || '').trim().toLowerCase();
+    const searchHidden = q && row.textContent.toLowerCase().indexOf(q) < 0;
+    const cat = row.getAttribute('data-cat') || 'neutral';
+    const catHidden = state.marketFilter !== 'all' && cat !== state.marketFilter;
+    row.style.display = (searchHidden || catHidden) ? 'none' : '';
+  }
+
+  /* ساخت نوار فیلتر دسته‌بندی */
+  function renderFilterBar(container, state) {
+    const bar = U.el('div', { class: 'filter-bar', id: 'filterBar' });
+    for (const f of FILTERS) {
+      bar.appendChild(U.el('button', {
+        class: 'fbtn' + (state.marketFilter === f.cat ? ' active' : ''),
+        'data-cat': f.cat,
+        text: f.label
+      }));
+    }
+    container.insertBefore(bar, container.querySelector('.coin-list'));
+    refreshFilterCounts(state);
+
+    bar.addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-cat]');
+      if (!btn) return;
+      state.marketFilter = btn.getAttribute('data-cat');
+      bar.querySelectorAll('.fbtn').forEach(b => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.coin-row').forEach(r => applyRowFilters(r, state));
+    });
+  }
+
+  /* شمارنده‌های زنده هر دسته + خلاصه */
+  function refreshFilterCounts(state) {
+    const counts = { 'strong-buy': 0, buy: 0, sell: 0, 'strong-sell': 0, neutral: 0 };
+    for (const id in state.listSignals) {
+      const ev = state.listSignals[id];
+      const cat = ev.category || Strategy.categoryOf(ev);
+      if (counts[cat] !== undefined) counts[cat]++;
+    }
+    const bar = document.getElementById('filterBar');
+    if (bar) {
+      bar.querySelectorAll('.fbtn').forEach(b => {
+        const cat = b.getAttribute('data-cat');
+        const n = cat === 'all' ? Object.keys(state.listSignals).length : (counts[cat] || 0);
+        const span = b.querySelector('.cnt') || U.el('span', { class: 'cnt' });
+        span.textContent = n;
+        b.appendChild(span);
+      });
+    }
+    const countEl = document.querySelector('.market-count');
+    if (countEl && state.market && state.market.list) {
+      countEl.textContent = state.market.list.length + ' سکه — صعودی قوی: ' + counts['strong-buy'] +
+        ' | صعودی: ' + counts.buy + ' | نزولی: ' + counts.sell + ' | نزولی قوی: ' + counts['strong-sell'];
+    }
+    return counts;
   }
 
   /* توست ساده */
@@ -114,14 +195,15 @@ const UI = (function () {
       }
     }
 
+    // نوار دسته‌بندی
+    renderFilterBar(container, state);
+
     // رویدادها
     const search = container.querySelector('#marketSearch');
     if (search) {
       search.addEventListener('input', U.debounce(function () {
-        const q = this.value.trim().toLowerCase();
-        for (const r of rows) {
-          r.style.display = (r.textContent.toLowerCase().indexOf(q) >= 0) ? '' : 'none';
-        }
+        state.marketSearch = this.value;
+        for (const r of rows) applyRowFilters(r, state);
       }, 150));
     }
     listWrap.addEventListener('click', function (e) {
@@ -675,5 +757,5 @@ const UI = (function () {
     });
   }
 
-  return { signalBadge, pumpBadge, severityLabel, renderMarket, updateMarketRows, renderDetail, renderScanner, renderSettings, renderSignalPanel, renderIndicators, renderPumpPanel, renderScanResults, toast };
+  return { signalBadge, pumpBadge, severityLabel, renderMarket, updateMarketRows, renderDetail, renderScanner, renderSettings, renderSignalPanel, renderIndicators, renderPumpPanel, renderScanResults, setRowSignal, renderFilterBar, refreshFilterCounts, applyRowFilters, toast };
 })();

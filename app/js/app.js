@@ -26,6 +26,8 @@ const App = (function () {
     listSignalsAt: {},       // زمان محاسبه هر سیگنال (برای TTL)
     chartSession: null,      // جلسه تعاملی نمودار
     notifAsked: false,       // مجوز اعلان یک بار در نشست خواسته شود
+    marketFilter: 'all',     // فیلتر دسته‌بندی فهرست
+    marketSearch: '',        // متن جستجوی فهرست
     loading: false
   };
 
@@ -382,21 +384,17 @@ const App = (function () {
           const a = TA.analyze(candles);
           if (!a || a.count < 40) return;
           const ev = Strategy.evaluate(a);
+          ev.category = Strategy.categoryFromAnalysis(a);
           state.listSignals[m.id] = ev;
           state.listSignalsAt[m.id] = Date.now();
           const row = document.querySelector('.coin-row[data-coin="' + m.id + '"] .sig-cell');
           if (row) UI.setRowSignal(row, ev);
         } catch (e) { /* بدون سیگنال */ }
         done++;
-        if (countEl && done % 10 === 0) {
-          countEl.textContent = state.market.list.length + ' سکه — محاسبه سیگنال: ' + done + '/' + total;
-        }
+        if (done % 10 === 0) UI.refreshFilterCounts(state);
       });
     }
-    if (total && countEl) {
-      const withSig = Object.keys(state.listSignals).filter(id => state.listSignals[id]).length;
-      countEl.textContent = state.market.list.length + ' سکه — سیگنال ' + withSig + ' سکه';
-    }
+    if (total) UI.refreshFilterCounts(state);
   }
 
   /* ============================================================
