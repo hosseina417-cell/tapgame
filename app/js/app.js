@@ -406,9 +406,14 @@ const App = (function () {
         } catch (e) { /* از کش */ }
       }
       if (!market || !market.list) throw new Error('داده بازار در دسترس نیست');
-      const coins = market.list.map(m => Providers.coinBySymbol(m.sym)).filter(Boolean).slice(0, 24);
+      // همه ارزهای فهرست (به‌جز استیبل‌کوین‌ها) — تا سقف تنظیم‌شده
+      const scanMax = Math.max(10, Math.min(100, Store.get('scanMax') || 60));
+      const coins = market.list.map(m => Providers.coinBySymbol(m.sym))
+        .filter(Boolean)
+        .filter(c => !Providers.isStablecoin(c.sym))
+        .slice(0, scanMax);
       const results = [];
-      const q = U.makeQueue(3);
+      const q = U.makeQueue(4);
       const opts = Store.load();
       const cooldownMs = 10 * 60 * 1000; // هشدار تکراری برای ۱۰ دقیقه ثبت نمی‌شود
       let done = 0;
@@ -418,6 +423,7 @@ const App = (function () {
           if (state.scanAbort) { done++; return; }
           try {
             const { candles, source } = await Providers.getKlinesFast(coin, '15m', 60, abort.signal);
+            if (candles.length) Providers.setPrice(coin.id, candles[candles.length - 1].c);
             const p = PumpDetect.check(candles, opts, '15m');
             if (p) {
               // dedupe: هشدار هم‌نوع تکراری اخیر را نادیده بگیر
@@ -456,7 +462,12 @@ const App = (function () {
         state.scanResults = results;
         state.scanAt = Date.now();
         Store.cacheScan(results);
-        if (status) status.textContent = 'اسکن کامل شد — ' + results.length + ' هشدار فعال.';
+        if (status) status.textContent = 'اسکن کامل شد — ' + coins.length + ' سکه بررسی شد، ' + results.length + ' هشدار فعال.';
+        // به‌روزرسانی قیمت سکه‌های سفارشی در فهرست بازار
+        if (state.screen === 'market') {
+          const listEl = document.getElementById('coinList');
+          if (listEl && state.market) UI.updateMarketRows(document.getElementById('screen'), state);
+        }
         const listEl = document.getElementById('scanList');
         if (listEl) UI.renderScanResults(listEl, results, state.scanAt);
       }

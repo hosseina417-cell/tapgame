@@ -37,6 +37,15 @@ echo "[1/6] کامپایل منابع (aapt2 compile)"
 "$AAPT2" compile --dir "$ROOT/android/res" -o "$BUILD/res.flata"
 
 echo "[2/6] لینک منابع و مانیفست (aapt2 link)"
+# مقدار نسخه مستقیماً در مانیفست (aapt2 برخی نسخه‌ها فلگ version را نادیده می‌گیرد)
+python3 - "$ROOT/android/AndroidManifest.xml" "$VERSION_CODE" "$VERSION_NAME" <<'PYEOF'
+import re, sys
+p, vc, vn = sys.argv[1], sys.argv[2], sys.argv[3]
+s = open(p, encoding='utf-8').read()
+s = re.sub(r'android:versionCode="[0-9]*"', 'android:versionCode="%s"' % vc, s)
+s = re.sub(r'android:versionName="[^"]*"', 'android:versionName="%s"' % vn, s)
+open(p, 'w', encoding='utf-8').write(s)
+PYEOF
 "$AAPT2" link \
     -o "$BUILD/app-unsigned.apk" \
     -I "$ANDROID_JAR" \

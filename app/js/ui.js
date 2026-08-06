@@ -66,6 +66,11 @@ const UI = (function () {
       container.appendChild(U.el('div', { class: 'stale-banner', text: '⚠ آفلاین — داده کش‌شده از ' + U.fmtDateTime(state.marketAt) + ' نمایش داده می‌شود' }));
     }
 
+    if (market && market.list) {
+      const wlCount = Store.get('watchlist').length;
+      container.appendChild(U.el('div', { class: 'market-count', text: market.list.length + ' سکه — ' + (wlCount ? wlCount + ' سکه سفارشی' : 'برای افزودن سکه به تنظیمات بروید') }));
+    }
+
     const listWrap = U.el('div', { class: 'coin-list', id: 'coinList' });
     container.appendChild(listWrap);
 
@@ -465,6 +470,7 @@ const UI = (function () {
     numSetting('آستانه دامپ ۱۵ دقیقه (٪-)', 'dumpPct15m', -20, -0.5, 0.1);
     numSetting('آستانه دامپ ۱ ساعت (٪-)', 'dumpPct1h', -50, -1, 0.5);
     numSetting('نسبت حجم به میانگین', 'volRatio', 1, 10, 0.1, 'x');
+    numSetting('تعداد ارزهای اسکن‌شده', 'scanMax', 10, 100, 5, 'سکه');
 
     // اعلان سیستمی
     const notifSetting = U.el('div', { class: 'setting' }, [
@@ -475,7 +481,7 @@ const UI = (function () {
 
     // سکه سفارشی
     const customPanel = U.el('div', { class: 'setting col' }, [
-      U.el('label', { class: 'setting-label', text: 'افزودن سکه سفارشی (نماد، مثل WIF)' }),
+      U.el('label', { class: 'setting-label', text: 'افزودن سکه سفارشی (نماد، مثل WIF یا BONK)' }),
       U.el('div', { class: 'custom-add' }, [
         U.el('input', { class: 'setting-input grow', type: 'text', id: 'customSym', placeholder: 'نماد سکه' }),
         U.el('button', { class: 'btn', id: 'customAddBtn', text: 'جستجو و افزودن' })
@@ -592,10 +598,14 @@ const UI = (function () {
           for (const c of found) {
             const row = U.el('div', { class: 'custom-row' }, [
               U.el('span', { class: 'coin-sym', text: c.sym + ' — ' + c.name }),
-              U.el('button', { class: 'btn small', text: 'افزودن', onclick: async () => {
+              U.el('button', { class: 'btn small', text: 'افزودن', onclick: async (ev) => {
+                const btn = ev.target;
+                btn.disabled = true;
+                btn.textContent = 'در حال بررسی...';
                 try {
-                  // اعتبارسنجی با گرفتن کندل
-                  await Providers.getKlines(c, '15m', 60);
+                  // اعتبارسنجی سریع: بایننس ← بای‌بیت
+                  const res = await Providers.getKlinesFast(c, '15m', 60);
+                  if (res.candles.length) Providers.setPrice(c.id, res.candles[res.candles.length - 1].c);
                   if (Providers.addCoin(c)) {
                     const wl = Store.get('watchlist');
                     wl.push(c);
@@ -605,9 +615,13 @@ const UI = (function () {
                     App.refreshMarket(false);
                   } else {
                     toast(c.sym + ' از قبل موجود است');
+                    btn.disabled = false;
+                    btn.textContent = 'افزودن';
                   }
                 } catch (e) {
-                  toast('داده‌ای برای ' + c.sym + ' پیدا نشد');
+                  btn.disabled = false;
+                  btn.textContent = 'افزودن';
+                  toast('داده‌ای برای ' + c.sym + ' در بایننس/بای‌بیت پیدا نشد');
                 }
               } })
             ]);

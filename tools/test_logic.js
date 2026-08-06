@@ -251,3 +251,28 @@ section('نرمال‌سازی داده صرافی‌ها');
 console.log('\n==================================');
 console.log('نتیجه: ' + passed + ' موفق، ' + failed + ' ناموفق');
 if (failed > 0) process.exit(1);
+
+/* ============ V1.1: ارزهای بیشتر و ثبت پویا ============ */
+section('V1.1: فهرست ارزها و ثبت پویا');
+{
+  const P = require('../app/js/providers.js');
+  ok(P.allCoins().length >= 100, 'فهرست پایه حداقل ۱۰۰ ارز دارد (' + P.allCoins().length + ')');
+  ok(P.coinById('bitcoin').kraken === 'XBTUSD', 'استثنای کراکن بیت‌کوین (XBTUSD)');
+  ok(P.coinById('dogecoin').kraken === 'XDGUSD', 'استثنای کراکن دوج (XDGUSD)');
+  const wif = P.coinById('dogwifcoin');
+  ok(wif && wif.binance === 'WIFUSDT' && wif.okx === 'WIF-USDT', 'سکه‌های جدید مثل WIF در فهرست هستند');
+
+  // ثبت پویا از فهرست بازار
+  P.registerMarket([{ id: 'mega-coin', sym: 'MEGA', name: 'Mega Coin' }]);
+  const dyn = P.coinBySymbol('MEGA');
+  ok(dyn && dyn.id === 'mega-coin', 'ارز جدید از فهرست بازار قابل شناسایی است');
+  ok(dyn.binance === 'MEGAUSDT', 'نماد صرافی ارز پویا ساخته شد');
+
+  // استیبل‌کوین‌ها
+  ok(P.isStablecoin('usdt') === true, 'USDT استیبل‌کوین است');
+  ok(P.isStablecoin('BTC') === false, 'BTC استیبل‌کوین نیست');
+
+  // قیمت کش
+  P.setPrice('mega-coin', 1.23);
+  ok(P.getPrice('mega-coin') === 1.23, 'قیمت کش برای سکه سفارشی ذخیره شد');
+}
