@@ -10,7 +10,8 @@ const Store = (function () {
   const DEFAULTS = {
     refreshSec: 60,        // فاصله به‌روزرسانی فهرست بازار
     detailRefreshSec: 120, // فاصله به‌روزرسانی صفحه جزئیات
-    scanIntervalMin: 5,    // اسکن خودکار پامپ/دامپ
+    scanIntervalMin: 10,   // فاصله اسکن خودکار (دقیقه)
+    autoScan: true,        // اسکن خودکار پامپ/دامپ
     pumpPct15m: 2.5,
     pumpPct1h: 5,
     dumpPct15m: -2.5,

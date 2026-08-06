@@ -68,6 +68,7 @@ code += `
           { coin: { id: 'bitcoin', sym: 'BTC', name: 'بیت‌کوین' }, type: 'pump', severity: 'extreme', msg: 'رشد ۱۱٪', at: Date.now() }
         ], Date.now());
         if (!document.querySelector('.scan-row')) errors.push('اسکنر: ردیف هشدار رندر نشد');
+        if (!document.querySelector('.auto-scan-line')) errors.push('اسکنر: خط وضعیت اسکن خودکار رندر نشد');
 
         // صفحه تنظیمات
         App.setScreen('settings');

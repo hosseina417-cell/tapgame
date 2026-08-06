@@ -20,6 +20,9 @@ const App = (function () {
     scanProgress: 0,
     scanResults: null,
     scanAt: 0,
+    scanManual: false,       // اسکن دستی یا خودکار
+    lastAutoScanAt: 0,       // زمان آخرین اسکن خودکار
+    lastAutoCount: 0,        // تعداد هشدار اسکن خودکار اخیر
     lastScanByCoin: {},      // برای dedupe هشدارهای تکراری
     lastNotifyByCoin: {},    // برای محدود کردن اعلان‌ها
     listSignals: {},         // سیگنال‌های سبک فهرست (شناسه سکه → badge)
@@ -37,7 +40,7 @@ const App = (function () {
 
   /* ---------- ناوبری (با مسیریابی hash برای دکمه بازگشت اندروید) ---------- */
   function setScreen(name) {
-    if (name !== 'scanner' && state.scanning) cancelScan();
+    if (name !== 'scanner' && state.scanning && state.scanManual) cancelScan();
     // هنگام خروج از صفحه جزئیات، جلسه نمودار (شنونده‌ها + overlay) آزاد شود
     if (name !== 'detail' && state.chartSession) {
       state.chartSession.destroy();
@@ -403,6 +406,7 @@ const App = (function () {
   async function runScan(manual) {
     if (state.scanning) return;
     state.scanning = true;
+    state.scanManual = !!manual;
     state.scanAbort = false;
     state.scanResults = null;
     const list = document.getElementById('scanList');
@@ -478,6 +482,15 @@ const App = (function () {
         state.scanAt = Date.now();
         Store.cacheScan(results);
         if (status) status.textContent = 'اسکن کامل شد — ' + coins.length + ' سکه بررسی شد، ' + results.length + ' هشدار فعال.';
+        // اسکن خودکار: ثبت زمان + اطلاع‌رسانی هشدارهای جدید
+        if (!state.scanManual) {
+          state.lastAutoScanAt = Date.now();
+          const severe = results.filter(r => r.severity === 'high' || r.severity === 'extreme').length;
+          state.lastAutoCount = severe;
+          if (state.screen !== 'scanner' && severe > 0 && Store.get('notifyEnabled')) {
+            UI.toast('🚨 اسکن خودکار: ' + severe + ' هشدار شدید پامپ/دامپ', 3500);
+          }
+        }
         // به‌روزرسانی قیمت سکه‌های سفارشی در فهرست بازار
         if (state.screen === 'market') {
           const listEl = document.getElementById('coinList');
@@ -516,7 +529,10 @@ const App = (function () {
     clearInterval(timers.scan);
     timers.market = setInterval(() => refreshMarket(false), Math.max(10, s.refreshSec) * 1000);
     timers.detail = setInterval(() => { if (state.screen === 'detail') loadDetail(); }, Math.max(15, s.detailRefreshSec) * 1000);
-    timers.scan = setInterval(() => { if (state.screen === 'scanner') runScan(false); }, Math.max(1, s.scanIntervalMin) * 60 * 1000);
+    if (s.autoScan) {
+      // اسکن خودکار: در هر صفحه‌ای اجرا می‌شود (در پس‌زمینه برنامه متوقف است)
+      timers.scan = setInterval(() => runScan(false), Math.max(1, s.scanIntervalMin) * 60 * 1000);
+    }
   }
 
   /* ---------- راه‌اندازی ---------- */
@@ -558,6 +574,8 @@ const App = (function () {
     applyHash();
     // سیگنال برای همه ارزهای فهرست
     setTimeout(() => loadListSignals(false), 1200);
+    // اولین اسکن خودکار ~۳۰ ثانیه بعد از اجرا (اگر فعال باشد)
+    if (Store.get('autoScan')) setTimeout(() => runScan(false), 30000);
   }
 
   document.addEventListener('DOMContentLoaded', boot);

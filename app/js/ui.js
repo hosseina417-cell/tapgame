@@ -456,6 +456,21 @@ const UI = (function () {
     const status = U.el('div', { class: 'scan-status', id: 'scanStatus' });
     container.appendChild(status);
 
+    // وضعیت اسکن خودکار
+    const s = Store.load();
+    if (s.autoScan) {
+      const lastTxt = state.lastAutoScanAt ? (' — آخرین اسکن خودکار: ' + U.fmtTime(state.lastAutoScanAt)) : '';
+      container.appendChild(U.el('div', { class: 'auto-scan-line' }, [
+        U.el('span', { class: 'dot online' }),
+        U.el('span', { text: 'اسکن خودکار فعال — هر ' + Math.max(1, s.scanIntervalMin) + ' دقیقه' + lastTxt })
+      ]));
+    } else {
+      container.appendChild(U.el('div', { class: 'auto-scan-line off' }, [
+        U.el('span', { class: 'dot offline' }),
+        U.el('span', { text: 'اسکن خودکار غیرفعال است (از تنظیمات فعال کنید)' })
+      ]));
+    }
+
     const list = U.el('div', { class: 'scan-list', id: 'scanList' });
     container.appendChild(list);
 
@@ -561,6 +576,13 @@ const UI = (function () {
     ]);
     form.appendChild(notifSetting);
 
+    // اسکن خودکار پامپ/دامپ
+    const autoScanSetting = U.el('div', { class: 'setting' }, [
+      U.el('label', { class: 'setting-label', text: 'اسکن خودکار پامپ/دامپ (در همه صفحه‌ها)' }),
+      U.el('button', { class: 'btn ' + (s.autoScan ? 'btn-on' : ''), id: 'autoScanToggle', text: s.autoScan ? '✔ فعال' : 'غیرفعال' })
+    ]);
+    form.appendChild(autoScanSetting);
+
     // سکه سفارشی
     const customPanel = U.el('div', { class: 'setting col' }, [
       U.el('label', { class: 'setting-label', text: 'افزودن سکه سفارشی (نماد، مثل WIF یا BONK)' }),
@@ -646,6 +668,20 @@ const UI = (function () {
       setTimeout(() => { this.textContent = 'ذخیره تنظیمات'; }, 1200);
       App.applySettings();
     });
+    // اسکن خودکار: تغییر وضعیت
+    const autoScanBtn = container.querySelector('#autoScanToggle');
+    if (autoScanBtn) {
+      autoScanBtn.addEventListener('click', function () {
+        const on = !Store.get('autoScan');
+        Store.set('autoScan', on);
+        this.textContent = on ? '✔ فعال' : 'غیرفعال';
+        this.classList.toggle('btn-on', on);
+        App.applySettings();
+        toast(on ? 'اسکن خودکار فعال شد (هر ' + Math.max(1, Store.get('scanIntervalMin')) + ' دقیقه)' : 'اسکن خودکار غیرفعال شد');
+        if (on) App.runScan(false); // اولین اسکن فوری
+      });
+    }
+
     // اعلان سیستمی: تغییر وضعیت + تست
     const notifBtn = container.querySelector('#notifToggle');
     if (notifBtn) {
