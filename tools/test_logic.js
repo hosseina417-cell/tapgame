@@ -365,3 +365,52 @@ section('لینک تریدینگ ویو');
   delete global.Store;
   ok(UI.tradingViewUrl(null).indexOf('tradingview.com') >= 0, 'سکه نامعتبر → صفحه اصلی تریدینگ ویو');
 }
+
+/* ============ جستجوی نماد واقعی تریدینگ ویو ============ */
+section('resolveTradingViewSymbol (رفع خطای LIT)');
+{
+  const UI = require('../app/js/ui.js');
+  const origFetch = global.fetch;
+
+  // شبیه‌سازی پاسخ symbol-search تریدینگ ویو
+  function mockSearch(hits) {
+    global.fetch = () => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(hits)
+    });
+  }
+
+  // مورد LIT: بایننس فقط پرپچوال دارد، اسپات روی OKX/بای‌بیت
+  mockSearch([
+    { symbol: 'LITUSDT.P', description: 'Lighter / TetherUS PERPETUAL', exchange: 'BINANCE', type: 'crypto' },
+    { symbol: 'LITUSDT', description: 'Lighter / TetherUS', exchange: 'OKX', type: 'crypto' },
+    { symbol: 'LITUSDT', description: 'Lighter / TetherUS', exchange: 'BYBIT', type: 'crypto' },
+    { symbol: 'LITE', description: 'Litecoin', exchange: 'NASDAQ', type: 'stock' }
+  ]);
+  UI.resolveTradingViewSymbol({ sym: 'LIT' }).then(r => {
+    ok(r && r.exchange === 'OKX' && r.symbol === 'LITUSDT', 'LIT: اسپات OKX انتخاب شد (نه پرپچوال بایننس) (' + (r && r.exchange + ':' + r.symbol) + ')');
+    ok(r && !r.perp, 'علامت پرپچوال false است');
+
+    // فقط پرپچوال موجود است → همان را برمی‌گرداند
+    mockSearch([
+      { symbol: 'XYZUSDT.P', description: 'XYZ / TetherUS PERPETUAL', exchange: 'BINANCE', type: 'crypto' }
+    ]);
+    return UI.resolveTradingViewSymbol({ sym: 'XYZ' });
+  }).then(r2 => {
+    ok(r2 && r2.exchange === 'BINANCE' && r2.symbol === 'XYZUSDT.P', 'فقط پرپچوال → BINANCE:XYZUSDT.P (' + (r2 && r2.exchange + ':' + r2.symbol) + ')');
+    ok(r2 && r2.perp, 'علامت پرپچوال true است');
+
+    // هیچ نتیجه‌ای → null (fallback به لینک قبلی)
+    mockSearch([]);
+    return UI.resolveTradingViewSymbol({ sym: 'NOTHING' });
+  }).then(r3 => {
+    ok(r3 === null, 'بدون نتیجه → null (fallback)');
+
+    // خطای شبکه → null
+    global.fetch = () => Promise.reject(new Error('network'));
+    return UI.resolveTradingViewSymbol({ sym: 'BTC' });
+  }).then(r4 => {
+    ok(r4 === null, 'خطای شبکه → null (fallback)');
+    global.fetch = origFetch;
+  });
+}

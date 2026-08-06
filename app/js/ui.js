@@ -257,6 +257,42 @@ const UI = (function () {
     'polygon-ecosystem-token': { binance: 'POLUSDT', bybit: 'POLUSDT', okx: 'POL-USDT' }
   };
 
+  /* جستجوی نماد واقعی در تریدینگ ویو (API جستجوی خودش)
+   * مشکل: بعضی سکه‌ها (مثل LIT) روی بایننس فقط نسخه دائمی دارند یا
+   * اصلاً اسپات ندارند → خطای «This symbol doesn't exist».
+   * این تابع صرافی‌ای را پیدا می‌کند که واقعاً جفت را دارد. */
+  const TV_EXCHANGE_PREF = ['BINANCE', 'OKX', 'BYBIT', 'MEXC', 'KUCOIN', 'COINBASE', 'KRAKEN'];
+
+  async function resolveTradingViewSymbol(coin) {
+    if (!coin) return null;
+    const queries = [coin.sym + 'USDT', coin.sym];
+    for (const q of queries) {
+      try {
+        const resp = await fetch('https://symbol-search.tradingview.com/symbol_search/?text=' +
+          encodeURIComponent(q) + '&hl=0&lang=en&type=&exchange=&domain=production', { cache: 'no-store' });
+        if (!resp.ok) continue;
+        const arr = await resp.json();
+        if (!Array.isArray(arr) || !arr.length) continue;
+        const base = coin.sym.toUpperCase() + 'USDT';
+        // فقط ارزهای دیجیتال با همان جفت
+        const hits = arr.filter(r => r && r.symbol && String(r.symbol).toUpperCase().split('.')[0] === base);
+        if (!hits.length) continue;
+        // اولویت: اسپات (بدون پسوند) سپس دائمی (.P)
+        const spot = hits.filter(h => String(h.symbol).indexOf('.') < 0);
+        const perp = hits.filter(h => String(h.symbol).toUpperCase().indexOf('.P') >= 0);
+        const pool = spot.length ? spot : perp;
+        // انتخاب صرافی با اولویت
+        for (const ex of TV_EXCHANGE_PREF) {
+          const hit = pool.find(h => String(h.exchange || '').toUpperCase() === ex);
+          if (hit) return { exchange: hit.exchange, symbol: hit.symbol, perp: pool === perp };
+        }
+        const any = pool[0];
+        return { exchange: any.exchange, symbol: any.symbol, perp: pool === perp };
+      } catch (e) { /* منبع بعدی یا fallback */ }
+    }
+    return null;
+  }
+
   /* ---------- لینک تریدینگ ویو برای یک سکه ----------
    * نکته مهم: کولون بین صرافی و نماد باید خام بماند (BINANCE:BTCUSDT)
    * انکود کردن آن به %3A در نسخه موبایل تریدینگ ویو خطای
@@ -295,8 +331,23 @@ const UI = (function () {
   }
 
   /* باز کردن تریدینگ ویو (پل جاوا → مرورگر گوشی) */
-  function openTradingView(coin) {
-    openExternalUrl(tradingViewUrl(coin));
+  async function openTradingView(coin) {
+    if (!coin) return;
+    // پیدا کردن نماد واقعی (بدون این، سکه‌هایی مثل LIT خطا می‌دهند)
+    let url = tradingViewUrl(coin);
+    let resolved = null;
+    try {
+      resolved = await resolveTradingViewSymbol(coin);
+    } catch (e) { /* fallback */ }
+    if (resolved) {
+      url = 'https://www.tradingview.com/chart/?symbol=' + resolved.exchange + ':' + resolved.symbol;
+    }
+    openExternalUrl(url);
+    if (resolved) {
+      const ex = String(resolved.exchange).toLowerCase();
+      const exFa = { binance: 'بایننس', okx: 'اوکی‌ایکس', bybit: 'بای‌بیت', mexc: 'مکس', kucoin: 'کوکوین', coinbase: 'کوین‌بیس', kraken: 'کراکن' }[ex] || resolved.exchange;
+      toast('📊 نمودار از صرافی ' + exFa + ' باز شد' + (resolved.perp ? ' (نسخه دائمی — اسپات موجود نیست)' : ''));
+    }
   }
 
   /* ============================================================
@@ -331,7 +382,14 @@ const UI = (function () {
 
     // دکمه تریدینگ ویو
     const tvBtn = U.el('button', { class: 'tv-btn', text: '📊 تریدینگ ویو' });
-    tvBtn.addEventListener('click', function () { openTradingView(coin); });
+    tvBtn.addEventListener('click', function () {
+      tvBtn.disabled = true;
+      tvBtn.textContent = 'در حال پیدا کردن نماد...';
+      openTradingView(coin).finally(() => {
+        tvBtn.disabled = false;
+        tvBtn.textContent = '📊 تریدینگ ویو';
+      });
+    });
     container.appendChild(tvBtn);
 
     // گزینه‌های جایگزین نمودار (اگر تریدینگ ویو باز نشد)
@@ -870,7 +928,7 @@ const UI = (function () {
     });
   }
 
-  return { signalBadge, pumpBadge, severityLabel, renderMarket, updateMarketRows, renderDetail, renderScanner, renderSettings, renderSignalPanel, renderIndicators, renderPumpPanel, renderScanResults, setRowSignal, renderFilterBar, refreshFilterCounts, applyRowFilters, toast, tradingViewUrl, openTradingView, openExternalUrl, chartLinks };
+  return { signalBadge, pumpBadge, severityLabel, renderMarket, updateMarketRows, renderDetail, renderScanner, renderSettings, renderSignalPanel, renderIndicators, renderPumpPanel, renderScanResults, setRowSignal, renderFilterBar, refreshFilterCounts, applyRowFilters, toast, tradingViewUrl, openTradingView, openExternalUrl, chartLinks, resolveTradingViewSymbol };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = UI;
