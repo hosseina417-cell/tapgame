@@ -92,6 +92,8 @@ code += `
         if (!document.getElementById('chart')) errors.push('جزئیات: نمودار نیست');
         if (!document.getElementById('signalPanel')) errors.push('جزئیات: پنل سیگنال نیست');
         if (!document.getElementById('detailChips')) errors.push('جزئیات: چیپ‌های اطلاعاتی نیست');
+        if (!document.querySelector('.tv-btn')) errors.push('جزئیات: دکمه تریدینگ ویو نیست');
+        if (!document.querySelector('.tv-alt-btn')) errors.push('جزئیات: دکمه‌های جایگزین نمودار نیست');
         if (location.hash !== '#/coin/bitcoin') errors.push('مسیریابی: hash جزئیات (' + location.hash + ')');
 
         // مسیریابی hash: شبیه‌سازی دکمه بازگشت اندروید

@@ -502,3 +502,31 @@ main { flex: 1; padding: 12px; }
   text-align: center;
 }
 .tv-btn:active { transform: scale(0.98); }
+
+/* گزینه‌های جایگزین نمودار */
+.tv-alt {
+  margin-bottom: 10px;
+}
+.tv-alt-title {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+  text-align: center;
+}
+.tv-alt-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.tv-alt-btn {
+  padding: 7px 12px;
+  background: var(--card);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.tv-alt-btn:active { border-color: var(--blue); color: var(--blue); }

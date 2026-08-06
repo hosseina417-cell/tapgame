@@ -239,6 +239,17 @@ const UI = (function () {
     }
   }
 
+  /* باز کردن هر لینک خارجی (پل جاوا → مرورگر گوشی) */
+  function openExternalUrl(url) {
+    try {
+      if (window.AndroidBridge && window.AndroidBridge.openExternal) {
+        window.AndroidBridge.openExternal(url);
+        return;
+      }
+    } catch (e) { /* fallback */ }
+    window.open(url, '_blank');
+  }
+
   /* ---------- لینک تریدینگ ویو برای یک سکه ---------- */
   function tradingViewUrl(coin) {
     if (!coin) return 'https://www.tradingview.com/';
@@ -256,16 +267,23 @@ const UI = (function () {
     return 'https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(prefix + pair);
   }
 
+  /* لینک‌های جایگزین نمودار (وقتی تریدینگ ویو در منطقه در دسترس نیست) */
+  function chartLinks(coin) {
+    if (!coin) return [];
+    const sym = coin.sym;
+    const base = sym.toLowerCase();
+    const links = [
+      { label: 'بای‌بیت', url: 'https://www.bybit.com/trade/spot/' + sym + '/USDT' },
+      { label: 'اوکی‌ایکس', url: 'https://www.okx.com/trade-spot/' + base + '-usdt' },
+      { label: 'کوین‌گکو', url: 'https://www.coingecko.com/en/coins/' + coin.id },
+      { label: 'کوین‌مارکت‌کپ', url: 'https://coinmarketcap.com/currencies/' + coin.id + '/' }
+    ];
+    return links;
+  }
+
   /* باز کردن تریدینگ ویو (پل جاوا → مرورگر گوشی) */
   function openTradingView(coin) {
-    const url = tradingViewUrl(coin);
-    try {
-      if (window.AndroidBridge && window.AndroidBridge.openExternal) {
-        window.AndroidBridge.openExternal(url);
-        return;
-      }
-    } catch (e) { /* fallback */ }
-    window.open(url, '_blank');
+    openExternalUrl(tradingViewUrl(coin));
   }
 
   /* ============================================================
@@ -302,6 +320,18 @@ const UI = (function () {
     const tvBtn = U.el('button', { class: 'tv-btn', text: '📊 تریدینگ ویو' });
     tvBtn.addEventListener('click', function () { openTradingView(coin); });
     container.appendChild(tvBtn);
+
+    // گزینه‌های جایگزین نمودار (اگر تریدینگ ویو باز نشد)
+    const altRow = U.el('div', { class: 'tv-alt' });
+    altRow.appendChild(U.el('div', { class: 'tv-alt-title', text: 'اگر تریدینگ ویو باز نشد:' }));
+    const altBtns = U.el('div', { class: 'tv-alt-btns' });
+    for (const link of chartLinks(coin)) {
+      const b = U.el('button', { class: 'tv-alt-btn', text: link.label });
+      b.addEventListener('click', function () { openExternalUrl(link.url); });
+      altBtns.appendChild(b);
+    }
+    altRow.appendChild(altBtns);
+    container.appendChild(altRow);
 
     // تب‌های تایم‌فریم
     const tfBar = U.el('div', { class: 'tf-bar' }, ['15m', '1h', '4h', '1d'].map(tf =>
@@ -827,7 +857,7 @@ const UI = (function () {
     });
   }
 
-  return { signalBadge, pumpBadge, severityLabel, renderMarket, updateMarketRows, renderDetail, renderScanner, renderSettings, renderSignalPanel, renderIndicators, renderPumpPanel, renderScanResults, setRowSignal, renderFilterBar, refreshFilterCounts, applyRowFilters, toast, tradingViewUrl, openTradingView };
+  return { signalBadge, pumpBadge, severityLabel, renderMarket, updateMarketRows, renderDetail, renderScanner, renderSettings, renderSignalPanel, renderIndicators, renderPumpPanel, renderScanResults, setRowSignal, renderFilterBar, refreshFilterCounts, applyRowFilters, toast, tradingViewUrl, openTradingView, openExternalUrl, chartLinks };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = UI;
