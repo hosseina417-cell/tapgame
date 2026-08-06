@@ -336,3 +336,25 @@ section('دسته‌بندی صعودی/نزولی');
   const dnStrong = S.categoryFromAnalysis(TA.analyze(gen(400, -3, 76)));
   ok(dnStrong === 'strong-sell', 'روند نزولی قوی (-۳٪ روزانه) → نزولی قوی (' + dnStrong + ')');
 }
+
+/* ============ لینک تریدینگ ویو ============ */
+section('لینک تریدینگ ویو');
+{
+  const UI = require('../app/js/ui.js');
+  // بدون watchlist → بایننس
+  const btc = UI.tradingViewUrl({ id: 'bitcoin', sym: 'BTC', kraken: 'XBTUSD' });
+  ok(btc.indexOf('BINANCE%3ABTCUSDT') >= 0 || btc.indexOf('BINANCE:BTCUSDT') >= 0, 'لینک بیت‌کوین → BINANCE:BTCUSDT (' + btc + ')');
+  const sol = UI.tradingViewUrl({ id: 'solana', sym: 'SOL' });
+  ok(sol.indexOf('BINANCE%3ASOLUSDT') >= 0 || sol.indexOf('BINANCE:SOLUSDT') >= 0, 'لینک سولانا → BINANCE:SOLUSDT');
+  // با watchlist و منبع بای‌بیت
+  global.Store = { get: () => [{ id: 'xcoin', sym: 'XCOIN', src: 'bybit' }] };
+  const x = UI.tradingViewUrl({ id: 'xcoin', sym: 'XCOIN' });
+  ok(x.indexOf('BYBIT%3AXCOINUSDT') >= 0 || x.indexOf('BYBIT:XCOINUSDT') >= 0, 'لینک با منبع بای‌بیت → BYBIT:XCOINUSDT (' + x + ')');
+  delete global.Store;
+  // کراکن با XBT
+  global.Store = { get: () => [{ id: 'bitcoin', sym: 'BTC', src: 'kraken' }] };
+  const kb = UI.tradingViewUrl({ id: 'bitcoin', sym: 'BTC', kraken: 'XBTUSD' });
+  ok(kb.indexOf('KRAKEN%3AXBTUSD') >= 0 || kb.indexOf('KRAKEN:XBTUSD') >= 0, 'لینک کراکن → KRAKEN:XBTUSD (' + kb + ')');
+  delete global.Store;
+  ok(UI.tradingViewUrl(null).indexOf('tradingview.com') >= 0, 'سکه نامعتبر → صفحه اصلی تریدینگ ویو');
+}

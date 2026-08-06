@@ -8,6 +8,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
@@ -48,6 +49,17 @@ public class MainActivity extends Activity {
                         == PackageManager.PERMISSION_GRANTED;
             }
             return true;
+        }
+
+        @JavascriptInterface
+        public void openExternal(String url) {
+            try {
+                Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Exception e) {
+                // باز کردن لینک خارجی نباید برنامه را از کار بیندازد
+            }
         }
     }
 

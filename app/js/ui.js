@@ -239,6 +239,35 @@ const UI = (function () {
     }
   }
 
+  /* ---------- لینک تریدینگ ویو برای یک سکه ---------- */
+  function tradingViewUrl(coin) {
+    if (!coin) return 'https://www.tradingview.com/';
+    let src = 'binance';
+    try {
+      const wl = Store.get('watchlist') || [];
+      const entry = wl.find(c => c.id === coin.id);
+      if (entry && entry.src) src = entry.src;
+    } catch (e) { /* پیش‌فرض بایننس */ }
+    const prefix = {
+      binance: 'BINANCE:', bybit: 'BYBIT:', okx: 'OKX:',
+      kraken: 'KRAKEN:', cryptocompare: 'COINBASE:'
+    }[src] || 'BINANCE:';
+    const pair = src === 'kraken' ? (coin.kraken || coin.sym + 'USD') : coin.sym + 'USDT';
+    return 'https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(prefix + pair);
+  }
+
+  /* باز کردن تریدینگ ویو (پل جاوا → مرورگر گوشی) */
+  function openTradingView(coin) {
+    const url = tradingViewUrl(coin);
+    try {
+      if (window.AndroidBridge && window.AndroidBridge.openExternal) {
+        window.AndroidBridge.openExternal(url);
+        return;
+      }
+    } catch (e) { /* fallback */ }
+    window.open(url, '_blank');
+  }
+
   /* ============================================================
    * صفحه ۲: جزئیات سکه
    * ============================================================ */
@@ -268,6 +297,11 @@ const UI = (function () {
 
     // چیپ‌های اطلاعاتی (۱ ساعت، ۲۴ ساعت، ارزش بازار، رتبه)
     container.appendChild(U.el('div', { class: 'chips-row', id: 'detailChips' }));
+
+    // دکمه تریدینگ ویو
+    const tvBtn = U.el('button', { class: 'tv-btn', text: '📊 تریدینگ ویو' });
+    tvBtn.addEventListener('click', function () { openTradingView(coin); });
+    container.appendChild(tvBtn);
 
     // تب‌های تایم‌فریم
     const tfBar = U.el('div', { class: 'tf-bar' }, ['15m', '1h', '4h', '1d'].map(tf =>
@@ -728,7 +762,7 @@ const UI = (function () {
                   if (res.candles.length) Providers.setPrice(full.id, res.candles[res.candles.length - 1].c);
                   if (Providers.addCoin(full)) {
                     const wl = Store.get('watchlist');
-                    wl.push(full);
+                    wl.push(Object.assign({}, full, { src: res.source }));
                     Store.set('watchlist', wl);
                     toast('✔ ' + full.sym + ' اضافه شد');
                     U.clear(customResults);
@@ -793,5 +827,7 @@ const UI = (function () {
     });
   }
 
-  return { signalBadge, pumpBadge, severityLabel, renderMarket, updateMarketRows, renderDetail, renderScanner, renderSettings, renderSignalPanel, renderIndicators, renderPumpPanel, renderScanResults, setRowSignal, renderFilterBar, refreshFilterCounts, applyRowFilters, toast };
+  return { signalBadge, pumpBadge, severityLabel, renderMarket, updateMarketRows, renderDetail, renderScanner, renderSettings, renderSignalPanel, renderIndicators, renderPumpPanel, renderScanResults, setRowSignal, renderFilterBar, refreshFilterCounts, applyRowFilters, toast, tradingViewUrl, openTradingView };
 })();
+
+if (typeof module !== 'undefined' && module.exports) module.exports = UI;
