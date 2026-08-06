@@ -106,6 +106,11 @@ code += `
         window.dispatchEvent(new window.HashChangeEvent('hashchange'));
         if (App.state.screen !== 'detail' || !App.state.coin || App.state.coin.id !== 'ethereum') errors.push('مسیریابی: جزئیات اتریوم باز نشد');
 
+        // تست: دکمه با on* handler واقعاً کلیک می‌شود (رفع باگ افزودن)
+        const btn = U.el('button', { class: 'btn', onclick: function () { window.__clicked = (window.__clicked || 0) + 1; } });
+        btn.click();
+        if (window.__clicked !== 1) errors.push('رویداد on* با U.el بسته نمی‌شود');
+
         window.__done = true;
       }, 300);
     } catch (e) {

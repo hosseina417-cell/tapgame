@@ -276,3 +276,23 @@ section('V1.1: فهرست ارزها و ثبت پویا');
   P.setPrice('mega-coin', 1.23);
   ok(P.getPrice('mega-coin') === 1.23, 'قیمت کش برای سکه سفارشی ذخیره شد');
 }
+
+/* ============ V1.1.1: باگ‌های افزودن سکه ============ */
+section('V1.1.1: buildCoin و افزودن سکه');
+{
+  const P = require('../app/js/providers.js');
+  // نتیجه جستجو فقط id/sym/name دارد — buildCoin باید نمادهای صرافی را بسازد
+  const c = P.buildCoin({ id: 'dogwifcoin', sym: 'WIF', name: 'دوج‌ویف' });
+  ok(c.binance === 'WIFUSDT' && c.bybit === 'WIFUSDT' && c.okx === 'WIF-USDT', 'buildCoin نمادهای صرافی را می‌سازد');
+  ok(c.kraken === 'WIFUSD' && c.cc === 'WIF', 'buildCoin کراکن و کریپتوکامپیر را می‌سازد');
+  const btc = P.buildCoin({ id: 'bitcoin', sym: 'BTC' });
+  ok(btc.kraken === 'XBTUSD', 'buildCoin استثنای کراکن BTC را اعمال می‌کند');
+  // addCoin باید سکه ناقص را کامل ذخیره کند
+  P.removeCoin('mega-custom');
+  ok(P.addCoin({ id: 'mega-custom', sym: 'MGC', name: 'Mega' }) === true, 'addCoin سکه جدید را می‌پذیرد');
+  const stored = P.coinById('mega-custom');
+  ok(stored && stored.binance === 'MGCUSDT', 'addCoin سکه کامل با نماد صرافی ذخیره می‌کند');
+  ok(P.addCoin({ id: 'mega-custom', sym: 'MGC' }) === false, 'افزودن تکراری رد می‌شود');
+  // addCoin با ورودی ناقص
+  ok(P.addCoin({}) === false, 'addCoin ورودی ناقص را رد می‌کند');
+}

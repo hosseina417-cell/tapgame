@@ -51,6 +51,7 @@ const U = (function () {
         else if (k === 'text') node.textContent = attrs[k];
         else if (k === 'html') node.innerHTML = attrs[k];
         else if (k === 'style') node.style.cssText = attrs[k];
+        else if (k.indexOf('on') === 0 && typeof attrs[k] === 'function') node.addEventListener(k.slice(2), attrs[k]);
         else node.setAttribute(k, attrs[k]);
       }
     }

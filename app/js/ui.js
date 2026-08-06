@@ -603,18 +603,20 @@ const UI = (function () {
                 btn.disabled = true;
                 btn.textContent = 'در حال بررسی...';
                 try {
+                  // ساخت سکه کامل از نتیجه جستجو (نمادهای صرافی خودکار ساخته می‌شوند)
+                  const full = Providers.buildCoin(c);
                   // اعتبارسنجی سریع: بایننس ← بای‌بیت
-                  const res = await Providers.getKlinesFast(c, '15m', 60);
-                  if (res.candles.length) Providers.setPrice(c.id, res.candles[res.candles.length - 1].c);
-                  if (Providers.addCoin(c)) {
+                  const res = await Providers.getKlinesFast(full, '15m', 60);
+                  if (res.candles.length) Providers.setPrice(full.id, res.candles[res.candles.length - 1].c);
+                  if (Providers.addCoin(full)) {
                     const wl = Store.get('watchlist');
-                    wl.push(c);
+                    wl.push(full);
                     Store.set('watchlist', wl);
-                    toast('✔ ' + c.sym + ' اضافه شد');
+                    toast('✔ ' + full.sym + ' اضافه شد');
                     U.clear(customResults);
-                    App.refreshMarket(false);
+                    App.refreshMarket(false).then(() => App.setScreen('market'));
                   } else {
-                    toast(c.sym + ' از قبل موجود است');
+                    toast(full.sym + ' از قبل موجود است');
                     btn.disabled = false;
                     btn.textContent = 'افزودن';
                   }
@@ -629,7 +631,31 @@ const UI = (function () {
           }
         } catch (e) {
           U.clear(customResults);
-          customResults.appendChild(U.el('div', { class: 'empty', text: 'خطا: ' + e.message }));
+          customResults.appendChild(U.el('div', { class: 'empty', text: 'خطا در جستجو: ' + e.message }));
+          // جایگزین: افزودن دستی با همان نماد تایپ‌شده
+          customResults.appendChild(U.el('div', { class: 'custom-row' }, [
+            U.el('span', { class: 'coin-sym', text: 'افزودن دستی نماد ' + q.toUpperCase() }),
+            U.el('button', { class: 'btn small', text: 'تلاش', onclick: async (ev) => {
+              const btn = ev.target;
+              btn.disabled = true;
+              btn.textContent = '...';
+              const manual = Providers.buildCoin({ id: q.toLowerCase() + '-coin', sym: q.toUpperCase(), name: q.toUpperCase() });
+              try {
+                await Providers.getKlinesFast(manual, '15m', 60);
+                Providers.addCoin(manual);
+                const wl = Store.get('watchlist');
+                wl.push(manual);
+                Store.set('watchlist', wl);
+                toast('✔ ' + manual.sym + ' اضافه شد');
+                U.clear(customResults);
+                App.refreshMarket(false).then(() => App.setScreen('market'));
+              } catch (e2) {
+                btn.disabled = false;
+                btn.textContent = 'تلاش';
+                toast('این نماد در بایننس/بای‌بیت پیدا نشد');
+              }
+            } })
+          ]));
         }
       });
     }

@@ -159,11 +159,10 @@ const Providers = (function () {
   const extraCoins = [];     // سکه‌های سفارشی کاربر
   const priceCache = {};     // آخرین قیمت شناخته‌شده (برای سکه‌های سفارشی)
 
-  function ensureCoin(base) {
+  /* ساخت کامل سکه از روی داده ناقص (نماد کافی است) */
+  function buildCoin(base) {
     if (!base || !base.id || !base.sym) return null;
     const sym = String(base.sym).toUpperCase();
-    const existing = coinById(base.id);
-    if (existing) return existing;
     const coin = {
       id: base.id,
       name: base.name || base.sym,
@@ -176,6 +175,14 @@ const Providers = (function () {
     };
     const o = SYM_OVERRIDES[sym];
     if (o) Object.assign(coin, o);
+    return coin;
+  }
+
+  function ensureCoin(base) {
+    if (!base || !base.id || !base.sym) return null;
+    const existing = coinById(base.id);
+    if (existing) return existing;
+    const coin = buildCoin(base);
     dynamicCoins[base.id] = coin;
     return coin;
   }
@@ -202,8 +209,9 @@ const Providers = (function () {
 
   /* ---------- سکه‌های سفارشی ---------- */
   function addCoin(coin) {
+    if (!coin || !coin.id || !coin.sym) return false;
     if (coinById(coin.id)) return false;
-    extraCoins.push(coin);
+    extraCoins.push(buildCoin(coin));
     return true;
   }
 
@@ -504,7 +512,7 @@ const Providers = (function () {
     }
   }
 
-  return { COINS, coinById, coinBySymbol, allCoins, addCoin, removeCoin, ensureCoin, registerMarket,
+  return { COINS, coinById, coinBySymbol, allCoins, addCoin, removeCoin, buildCoin, ensureCoin, registerMarket,
            isStablecoin, setPrice, getPrice, mergeCustom, searchCoin,
            getKlines, getKlinesFast, getMarketList, getTicker24h, fetchJSON };
 })();

@@ -23,6 +23,7 @@ const App = (function () {
     lastScanByCoin: {},      // برای dedupe هشدارهای تکراری
     lastNotifyByCoin: {},    // برای محدود کردن اعلان‌ها
     listSignals: {},         // سیگنال‌های سبک فهرست (شناسه سکه → badge)
+    listSignalsAt: {},       // زمان محاسبه هر سیگنال (برای TTL)
     chartSession: null,      // جلسه تعاملی نمودار
     notifAsked: false,       // مجوز اعلان یک بار در نشست خواسته شود
     loading: false
@@ -178,6 +179,8 @@ const App = (function () {
         } else {
           UI.renderMarket(document.getElementById('screen'), state);
         }
+        // سیگنال‌ها را برای ارزهای تازه به‌روز کن (با کش ۵ دقیقه‌ای)
+        loadListSignals(false);
       }
       setLoading(false);
     } catch (e) {
@@ -353,32 +356,46 @@ const App = (function () {
   /* ============================================================
    * سیگنال سبک برای سکه‌های نشان‌شده در فهرست (C19)
    * ============================================================ */
-  async function loadListSignals() {
+  async function loadListSignals(force) {
     if (state.screen !== 'market') return;
-    // سکه‌های نشان‌شده + چند سکه برتر بازار
-    const favs = Store.get('favorites');
-    const ids = favs.slice(0, 8);
-    if (state.market && state.market.list) {
-      for (const m of state.market.list.slice(0, 6)) {
-        if (ids.length >= 14) break;
-        if (ids.indexOf(m.id) < 0) ids.push(m.id);
-      }
-    }
-    if (!ids.length) return;
-    const q = U.makeQueue(3);
-    for (const id of ids) {
-      const coin = Providers.coinById(id);
+    if (!state.market || !state.market.list) return;
+    // سیگنال برای همه ارزهای فهرست (به‌جز استیبل‌کوین‌ها) با کش ۵ دقیقه‌ای
+    const TTL = 5 * 60 * 1000;
+    const q = U.makeQueue(4);
+    let done = 0, total = 0;
+    const countEl = document.querySelector('.market-count');
+    for (const m of state.market.list) {
+      if (Providers.isStablecoin(m.sym)) continue;
+      const coin = Providers.coinById(m.id);
       if (!coin) continue;
+      total++;
+      // اگر سیگنال تازه داریم، فقط نشان را مطمئن کن
+      if (!force && state.listSignals[m.id] && state.listSignalsAt[m.id] && (Date.now() - state.listSignalsAt[m.id]) < TTL) {
+        const row = document.querySelector('.coin-row[data-coin="' + m.id + '"] .sig-cell');
+        if (row && !row.children.length) UI.setRowSignal(row, state.listSignals[m.id]);
+        continue;
+      }
       q.add(async () => {
         try {
-          const { candles } = await Providers.getKlines(coin, '1h', 120);
+          // نسخه سریع: بایننس ← بای‌بیت (۸۰ کندل برای اندیکاتورها کافی است)
+          const { candles } = await Providers.getKlinesFast(coin, '1h', 80);
           const a = TA.analyze(candles);
+          if (!a || a.count < 40) return;
           const ev = Strategy.evaluate(a);
-          state.listSignals[id] = ev;
-          const row = document.querySelector('.coin-row[data-coin="' + id + '"] .sig-cell');
+          state.listSignals[m.id] = ev;
+          state.listSignalsAt[m.id] = Date.now();
+          const row = document.querySelector('.coin-row[data-coin="' + m.id + '"] .sig-cell');
           if (row) UI.setRowSignal(row, ev);
         } catch (e) { /* بدون سیگنال */ }
+        done++;
+        if (countEl && done % 10 === 0) {
+          countEl.textContent = state.market.list.length + ' سکه — محاسبه سیگنال: ' + done + '/' + total;
+        }
       });
+    }
+    if (total && countEl) {
+      const withSig = Object.keys(state.listSignals).filter(id => state.listSignals[id]).length;
+      countEl.textContent = state.market.list.length + ' سکه — سیگنال ' + withSig + ' سکه';
     }
   }
 
@@ -541,8 +558,8 @@ const App = (function () {
     applySettings();
     refreshMarket(true);
     applyHash();
-    // سیگنال‌های سبک برای سکه‌های نشان‌شده
-    setTimeout(loadListSignals, 1500);
+    // سیگنال برای همه ارزهای فهرست
+    setTimeout(() => loadListSignals(false), 1200);
   }
 
   document.addEventListener('DOMContentLoaded', boot);
