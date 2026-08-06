@@ -343,18 +343,25 @@ section('لینک تریدینگ ویو');
   const UI = require('../app/js/ui.js');
   // بدون watchlist → بایننس
   const btc = UI.tradingViewUrl({ id: 'bitcoin', sym: 'BTC', kraken: 'XBTUSD' });
-  ok(btc.indexOf('BINANCE%3ABTCUSDT') >= 0 || btc.indexOf('BINANCE:BTCUSDT') >= 0, 'لینک بیت‌کوین → BINANCE:BTCUSDT (' + btc + ')');
+  ok(btc.indexOf('symbol=BINANCE:BTCUSDT') >= 0, 'لینک بیت‌کوین → symbol=BINANCE:BTCUSDT (کولون خام، نه %3A) (' + btc + ')');
+  ok(btc.indexOf("%3A") < 0, "کولون انکود نشده است (رفع باگ symbol error)");
   const sol = UI.tradingViewUrl({ id: 'solana', sym: 'SOL' });
-  ok(sol.indexOf('BINANCE%3ASOLUSDT') >= 0 || sol.indexOf('BINANCE:SOLUSDT') >= 0, 'لینک سولانا → BINANCE:SOLUSDT');
+  ok(sol.indexOf('symbol=BINANCE:SOLUSDT') >= 0, 'لینک سولانا → symbol=BINANCE:SOLUSDT');
+  // RNDR تغییر نام داده → RENDER
+  const rndr = UI.tradingViewUrl({ id: 'render-token', sym: 'RNDR' });
+  ok(rndr.indexOf('BINANCE:RENDERUSDT') >= 0, 'لینک رندر → BINANCE:RENDERUSDT (تغییر نام) (' + rndr + ')');
+  // MATIC تغییر نام داده → POL
+  const matic = UI.tradingViewUrl({ id: 'matic-network', sym: 'MATIC' });
+  ok(matic.indexOf('BINANCE:POLUSDT') >= 0, 'لینک پالیگان → BINANCE:POLUSDT (تغییر نام) (' + matic + ')');
   // با watchlist و منبع بای‌بیت
   global.Store = { get: () => [{ id: 'xcoin', sym: 'XCOIN', src: 'bybit' }] };
   const x = UI.tradingViewUrl({ id: 'xcoin', sym: 'XCOIN' });
-  ok(x.indexOf('BYBIT%3AXCOINUSDT') >= 0 || x.indexOf('BYBIT:XCOINUSDT') >= 0, 'لینک با منبع بای‌بیت → BYBIT:XCOINUSDT (' + x + ')');
+  ok(x.indexOf('symbol=BYBIT:XCOINUSDT') >= 0, 'لینک با منبع بای‌بیت → BYBIT:XCOINUSDT (' + x + ')');
   delete global.Store;
   // کراکن با XBT
   global.Store = { get: () => [{ id: 'bitcoin', sym: 'BTC', src: 'kraken' }] };
   const kb = UI.tradingViewUrl({ id: 'bitcoin', sym: 'BTC', kraken: 'XBTUSD' });
-  ok(kb.indexOf('KRAKEN%3AXBTUSD') >= 0 || kb.indexOf('KRAKEN:XBTUSD') >= 0, 'لینک کراکن → KRAKEN:XBTUSD (' + kb + ')');
+  ok(kb.indexOf('symbol=KRAKEN:XBTUSD') >= 0, 'لینک کراکن → KRAKEN:XBTUSD (' + kb + ')');
   delete global.Store;
   ok(UI.tradingViewUrl(null).indexOf('tradingview.com') >= 0, 'سکه نامعتبر → صفحه اصلی تریدینگ ویو');
 }

@@ -250,7 +250,17 @@ const UI = (function () {
     window.open(url, '_blank');
   }
 
-  /* ---------- لینک تریدینگ ویو برای یک سکه ---------- */
+  /* نمادهای جایگزین تریدینگ ویو (سکه‌هایی که در صرافی تغییر نام داده‌اند) */
+  const TV_OVERRIDES = {
+    'render-token':  { binance: 'RENDERUSDT', bybit: 'RENDERUSDT', okx: 'RENDER-USDT' },
+    'matic-network': { binance: 'POLUSDT',    bybit: 'POLUSDT',    okx: 'POL-USDT' },
+    'polygon-ecosystem-token': { binance: 'POLUSDT', bybit: 'POLUSDT', okx: 'POL-USDT' }
+  };
+
+  /* ---------- لینک تریدینگ ویو برای یک سکه ----------
+   * نکته مهم: کولون بین صرافی و نماد باید خام بماند (BINANCE:BTCUSDT)
+   * انکود کردن آن به %3A در نسخه موبایل تریدینگ ویو خطای
+   * «This symbol doesn't exist» می‌دهد. */
   function tradingViewUrl(coin) {
     if (!coin) return 'https://www.tradingview.com/';
     let src = 'binance';
@@ -263,8 +273,11 @@ const UI = (function () {
       binance: 'BINANCE:', bybit: 'BYBIT:', okx: 'OKX:',
       kraken: 'KRAKEN:', cryptocompare: 'COINBASE:'
     }[src] || 'BINANCE:';
-    const pair = src === 'kraken' ? (coin.kraken || coin.sym + 'USD') : coin.sym + 'USDT';
-    return 'https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(prefix + pair);
+    let pair = src === 'kraken' ? (coin.kraken || coin.sym + 'USD') : coin.sym + 'USDT';
+    // اعمال نماد جایگزین برای سکه‌های تغییرنام‌داده
+    const ov = TV_OVERRIDES[coin.id];
+    if (ov && ov[src]) pair = ov[src];
+    return 'https://www.tradingview.com/chart/?symbol=' + prefix + pair;
   }
 
   /* لینک‌های جایگزین نمودار (وقتی تریدینگ ویو در منطقه در دسترس نیست) */
@@ -323,7 +336,7 @@ const UI = (function () {
 
     // گزینه‌های جایگزین نمودار (اگر تریدینگ ویو باز نشد)
     const altRow = U.el('div', { class: 'tv-alt' });
-    altRow.appendChild(U.el('div', { class: 'tv-alt-title', text: 'اگر تریدینگ ویو باز نشد:' }));
+    altRow.appendChild(U.el('div', { class: 'tv-alt-title', text: 'اگر تریدینگ ویو نماد را پیدا نکرد:' }));
     const altBtns = U.el('div', { class: 'tv-alt-btns' });
     for (const link of chartLinks(coin)) {
       const b = U.el('button', { class: 'tv-alt-btn', text: link.label });

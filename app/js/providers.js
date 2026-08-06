@@ -35,7 +35,7 @@ const Providers = (function () {
     ['DOT',  'polkadot', 'پولکادات'],
     ['LINK', 'chainlink', 'چین‌لینک'],
     ['TRX',  'tron', 'ترون'],
-    ['MATIC','matic-network', 'پالیگان'],
+    ['MATIC','matic-network', 'پالیگان (MATIC)'],
     ['POL',  'polygon-ecosystem-token', 'پالیگان (POL)'],
     ['LTC',  'litecoin', 'لایت‌کوین'],
     ['SHIB', 'shiba-inu', 'شیبا'],
@@ -56,7 +56,7 @@ const Providers = (function () {
     ['AAVE', 'aave', 'آوه'],
     ['SUI',  'sui', 'سویی'],
     ['PEPE', 'pepe', 'پپه'],
-    ['RNDR', 'render-token', 'رندر'],
+    ['RNDR', 'render-token', 'رندر'],  // نماد صرافی: RENDERUSDT
     ['BCH',  'bitcoin-cash', 'بیت‌کوین کش'],
     ['ETC',  'ethereum-classic', 'اتریوم کلاسیک'],
     ['HBAR', 'hedera-hashgraph', 'هدرا'],
@@ -148,6 +148,9 @@ const Providers = (function () {
       };
       const o = SYM_OVERRIDES[sym];
       if (o) Object.assign(c, o);
+      // تغییرنام‌های رسمی: RNDR → RENDER، MATIC → POL
+      if (sym === 'RNDR') { c.binance = 'RENDERUSDT'; c.bybit = 'RENDERUSDT'; c.okx = 'RENDER-USDT'; }
+      if (sym === 'MATIC') { c.binance = 'POLUSDT'; c.bybit = 'POLUSDT'; c.okx = 'POL-USDT'; }
       return c;
     });
   }
@@ -175,6 +178,8 @@ const Providers = (function () {
     };
     const o = SYM_OVERRIDES[sym];
     if (o) Object.assign(coin, o);
+    if (sym === 'RNDR') { coin.binance = 'RENDERUSDT'; coin.bybit = 'RENDERUSDT'; coin.okx = 'RENDER-USDT'; }
+    if (sym === 'MATIC') { coin.binance = 'POLUSDT'; coin.bybit = 'POLUSDT'; coin.okx = 'POL-USDT'; }
     return coin;
   }
 
