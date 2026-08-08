@@ -1,52 +1,52 @@
-// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
+// This Pine Script code is subject to the terms of the Mozilla Public License 2.0
 // https://mozilla.org/MPL/2.0/
-// © SP2L Pour Samadi Strategy - Version 5.0 FINAL
+//  SP2L Pour Samadi Strategy - Version 5.0 FINAL
 // استراتژی اسپایک تو لگ (Spike 2 Leg) استاد محمدعلی پورصمدی
 // نسخه نهایی و بهینهسازی شده برای بازار کریپتو
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 
 //@version=5
 indicator("SP2L Pour Samadi [V5 FINAL]", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //                        تنظیمات
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 
-// ──── اسپایک ────
-g1 = "═══ اسپایک ═══"
+// ---- اسپایک ----
+g1 = "=== اسپایک ==="
 minSpk     = input.int(3, "حداقل کندل اسپایک", 2, 10, group=g1)
 useMom     = input.bool(true, "فیلتر مومنتوم", group=g1)
 momLvl     = input.int(2, "سطح قدرت (1-5)", 1, 5, group=g1)
 
-// ──── FVG ────
-g2 = "═══ FVG ═══"
+// ---- FVG ----
+g2 = "=== FVG ==="
 useFVG     = input.bool(true, "فیلتر FVG", group=g2)
 fvgType    = input.string("Significant", "نوع", ["All", "Significant", "Structural", "Major"], group=g2)
 fvgLife    = input.int(20, "عمر (کندل)", 5, 50, group=g2)
 mergeFVG   = input.bool(true, "ادغام FVG همپوشان", group=g2)
 
-// ──── دوجی ────
-g3 = "═══ دوجی ═══"
+// ---- دوجی ----
+g3 = "=== دوجی ==="
 useDj      = input.bool(true, "فیلتر دوجی", group=g3)
 djBody     = input.float(0.1, "نسبت بدنه دوجی", 0.05, 0.3, 0.05, group=g3)
 djMax      = input.float(0.25, "حداکثر % دوجی", 0.1, 0.5, 0.05, group=g3)
 
-// ──── ساختار ────
-g4 = "═══ ساختار ═══"
+// ---- ساختار ----
+g4 = "=== ساختار ==="
 useStr     = input.bool(true, "BOS / CHoCH", group=g4)
 swLen      = input.int(5, "طول Swing", 2, 10, group=g4)
 useOB      = input.bool(true, "Order Block", group=g4)
 
-// ──── ورود ────
-g5 = "═══ ورود ═══"
+// ---- ورود ----
+g5 = "=== ورود ==="
 eMode      = input.string("Aggressive", "حالت", ["Aggressive", "Moderate", "Defensive"], group=g5)
 sigBars    = input.int(10, "اعتبار سیگنال", 3, 25, group=g5)
 secEntry   = input.bool(true, "ورود دوم", group=g5)
 secDepth   = input.float(50.0, "عمق ورود۲ %", 10, 80, 5, group=g5) / 100
 coolBars   = input.int(3, "Cooldown", 1, 10, group=g5)
 
-// ──── پوزیشن ────
-g6 = "═══ پوزیشن ═══"
+// ---- پوزیشن ----
+g6 = "=== پوزیشن ==="
 useSLBuf   = input.bool(true, "آستانه SL", group=g6)
 slBuf      = input.float(0.3, "آستانه %", 0.1, 3.0, 0.1, group=g6) / 100
 rr1        = input.float(1.0, "R:R هدف۱", 0.5, 5.0, 0.5, group=g6)
@@ -55,8 +55,8 @@ useTrail   = input.bool(true, "تریلینگ استاپ", group=g6)
 trR        = input.float(0.5, "فاصله تریلینگ (R)", 0.2, 2.0, 0.1, group=g6)
 riskPerTrade = input.float(1.0, "ریسک هر معامله %", 0.5, 5.0, 0.5, group=g6) / 100
 
-// ──── حجم و RSI ────
-g7 = "═══ حجم و RSI ═══"
+// ---- حجم و RSI ----
+g7 = "=== حجم و RSI ==="
 useVol     = input.bool(true, "فیلتر حجم", group=g7)
 vMul       = input.float(1.2, "ضریب حجم", 1.0, 3.0, 0.1, group=g7)
 vLen       = input.int(20, "میانگین حجم", 5, 50, group=g7)
@@ -65,40 +65,40 @@ rsiL       = input.int(14, "دوره RSI", 5, 30, group=g7)
 rsiHi      = input.float(70.0, "OB", 60, 90, group=g7)
 rsiLo      = input.float(30.0, "OS", 10, 40, group=g7)
 
-// ──── مولتی تایمفریم ────
-g8 = "═══ مولتی تایمفریم ═══"
+// ---- مولتی تایمفریم ----
+g8 = "=== مولتی تایمفریم ==="
 useMTF     = input.bool(true, "تأیید HTF", group=g8)
 htfTF      = input.timeframe("60", "تایمفریم", group=g8)
 
-// ──── امتیازدهی ────
-g9 = "═══ امتیازدهی ═══"
+// ---- امتیازدهی ----
+g9 = "=== امتیازدهی ==="
 useConf    = input.bool(true, "سیستم امتیاز", group=g9)
 minC       = input.int(2, "حداقل امتیاز", 1, 10, group=g9)
 
-// ──── فیلتر زمانی ────
-g10 = "═══ Kill Zone ═══"
+// ---- فیلتر زمانی ----
+g10 = "=== Kill Zone ==="
 useKZ      = input.bool(false, "فیلتر Kill Zone", group=g10)
 kzStart    = input.int(7, "شروع UTC", 0, 23, group=g10)
 kzEnd      = input.int(20, "پایان UTC", 0, 23, group=g10)
 
-// ──── نمایش ────
-g11 = "═══ نمایش ═══"
+// ---- نمایش ----
+g11 = "=== نمایش ==="
 dMode      = input.string("Signal", "حالت", ["Setup", "Signal"], group=g11)
 showDash   = input.bool(true, "داشبورد", group=g11)
-showGuide  = input.bool(false, "📖 راهنمای هوشمند (کلیک=باز)", group=g11)
+showGuide  = input.bool(false, " راهنمای هوشمند (کلیک=باز)", group=g11)
 showFVGs   = input.bool(true, "FVG ها", group=g11)
 showStr    = input.bool(true, "ساختار", group=g11)
 showHLs    = input.bool(true, "سطوح HL/LH", group=g11)
 showZone   = input.bool(true, "ناحیه ترید", group=g11)
 showExpire = input.bool(true, "هشدار انقضا", group=g11)
-showTrend  = input.bool(false, "📈 خطوط روند (خودکار)", group=g11)
-showSR     = input.bool(false, "➖ حمایت/مقاومت (خودکار)", group=g11)
+showTrend  = input.bool(false, " خطوط روند (خودکار)", group=g11)
+showSR     = input.bool(false, " حمایت/مقاومت (خودکار)", group=g11)
 srLookback = input.int(50, "دوره بررسی S/R", 20, 100, group=g11)
 srTouch    = input.int(2, "حداقل برخورد S/R", 2, 5, group=g11)
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //                     توابع پایه
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 bdy() => math.abs(close - open)
 rng() => high - low
 brt() => rng() > 0 ? bdy() / rng() : 0
@@ -115,9 +115,9 @@ strThr   = avgBdy * (1 + momLvl * 0.3)
 utcH     = hour(time, "UTC")
 inKZ     = not useKZ or (utcH >= kzStart and utcH <= kzEnd)
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //                   تشخیص FVG + ادغام
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 rawBFVG = low > high[2]
 rawSFVG = high < low[2]
 
@@ -198,9 +198,9 @@ if showFVGs
 nBFVG = array.size(fBT)
 nSFVG = array.size(fST)
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //                تشخیص Order Block
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 isBullOB = isS()[1] and isB() and bdy() > avgBdy * 1.5
 isBearOB = isB()[1] and isS() and bdy() > avgBdy * 1.5
 
@@ -224,9 +224,9 @@ if isBearOB
 nearBullOB = useOB and not na(obBL) and low <= obBH and low >= obBL - atr14
 nearBearOB = useOB and not na(obSH) and high >= obSL2 and high <= obSH + atr14
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //           ساختار بازار + Pivot Tracking
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 swH = ta.pivothigh(high, swLen, swLen)
 swL = ta.pivotlow(low, swLen, swLen)
 
@@ -257,26 +257,26 @@ if sBOS or sCHoCH
 if showStr
     if bBOS and not na(pSHb)
         line.new(pSHb, pSH, bar_index, pSH, color=color.new(#00c853, 50), style=line.style_dashed)
-        label.new(bar_index, pSH, "BOS↑", color=color.new(#00c853, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
+        label.new(bar_index, pSH, "BOS", color=color.new(#00c853, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
     if sBOS and not na(pSLb)
         line.new(pSLb, pSL, bar_index, pSL, color=color.new(#ff1744, 50), style=line.style_dashed)
-        label.new(bar_index, pSL, "BOS↓", color=color.new(#ff1744, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
+        label.new(bar_index, pSL, "BOS", color=color.new(#ff1744, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
     if bCHoCH and not na(pSHb)
-        label.new(bar_index, pSH, "CHoCH↑", color=color.new(#26A69A, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
+        label.new(bar_index, pSH, "CHoCH", color=color.new(#26A69A, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
     if sCHoCH and not na(pSLb)
-        label.new(bar_index, pSL, "CHoCH↓", color=color.new(#EF5350, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
+        label.new(bar_index, pSL, "CHoCH", color=color.new(#EF5350, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //                مولتی تایمفریم
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 htf21 = request.security(syminfo.tickerid, htfTF, ta.ema(close, 21))
 htf50 = request.security(syminfo.tickerid, htfTF, ta.ema(close, 50))
 htfUp = htf21 > htf50
 htfDn = htf21 < htf50
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //                تشخیص اسپایک
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 cntB() =>
     c = 0
     maxI = math.min(15, math.max(bar_index, 0))
@@ -387,9 +387,9 @@ sSpk = bar_index > 15 and sC >= minSpk and chkMom(-1) and chkDj(-1) and chkFVG(-
 bOrg = bSpk ? findOrg(1) : na
 sOrg = sSpk ? findOrg(-1) : na
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //            ردیابی داینامیک HL/LH
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 var int   trk = 0     // 0=none 1=bull 2=bear
 var float cHL = na
 var float cLH = na
@@ -428,9 +428,9 @@ if showHLs and trk == 1 and not na(cHL)
 if showHLs and trk == 2 and not na(cLH)
     line.new(trkB, cLH, bar_index + 3, cLH, color=color.new(#ff5252, 40), style=line.style_dotted)
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //        واگرایی RSI + سیستم امتیازدهی
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 rsiBDiv = rsiVal < rsiVal[5] and low < low[5] and rsiVal > rsiLo
 rsiSDiv = rsiVal > rsiVal[5] and high > high[5] and rsiVal < rsiHi
 
@@ -488,10 +488,10 @@ calcConfSell() =>
         s += 1
     s
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //           ماشین حالت نهایی
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-var int   st    = 0     // 0=idle 1=setup↑ 2=setup↓ 3=long 4=short
+// --------------------------------------------------------
+var int   st    = 0     // 0=idle 1=setup 2=setup 3=long 4=short
 var float ent   = na
 var float slp   = na
 var float tp1   = na
@@ -508,7 +508,7 @@ var bool  expired = false
 
 canGo = bar_index - lastEx > coolBars
 
-// ─── ستاپ ───
+// --- ستاپ ---
 if bSpk and canGo and (not useStr or bias >= 0) and (not useMTF or htfUp)
     cs = useConf ? calcConfBuy() : 5
     if cs >= minC
@@ -535,7 +535,7 @@ if sSpk and canGo and (not useStr or bias <= 0) and (not useMTF or htfDn)
         sOrg2 := sOrg
         expired := false
 
-// ─── ورود خرید ───
+// --- ورود خرید ---
 float d = 0.0
 if st == 1 and bar_index - sB <= sigBars
     buf = useSLBuf ? sOrg2 * slBuf : 0
@@ -579,7 +579,7 @@ if st == 2 and bar_index - sB <= sigBars
         tp2 := ent - d * rr2
         expired := false
 
-// ─── مدیریت Long ───
+// --- مدیریت Long ---
 if st == 3
     if not t1h and high >= tp1
         t1h := true
@@ -598,7 +598,7 @@ if st == 3
         if low <= se and close > se
             sEnt := true
 
-// ─── مدیریت Short ───
+// --- مدیریت Short ---
 if st == 4
     if not t1h and low <= tp1
         t1h := true
@@ -617,16 +617,16 @@ if st == 4
         if high >= se and close < se
             sEnt := true
 
-// ─── انقضا ───
+// --- انقضا ---
 if (st == 1 or st == 2) and bar_index - sB > sigBars
     expired := true
     if showExpire
-        label.new(bar_index, close, "⏰✗", color=color.new(#ff6f00, 50), textcolor=color.white, style=label.style_label_up, size=size.tiny)
+        label.new(bar_index, close, "X", color=color.new(#ff6f00, 50), textcolor=color.white, style=label.style_label_up, size=size.tiny)
     st := 0
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //              ناحیه ترید
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 var box tZone = na
 
 if showZone
@@ -641,22 +641,22 @@ if showZone
     if st >= 3 and not na(tZone)
         box.set_right(tZone, bar_index + 5)
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //              رسم سطوح
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 isL = st == 3
 isS2 = st == 4
 
-plot(isL ? ent : na, "E↑", color.new(#2196F3, 20), style=plot.style_linebr, linewidth=2)
-plot(isS2 ? ent : na, "E↓", color.new(#FF9800, 20), style=plot.style_linebr, linewidth=2)
-plot(isL ? slp : na, "SL↑", color.new(#F44336, 30), style=plot.style_linebr)
-plot(isS2 ? slp : na, "SL↓", color.new(#F44336, 30), style=plot.style_linebr)
-plot(isL and t1h and not na(tSL) ? tSL : na, "Tr↑", color.new(#FFEB3B, 10), style=plot.style_linebr, linewidth=2)
-plot(isS2 and t1h and not na(tSL) ? tSL : na, "Tr↓", color.new(#FFEB3B, 10), style=plot.style_linebr, linewidth=2)
-plot(isL ? tp1 : na, "TP1↑", color=color.new(#4CAF50, 40), style=plot.style_cross)
-plot(isL ? tp2 : na, "TP2↑", color=color.new(#8BC34A, 40), style=plot.style_cross)
-plot(isS2 ? tp1 : na, "TP1↓", color=color.new(#4CAF50, 40), style=plot.style_cross)
-plot(isS2 ? tp2 : na, "TP2↓", color=color.new(#8BC34A, 40), style=plot.style_cross)
+plot(isL ? ent : na, "E", color.new(#2196F3, 20), style=plot.style_linebr, linewidth=2)
+plot(isS2 ? ent : na, "E", color.new(#FF9800, 20), style=plot.style_linebr, linewidth=2)
+plot(isL ? slp : na, "SL", color.new(#F44336, 30), style=plot.style_linebr)
+plot(isS2 ? slp : na, "SL", color.new(#F44336, 30), style=plot.style_linebr)
+plot(isL and t1h and not na(tSL) ? tSL : na, "Tr", color.new(#FFEB3B, 10), style=plot.style_linebr, linewidth=2)
+plot(isS2 and t1h and not na(tSL) ? tSL : na, "Tr", color.new(#FFEB3B, 10), style=plot.style_linebr, linewidth=2)
+plot(isL ? tp1 : na, "TP1", color=color.new(#4CAF50, 40), style=plot.style_cross)
+plot(isL ? tp2 : na, "TP2", color=color.new(#8BC34A, 40), style=plot.style_cross)
+plot(isS2 ? tp1 : na, "TP1", color=color.new(#4CAF50, 40), style=plot.style_cross)
+plot(isS2 ? tp2 : na, "TP2", color=color.new(#8BC34A, 40), style=plot.style_cross)
 
 bE = st == 3 and st[1] != 3
 sE = st == 4 and st[1] != 4
@@ -666,20 +666,20 @@ plotshape(sE and dMode == "Signal", "SELL", shape.triangledown, location.aboveba
 
 // لیبل اسپایک (تفکیک از سیگنال)
 if bSpk
-    label.new(bar_index, low, "◆SPK↑", color=color.new(#00695C, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
+    label.new(bar_index, low, "*SPK", color=color.new(#00695C, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
 if sSpk
-    label.new(bar_index, high, "◆SPK↓", color=color.new(#B71C1C, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
+    label.new(bar_index, high, "*SPK", color=color.new(#B71C1C, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
 
 bgcolor(bSpk ? color.new(#00c853, 94) : sSpk ? color.new(#ff1744, 94) : na)
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //              آمار و نتایج
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 var int   tot = 0
 var int   win = 0
 var int   los = 0
 var float pnl = 0.0
-var string lR  = "✗ خارج"
+var string lR  = "X خارج"
 var float pkP = 0.0
 var float mDD = 0.0
 var int   conLoss = 0
@@ -704,12 +704,12 @@ if st == 0 and (st[1] == 3 or st[1] == 4)
     if r > 0
         win += 1
         conLoss := 0
-        lR := "✓ +" + str.tostring(math.round(r, 4))
+        lR := "V +" + str.tostring(math.round(r, 4))
     else
         los += 1
         conLoss += 1
         maxCL := math.max(maxCL, conLoss)
-        lR := "✗ " + str.tostring(math.round(r, 4))
+        lR := "X " + str.tostring(math.round(r, 4))
 
 wR = tot > 0 ? win / tot * 100 : 0.0
 pf = los > 0 ? win / los : win > 0 ? 99.0 : 0.0
@@ -717,64 +717,64 @@ pf = los > 0 ? win / los : win > 0 ? 99.0 : 0.0
 // پیشنهاد ریسک بهینه
 optRisk = wR > 0 and rr1 > 0 ? (wR / 100) * rr1 : riskPerTrade
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //         داشبورد حرفهای (نسخه نهایی)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 if showDash and barstate.islast
     var table d = table.new(position.top_right, 2, 18, bgcolor=color.new(#0d1117, 5), border_width=1, border_color=#30363d)
     
     bg = #161b22
     rw = 0
     
-    // ─ هدر ─
-    table.cell(d, 0, rw, "⚡ SP2L V5 FINAL", text_color=#ffd700, text_size=size.normal, bgcolor=bg)
+    // - هدر -
+    table.cell(d, 0, rw, " SP2L V5 FINAL", text_color=#ffd700, text_size=size.normal, bgcolor=bg)
     table.cell(d, 1, rw, "پور صمدی", text_color=#ffd700, text_size=size.normal, bgcolor=bg)
     rw += 1
     
-    // ─ ساختار ─
+    // - ساختار -
     table.cell(d, 0, rw, "ساختار:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, bias == 1 ? "🟢 صعودی" : bias == -1 ? "🔴 نزولی" : "⚪ خنثی", text_color=bias == 1 ? #00e676 : bias == -1 ? #ff1744 : #888888, text_size=size.small)
+    table.cell(d, 1, rw, bias == 1 ? "[+] صعودی" : bias == -1 ? "[-] نزولی" : " خنثی", text_color=bias == 1 ? #00e676 : bias == -1 ? #ff1744 : #888888, text_size=size.small)
     rw += 1
     
-    // ─ HTF ─
+    // - HTF -
     table.cell(d, 0, rw, "روند بالا:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, htfUp ? "🟢 صعودی" : htfDn ? "🔴 نزولی" : "⚪ خنثی", text_color=htfUp ? #00e676 : htfDn ? #ff1744 : #888888, text_size=size.small)
+    table.cell(d, 1, rw, htfUp ? "[+] صعودی" : htfDn ? "[-] نزولی" : " خنثی", text_color=htfUp ? #00e676 : htfDn ? #ff1744 : #888888, text_size=size.small)
     rw += 1
     
-    // ─ FVG ─
+    // - FVG -
     table.cell(d, 0, rw, "FVG:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, str.tostring(nBFVG) + "↑ " + str.tostring(nSFVG) + "↓", text_color=#58a6ff, text_size=size.small)
+    table.cell(d, 1, rw, str.tostring(nBFVG) + " " + str.tostring(nSFVG) + "x", text_color=#58a6ff, text_size=size.small)
     rw += 1
     
-    // ─ حجم ─
+    // - حجم -
     table.cell(d, 0, rw, "حجم:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, volume > avgVol * vMul ? " بالا" : volume > avgVol ? "◆ متوسط" : "◇ کم", text_color=volume > avgVol * vMul ? #00e676 : volume > avgVol ? #ffa726 : #888888, text_size=size.small)
+    table.cell(d, 1, rw, volume > avgVol * vMul ? " بالا" : volume > avgVol ? "* متوسط" : "- کم", text_color=volume > avgVol * vMul ? #00e676 : volume > avgVol ? #ffa726 : #888888, text_size=size.small)
     rw += 1
     
-    // ─ RSI ─
+    // - RSI -
     table.cell(d, 0, rw, "RSI:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, str.tostring(math.round(rsiVal, 1)) + (rsiBDiv ? " ↑واگرایی" : rsiSDiv ? " ↓واگرایی" : ""), text_color=rsiVal > rsiHi ? #ff1744 : rsiVal < rsiLo ? #00e676 : #c9d1d9, text_size=size.small)
+    table.cell(d, 1, rw, str.tostring(math.round(rsiVal, 1)) + (rsiBDiv ? " واگرایی" : rsiSDiv ? " واگرایی" : "x"), text_color=rsiVal > rsiHi ? #ff1744 : rsiVal < rsiLo ? #00e676 : #c9d1d9, text_size=size.small)
     rw += 1
     
-    // ─ Kill Zone ─
+    // - Kill Zone -
     if useKZ
         table.cell(d, 0, rw, "منطقه زمانی:", text_color=#c9d1d9, text_size=size.small)
-        table.cell(d, 1, rw, inKZ ? "✓ فعال" : "✗", text_color=inKZ ? #00e676 : #888888, text_size=size.small)
+        table.cell(d, 1, rw, inKZ ? "V فعال" : "X", text_color=inKZ ? #00e676 : #888888, text_size=size.small)
         rw += 1
     
-    // ─ وضعیت ─
+    // - وضعیت -
     table.cell(d, 0, rw, "وضعیت:", text_color=#c9d1d9, text_size=size.small)
-    stT = st == 1 ? "🟡 ستاپ خرید" : st == 2 ? "🟡 ستاپ فروش" : st == 3 ? "🟢 خرید" : st == 4 ? "🔴 فروش" : "⚪ آزاد"
+    stT = st == 1 ? "[!] ستاپ خرید" : st == 2 ? "[!] ستاپ فروش" : st == 3 ? "[+] خرید" : st == 4 ? "[-] فروش" : " آزاد"
     stC = st >= 3 ? #00e676 : st >= 1 ? #ffa726 : #888888
     table.cell(d, 1, rw, stT, text_color=stC, text_size=size.small)
     rw += 1
     
-    // ─ امتیاز ─
+    // - امتیاز -
     table.cell(d, 0, rw, "امتیاز اطمینان:", text_color=#c9d1d9, text_size=size.small)
     table.cell(d, 1, rw, str.tostring(math.round(cS)) + " از 10", text_color=cS >= 7 ? #00e676 : cS >= 4 ? #ffa726 : #ff1744, text_size=size.small)
     rw += 1
     
-    // ─ پوزیشن ─
+    // - پوزیشن -
     if st >= 3
         table.cell(d, 0, rw, "قیمت ورود:", text_color=#c9d1d9, text_size=size.small)
         table.cell(d, 1, rw, str.tostring(ent, "#.####"), text_color=#2196F3, text_size=size.small)
@@ -786,7 +786,7 @@ if showDash and barstate.islast
         rw += 1
         
         table.cell(d, 0, rw, "هدف اول:", text_color=#c9d1d9, text_size=size.small)
-        table.cell(d, 1, rw, str.tostring(tp1, "#.####") + (t1h ? " ✓ لمس شد" : " ⏳ در انتظار"), text_color=t1h ? #00e676 : #c9d1d9, text_size=size.small)
+        table.cell(d, 1, rw, str.tostring(tp1, "#.####") + (t1h ? " V لمس شد" : " ... در انتظار"), text_color=t1h ? #00e676 : #c9d1d9, text_size=size.small)
         rw += 1
         
         table.cell(d, 0, rw, "هدف دوم:", text_color=#c9d1d9, text_size=size.small)
@@ -801,13 +801,13 @@ if showDash and barstate.islast
         // P&L لحظهای
         table.cell(d, 0, rw, "سود/ضرر لحظهای:", text_color=#c9d1d9, text_size=size.small)
         upClr = unrealPnL > 0 ? #00e676 : unrealPnL < 0 ? #ff1744 : #c9d1d9
-        upSign = unrealPnL > 0 ? "+" : ""
+        upSign = unrealPnL > 0 ? "+" : "x"
         table.cell(d, 1, rw, upSign + str.tostring(math.round(unrealPnL, 4)), text_color=upClr, text_size=size.small)
         rw += 1
     
-    // ─ آمار ─
-    table.cell(d, 0, rw, "━━━━ آمار ━━━━", text_color=#ffd700, text_size=size.small, bgcolor=bg)
-    table.cell(d, 1, rw, "", bgcolor=bg)
+    // - آمار -
+    table.cell(d, 0, rw, "---- آمار ----", text_color=#ffd700, text_size=size.small, bgcolor=bg)
+    table.cell(d, 1, rw, "x", bgcolor=bg)
     rw += 1
     
     table.cell(d, 0, rw, "تعداد معاملات:", text_color=#c9d1d9, text_size=size.small)
@@ -826,51 +826,51 @@ if showDash and barstate.islast
     table.cell(d, 1, rw, str.tostring(math.round(mDD, 4)), text_color=#ff1744, text_size=size.small)
     rw += 1
     
-    // ─ هشدار ضرر متوالی ─
+    // - هشدار ضرر متوالی -
     if maxCL >= 3
-        table.cell(d, 0, rw, "⚠️ ضرر متوالی:", text_color=#ff1744, text_size=size.small)
+        table.cell(d, 0, rw, "! ضرر متوالی:", text_color=#ff1744, text_size=size.small)
         table.cell(d, 1, rw, str.tostring(maxCL) + "x", text_color=#ff1744, text_size=size.small)
         rw += 1
     
-    // ─ پیشنهاد ریسک ─
+    // - پیشنهاد ریسک -
     table.cell(d, 0, rw, "ریسک پیشنهادی:", text_color=#c9d1d9, text_size=size.small)
     table.cell(d, 1, rw, str.tostring(math.round(optRisk * 100, 1)) + "%", text_color=#ffd700, text_size=size.small)
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //         راهنمای هوشمند (با کلیک روی input باز میشه)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 if showGuide and barstate.islast
     var table guide = table.new(position.bottom_right, 2, 12, bgcolor=color.new(#1a1a2e, 20), border_width=1, border_color=#30363d)
     
     gb = #16213e
     
-    // ─ هدر ──
-    table.cell(guide, 0, 0, "💡 راهنمای هوشمند", text_color=#ffd700, text_size=size.small, bgcolor=gb)
-    table.cell(guide, 1, 0, "", bgcolor=gb)
+    // - هدر --
+    table.cell(guide, 0, 0, " راهنمای هوشمند", text_color=#ffd700, text_size=size.small, bgcolor=gb)
+    table.cell(guide, 1, 0, "x", bgcolor=gb)
     
-    // ── پیشنهاد اصلی ──
+    // -- پیشنهاد اصلی --
     table.cell(guide, 0, 1, "پیشنهاد:", text_color=#c9d1d9, text_size=size.tiny)
     
-    actionText = ""
+    actionText = "x"
     actionColor = #888888
     
     if st == 3
-        actionText := "🟢 الان بخر (Long)"
+        actionText := "[+] الان بخر (Long)"
         actionColor := #00e676
     else if st == 4
-        actionText := "🔴 الان بفروش (Short)"
+        actionText := "[-] الان بفروش (Short)"
         actionColor := #ff1744
     else if st == 1 and cS >= minC
-        actionText := "🟡 آماده خرید باش"
+        actionText := "[!] آماده خرید باش"
         actionColor := #ffa726
     else if st == 2 and cS >= minC
-        actionText := "🟡 آماده فروش باش"
+        actionText := "[!] آماده فروش باش"
         actionColor := #ffa726
     else if bias == 1 and htfUp
-        actionText := "⏳ صبر برای سیگنال خرید"
+        actionText := "... صبر برای سیگنال خرید"
         actionColor := #58a6ff
     else if bias == -1 and htfDn
-        actionText := "⏳ صبر برای سیگنال فروش"
+        actionText := "... صبر برای سیگنال فروش"
         actionColor := #58a6ff
     else
         actionText := " دست نگه دار"
@@ -878,10 +878,10 @@ if showGuide and barstate.islast
     
     table.cell(guide, 1, 1, actionText, text_color=actionColor, text_size=size.tiny)
     
-    // ── چرا؟ ──
+    // -- چرا؟ --
     table.cell(guide, 0, 2, "دلیل:", text_color=#c9d1d9, text_size=size.tiny)
     
-    reasonText = ""
+    reasonText = "x"
     if st == 3 or st == 4
         reasonText := "سیگنال فعال + تریلینگ"
     else if st == 1 or st == 2
@@ -895,9 +895,9 @@ if showGuide and barstate.islast
     
     table.cell(guide, 1, 2, reasonText, text_color=#c9d1d9, text_size=size.tiny)
     
-    // ── سطوح کلیدی ──
+    // -- سطوح کلیدی --
     table.cell(guide, 0, 3, "سطوح کلیدی:", text_color=#c9d1d9, text_size=size.tiny)
-    keyLevelsText = ""
+    keyLevelsText = "x"
     if st >= 3
         keyLevelsText := "Entry: " + str.tostring(ent, "#.####") + " | SL: " + str.tostring(slp, "#.####")
     else if bias == 1
@@ -909,55 +909,55 @@ if showGuide and barstate.islast
     
     table.cell(guide, 1, 3, keyLevelsText, text_color=#58a6ff, text_size=size.tiny)
     
-    // ── نقاط قوت و ضعف ──
+    // -- نقاط قوت و ضعف --
     table.cell(guide, 0, 4, "نقاط قوت:", text_color=#c9d1d9, text_size=size.tiny)
-    strengths = ""
+    strengths = "x"
     if bias >= 0 and bias != 0
-        strengths := "ساختار صعودی ✓"
+        strengths := "ساختار صعودی V"
     if htfUp
-        strengths := strengths + " | HTF صعودی ✓"
+        strengths := strengths + " | HTF صعودی V"
     if nBFVG > 0
-        strengths := strengths + " | FVG ✓"
+        strengths := strengths + " | FVG V"
     if volume > avgVol * vMul
-        strengths := strengths + " | حجم بالا ✓"
-    if strengths == ""
-        strengths := "ندارد ❌"
+        strengths := strengths + " | حجم بالا V"
+    if strengths == "x"
+        strengths := "ندارد "
     table.cell(guide, 1, 4, strengths, text_color=#00e676, text_size=size.tiny)
     
     table.cell(guide, 0, 5, "نقاط ضعف:", text_color=#c9d1d9, text_size=size.tiny)
-    weaknesses = ""
+    weaknesses = "x"
     if volume < avgVol
         weaknesses := "حجم کم "
     if rsiVal > rsiHi
         weaknesses := weaknesses + " | اشباع خرید "
     if rsiVal < rsiLo
-        weaknesses := weaknesses + " | اشباع فروش ✗"
+        weaknesses := weaknesses + " | اشباع فروش X"
     if bias == 0
-        weaknesses := weaknesses + " | بدون روند ✗"
+        weaknesses := weaknesses + " | بدون روند X"
     if htfUp != (bias >= 0) and bias != 0
-        weaknesses := weaknesses + " | تضاد HTF ✗"
-    if weaknesses == ""
-        weaknesses := "ندارد ✓"
-    table.cell(guide, 1, 5, weaknesses, text_color=weaknesses == "ندارد ✓" ? #00e676 : #ff1744, text_size=size.tiny)
+        weaknesses := weaknesses + " | تضاد HTF X"
+    if weaknesses == "x"
+        weaknesses := "ندارد V"
+    table.cell(guide, 1, 5, weaknesses, text_color=weaknesses == "ندارد V" ? #00e676 : #ff1744, text_size=size.tiny)
     
-    // ── امتیاز و معیارها ──
+    // -- امتیاز و معیارها --
     table.cell(guide, 0, 6, "امتیاز:", text_color=#c9d1d9, text_size=size.tiny)
-    confBar = ""
+    confBar = "x"
     filled = math.round(cS)
     for i = 1 to 10
-        confBar := confBar + (i <= filled ? "█" : "░")
+        confBar := confBar + (i <= filled ? "=" : ".")
     table.cell(guide, 1, 6, confBar + " " + str.tostring(math.round(cS)) + "/10", text_color=cS >= minC ? #00e676 : #ff1744, text_size=size.tiny)
     
-    // ── چکلیست ورود ──
+    // -- چکلیست ورود --
     table.cell(guide, 0, 7, "چکلیست:", text_color=#c9d1d9, text_size=size.tiny)
-    checklist = ""
-    checklist := checklist + (bias != 0 ? "✓" : "✗") + "ساختار "
-    checklist := checklist + ((bias >= 0 ? htfUp : htfDn) ? "✓" : "✗") + "HTF "
-    checklist := checklist + (nBFVG > 0 or nSFVG > 0 ? "✓" : "✗") + "FVG "
-    checklist := checklist + (volume > avgVol * vMul ? "✓" : "✗") + "حجم "
+    checklist = "x"
+    checklist := checklist + (bias != 0 ? "V" : "X") + "ساختار "
+    checklist := checklist + ((bias >= 0 ? htfUp : htfDn) ? "V" : "X") + "HTF "
+    checklist := checklist + (nBFVG > 0 or nSFVG > 0 ? "V" : "X") + "FVG "
+    checklist := checklist + (volume > avgVol * vMul ? "V" : "X") + "حجم "
     table.cell(guide, 1, 7, checklist, text_color=#c9d1d9, text_size=size.tiny)
     
-    // ── RSI ──
+    // -- RSI --
     table.cell(guide, 0, 8, "RSI:", text_color=#c9d1d9, text_size=size.tiny)
     rsiStatus = str.tostring(math.round(rsiVal, 1))
     if rsiVal > rsiHi
@@ -970,22 +970,22 @@ if showGuide and barstate.islast
         rsiStatus := rsiStatus + " نزولی"
     table.cell(guide, 1, 8, rsiStatus, text_color=rsiVal > rsiHi or rsiVal < rsiLo ? #ff1744 : #c9d1d9, text_size=size.tiny)
     
-    // ── هشدارها ──
+    // -- هشدارها --
     table.cell(guide, 0, 9, "هشدار:", text_color=#c9d1d9, text_size=size.tiny)
-    alertText = ""
+    alertText = "x"
     if maxCL >= 3
-        alertText := "⚠️ " + str.tostring(maxCL) + " ضرر متوالی!"
+        alertText := "! " + str.tostring(maxCL) + " ضرر متوالی!"
     else if unrealPnL != 0.0 and unrealPnL < 0
-        alertText := "⚠️ ضرر لحظهای: " + str.tostring(math.round(unrealPnL, 4))
+        alertText := "! ضرر لحظهای: " + str.tostring(math.round(unrealPnL, 4))
     else if cS >= 7
-        alertText := "🔥 سیگنال قوی!"
+        alertText := "سیگنال قوی!"
     else
-        alertText := "بدون هشدار ✓"
-    table.cell(guide, 1, 9, alertText, text_color=alertText == "بدون هشدار ✓" or alertText == "🔥 سیگنال قوی!" ? #00e676 : #ff1744, text_size=size.tiny)
+        alertText := "بدون هشدار V"
+    table.cell(guide, 1, 9, alertText, text_color=alertText == "بدون هشدار V" or alertText == "* سیگنال قوی!" ? #00e676 : #ff1744, text_size=size.tiny)
     
-    // ── نکته طلایی ──
-    table.cell(guide, 0, 10, "💎 نکته:", text_color=#ffd700, text_size=size.tiny)
-    tip = ""
+    // -- نکته طلایی --
+    table.cell(guide, 0, 10, "* نکته:", text_color=#ffd700, text_size=size.tiny)
+    tip = "x"
     if st == 3
         tip := "TP1 رو ریسکفری کن"
     else if st == 4
@@ -1002,16 +1002,16 @@ if showGuide and barstate.islast
         tip := "صبر کن تا سیگنال واضح بیاد"
     table.cell(guide, 1, 10, tip, text_color=#ffd700, text_size=size.tiny)
     
-    // ── مدیریت سرمایه ──
-    table.cell(guide, 0, 11, "💰 ریسک:", text_color=#c9d1d9, text_size=size.tiny)
+    // -- مدیریت سرمایه --
+    table.cell(guide, 0, 11, " ریسک:", text_color=#c9d1d9, text_size=size.tiny)
     riskText = "هر معامله: " + str.tostring(math.round(optRisk * 100, 1)) + "٪ سرمایه"
     if unrealPnL != 0.0
-        riskText := riskText + " | P&L: " + (unrealPnL > 0 ? "+" : "") + str.tostring(math.round(unrealPnL, 4))
+        riskText := riskText + " | P&L: " + (unrealPnL > 0 ? "+" : "x") + str.tostring(math.round(unrealPnL, 4))
     table.cell(guide, 1, 11, riskText, text_color=unrealPnL >= 0 ? #00e676 : #ff1744, text_size=size.tiny)
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //         خطوط روند خودکار (فقط در آخرین کندل)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 if showTrend and barstate.islast
     // پاک کردن خطوط قبلی
     var line uptrendLine = na
@@ -1061,7 +1061,7 @@ if showTrend and barstate.islast
         futureBars = 30
         uptrendLine := line.new(upB2, upV2, bar_index + futureBars, upV1 + slope * futureBars, 
                                 color=color.new(#00e676, 40), width=2)
-        upLabel := label.new(upB1, upV1, "▲TL", color=color.new(#00e676, 30), 
+        upLabel := label.new(upB1, upV1, "TL-Up", color=color.new(#00e676, 30), 
                             textcolor=color.white, style=label.style_label_up, size=size.tiny)
     
     // رسم خط روند نزولی (اگر Lower High داشتیم)
@@ -1070,12 +1070,12 @@ if showTrend and barstate.islast
         futureBars = 30
         downtrendLine := line.new(dnB2, dnV2, bar_index + futureBars, dnV1 + slope * futureBars, 
                                   color=color.new(#ff1744, 40), width=2)
-        dnLabel := label.new(dnB1, dnV1, "▼TL", color=color.new(#ff1744, 30), 
+        dnLabel := label.new(dnB1, dnV1, "TL-Dn", color=color.new(#ff1744, 30), 
                             textcolor=color.white, style=label.style_label_down, size=size.tiny)
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// -------------------------------------------------------
 //         حمایت/مقاومت خودکار (فقط در آخرین کندل)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 if showSR and barstate.islast
     // جمعآوری pivot ها در 100 کندل آخر
     var float[] srLvl = array.new_float(0)
@@ -1133,19 +1133,19 @@ if showSR and barstate.islast
             
             drawn += 1
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //                    آلارمها
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-alertcondition(bE, "SP2L Buy Signal", "⚡ SP2L: سیگنال خرید فعال!")
-alertcondition(sE, "SP2L Sell Signal", "⚡ SP2L: سیگنال فروش فعال!")
-alertcondition(bSpk, "SP2L Bull Spike", "◆ SP2L: اسپایک صعودی شناسایی شد")
-alertcondition(sSpk, "SP2L Bear Spike", "◆ SP2L: اسپایک نزولی شناسایی شد")
-alertcondition(bBOS or bCHoCH, "Structure Bull", "🏗️ ساختار صعودی (BOS/CHoCH↑)")
-alertcondition(sBOS or sCHoCH, "Structure Bear", "🏗️ ساختار نزولی (BOS/CHoCH↓)")
-alertcondition(t1h and not t1h[1], "TP1 Hit", "🎯 SP2L: هدف اول لمس شد!")
-alertcondition(sEnt and not sEnt[1], "Secondary Entry", "🔄 SP2L: ورود دوم فعال!")
-alertcondition(expired, "Signal Expired", "⏰ SP2L: سیگنال منقضی شد")
+// --------------------------------------------------------
+alertcondition(bE, "SP2L Buy Signal", " SP2L: سیگنال خرید فعال!")
+alertcondition(sE, "SP2L Sell Signal", " SP2L: سیگنال فروش فعال!")
+alertcondition(bSpk, "SP2L Bull Spike", "* SP2L: اسپایک صعودی شناسایی شد")
+alertcondition(sSpk, "SP2L Bear Spike", "* SP2L: اسپایک نزولی شناسایی شد")
+alertcondition(bBOS or bCHoCH, "Structure Bull", " ساختار صعودی (BOS/CHoCH)")
+alertcondition(sBOS or sCHoCH, "Structure Bear", " ساختار نزولی (BOS/CHoCH)")
+alertcondition(t1h and not t1h[1], "TP1 Hit", " SP2L: هدف اول لمس شد!")
+alertcondition(sEnt and not sEnt[1], "Secondary Entry", " SP2L: ورود دوم فعال!")
+alertcondition(expired, "Signal Expired", " SP2L: سیگنال منقضی شد")
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
 //  پایان - SP2L Pour Samadi Strategy V5 FINAL
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// --------------------------------------------------------
