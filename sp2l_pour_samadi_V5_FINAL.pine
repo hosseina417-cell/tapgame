@@ -666,9 +666,9 @@ plotshape(sE and dMode == "Signal", "SELL", shape.triangledown, location.aboveba
 
 // لیبل اسپایک (تفکیک از سیگنال)
 if bSpk
-    label.new(bar_index, low, "◆SPK↑", color=color.new(#00695C, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
+    label.new(bar_index, low, "*SPK↑", color=color.new(#00695C, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
 if sSpk
-    label.new(bar_index, high, "◆SPK↓", color=color.new(#B71C1C, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
+    label.new(bar_index, high, "*SPK↓", color=color.new(#B71C1C, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
 
 bgcolor(bSpk ? color.new(#00c853, 94) : sSpk ? color.new(#ff1744, 94) : na)
 
@@ -704,7 +704,7 @@ if st == 0 and (st[1] == 3 or st[1] == 4)
     if r > 0
         win += 1
         conLoss := 0
-        lR := "✓ +" + str.tostring(math.round(r, 4))
+        lR := "V +" + str.tostring(math.round(r, 4))
     else
         los += 1
         conLoss += 1
@@ -733,12 +733,12 @@ if showDash and barstate.islast
     
     // ─ ساختار ─
     table.cell(d, 0, rw, "ساختار:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, bias == 1 ? "🟢 صعودی" : bias == -1 ? "🔴 نزولی" : "⚪ خنثی", text_color=bias == 1 ? #00e676 : bias == -1 ? #ff1744 : #888888, text_size=size.small)
+    table.cell(d, 1, rw, bias == 1 ? "[+] صعودی" : bias == -1 ? "[-] نزولی" : "[o] خنثی", text_color=bias == 1 ? #00e676 : bias == -1 ? #ff1744 : #888888, text_size=size.small)
     rw += 1
     
     // ─ HTF ─
     table.cell(d, 0, rw, "روند بالا:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, htfUp ? "🟢 صعودی" : htfDn ? "🔴 نزولی" : "⚪ خنثی", text_color=htfUp ? #00e676 : htfDn ? #ff1744 : #888888, text_size=size.small)
+    table.cell(d, 1, rw, htfUp ? "[+] صعودی" : htfDn ? "[-] نزولی" : "[o] خنثی", text_color=htfUp ? #00e676 : htfDn ? #ff1744 : #888888, text_size=size.small)
     rw += 1
     
     // ─ FVG ─
@@ -748,7 +748,7 @@ if showDash and barstate.islast
     
     // ─ حجم ─
     table.cell(d, 0, rw, "حجم:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, volume > avgVol * vMul ? " بالا" : volume > avgVol ? "◆ متوسط" : "◇ کم", text_color=volume > avgVol * vMul ? #00e676 : volume > avgVol ? #ffa726 : #888888, text_size=size.small)
+    table.cell(d, 1, rw, volume > avgVol * vMul ? " بالا" : volume > avgVol ? "* متوسط" : "- کم", text_color=volume > avgVol * vMul ? #00e676 : volume > avgVol ? #ffa726 : #888888, text_size=size.small)
     rw += 1
     
     // ─ RSI ─
@@ -759,12 +759,12 @@ if showDash and barstate.islast
     // ─ Kill Zone ─
     if useKZ
         table.cell(d, 0, rw, "منطقه زمانی:", text_color=#c9d1d9, text_size=size.small)
-        table.cell(d, 1, rw, inKZ ? "✓ فعال" : "✗", text_color=inKZ ? #00e676 : #888888, text_size=size.small)
+        table.cell(d, 1, rw, inKZ ? "V فعال" : "✗", text_color=inKZ ? #00e676 : #888888, text_size=size.small)
         rw += 1
     
     // ─ وضعیت ─
     table.cell(d, 0, rw, "وضعیت:", text_color=#c9d1d9, text_size=size.small)
-    stT = st == 1 ? "🟡 ستاپ خرید" : st == 2 ? "🟡 ستاپ فروش" : st == 3 ? "🟢 خرید" : st == 4 ? "🔴 فروش" : "⚪ آزاد"
+    stT = st == 1 ? "[!] ستاپ خرید" : st == 2 ? "[!] ستاپ فروش" : st == 3 ? "[+] خرید" : st == 4 ? "[-] فروش" : "[o] آزاد"
     stC = st >= 3 ? #00e676 : st >= 1 ? #ffa726 : #888888
     table.cell(d, 1, rw, stT, text_color=stC, text_size=size.small)
     rw += 1
@@ -786,7 +786,7 @@ if showDash and barstate.islast
         rw += 1
         
         table.cell(d, 0, rw, "هدف اول:", text_color=#c9d1d9, text_size=size.small)
-        table.cell(d, 1, rw, str.tostring(tp1, "#.####") + (t1h ? " ✓ لمس شد" : " ⏳ در انتظار"), text_color=t1h ? #00e676 : #c9d1d9, text_size=size.small)
+        table.cell(d, 1, rw, str.tostring(tp1, "#.####") + (t1h ? " V لمس شد" : " ... در انتظار"), text_color=t1h ? #00e676 : #c9d1d9, text_size=size.small)
         rw += 1
         
         table.cell(d, 0, rw, "هدف دوم:", text_color=#c9d1d9, text_size=size.small)
@@ -828,7 +828,7 @@ if showDash and barstate.islast
     
     // ─ هشدار ضرر متوالی ─
     if maxCL >= 3
-        table.cell(d, 0, rw, "⚠️ ضرر متوالی:", text_color=#ff1744, text_size=size.small)
+        table.cell(d, 0, rw, "! ضرر متوالی:", text_color=#ff1744, text_size=size.small)
         table.cell(d, 1, rw, str.tostring(maxCL) + "x", text_color=#ff1744, text_size=size.small)
         rw += 1
     
@@ -855,22 +855,22 @@ if showGuide and barstate.islast
     actionColor = #888888
     
     if st == 3
-        actionText := "🟢 الان بخر (Long)"
+        actionText := "[+] الان بخر (Long)"
         actionColor := #00e676
     else if st == 4
-        actionText := "🔴 الان بفروش (Short)"
+        actionText := "[-] الان بفروش (Short)"
         actionColor := #ff1744
     else if st == 1 and cS >= minC
-        actionText := "🟡 آماده خرید باش"
+        actionText := "[!] آماده خرید باش"
         actionColor := #ffa726
     else if st == 2 and cS >= minC
-        actionText := "🟡 آماده فروش باش"
+        actionText := "[!] آماده فروش باش"
         actionColor := #ffa726
     else if bias == 1 and htfUp
-        actionText := "⏳ صبر برای سیگنال خرید"
+        actionText := "... صبر برای سیگنال خرید"
         actionColor := #58a6ff
     else if bias == -1 and htfDn
-        actionText := "⏳ صبر برای سیگنال فروش"
+        actionText := "... صبر برای سیگنال فروش"
         actionColor := #58a6ff
     else
         actionText := " دست نگه دار"
@@ -913,13 +913,13 @@ if showGuide and barstate.islast
     table.cell(guide, 0, 4, "نقاط قوت:", text_color=#c9d1d9, text_size=size.tiny)
     strengths = ""
     if bias >= 0 and bias != 0
-        strengths := "ساختار صعودی ✓"
+        strengths := "ساختار صعودی V"
     if htfUp
-        strengths := strengths + " | HTF صعودی ✓"
+        strengths := strengths + " | HTF صعودی V"
     if nBFVG > 0
-        strengths := strengths + " | FVG ✓"
+        strengths := strengths + " | FVG V"
     if volume > avgVol * vMul
-        strengths := strengths + " | حجم بالا ✓"
+        strengths := strengths + " | حجم بالا V"
     if strengths == ""
         strengths := "ندارد ❌"
     table.cell(guide, 1, 4, strengths, text_color=#00e676, text_size=size.tiny)
@@ -937,24 +937,24 @@ if showGuide and barstate.islast
     if htfUp != (bias >= 0) and bias != 0
         weaknesses := weaknesses + " | تضاد HTF ✗"
     if weaknesses == ""
-        weaknesses := "ندارد ✓"
-    table.cell(guide, 1, 5, weaknesses, text_color=weaknesses == "ندارد ✓" ? #00e676 : #ff1744, text_size=size.tiny)
+        weaknesses := "ندارد V"
+    table.cell(guide, 1, 5, weaknesses, text_color=weaknesses == "ندارد V" ? #00e676 : #ff1744, text_size=size.tiny)
     
     // ── امتیاز و معیارها ──
     table.cell(guide, 0, 6, "امتیاز:", text_color=#c9d1d9, text_size=size.tiny)
     confBar = ""
     filled = math.round(cS)
     for i = 1 to 10
-        confBar := confBar + (i <= filled ? "█" : "░")
+        confBar := confBar + (i <= filled ? "=" : ".")
     table.cell(guide, 1, 6, confBar + " " + str.tostring(math.round(cS)) + "/10", text_color=cS >= minC ? #00e676 : #ff1744, text_size=size.tiny)
     
     // ── چک‌لیست ورود ──
     table.cell(guide, 0, 7, "چک‌لیست:", text_color=#c9d1d9, text_size=size.tiny)
     checklist = ""
-    checklist := checklist + (bias != 0 ? "✓" : "✗") + "ساختار "
-    checklist := checklist + ((bias >= 0 ? htfUp : htfDn) ? "✓" : "✗") + "HTF "
-    checklist := checklist + (nBFVG > 0 or nSFVG > 0 ? "✓" : "✗") + "FVG "
-    checklist := checklist + (volume > avgVol * vMul ? "✓" : "✗") + "حجم "
+    checklist := checklist + (bias != 0 ? "V" : "✗") + "ساختار "
+    checklist := checklist + ((bias >= 0 ? htfUp : htfDn) ? "V" : "✗") + "HTF "
+    checklist := checklist + (nBFVG > 0 or nSFVG > 0 ? "V" : "✗") + "FVG "
+    checklist := checklist + (volume > avgVol * vMul ? "V" : "✗") + "حجم "
     table.cell(guide, 1, 7, checklist, text_color=#c9d1d9, text_size=size.tiny)
     
     // ── RSI ──
@@ -974,14 +974,14 @@ if showGuide and barstate.islast
     table.cell(guide, 0, 9, "هشدار:", text_color=#c9d1d9, text_size=size.tiny)
     alertText = ""
     if maxCL >= 3
-        alertText := "⚠️ " + str.tostring(maxCL) + " ضرر متوالی!"
+        alertText := "! " + str.tostring(maxCL) + " ضرر متوالی!"
     else if unrealPnL != 0.0 and unrealPnL < 0
-        alertText := "⚠️ ضرر لحظه‌ای: " + str.tostring(math.round(unrealPnL, 4))
+        alertText := "! ضرر لحظه‌ای: " + str.tostring(math.round(unrealPnL, 4))
     else if cS >= 7
-        alertText := "🔥 سیگنال قوی!"
+        alertText := "* سیگنال قوی!"
     else
-        alertText := "بدون هشدار ✓"
-    alertClr = alertText == "بدون هشدار ✓" or alertText == " سیگنال قوی!" ? #00e676 : #ff1744
+        alertText := "بدون هشدار V"
+    alertClr = alertText == "بدون هشدار V" or alertText == " سیگنال قوی!" ? #00e676 : #ff1744
     table.cell(guide, 1, 9, alertText, text_color=alertClr, text_size=size.tiny)
     
     // ── نکته طلایی ──
@@ -1062,7 +1062,7 @@ if showTrend and barstate.islast
         futureBars = 30
         uptrendLine := line.new(upB2, upV2, bar_index + futureBars, upV1 + slope * futureBars, 
                                 color=color.new(#00e676, 40), width=2)
-        upLabel := label.new(upB1, upV1, "▲TL", color=color.new(#00e676, 30), 
+        upLabel := label.new(upB1, upV1, "^TL", color=color.new(#00e676, 30), 
                             textcolor=color.white, style=label.style_label_up, size=size.tiny)
     
     // رسم خط روند نزولی (اگر Lower High داشتیم)
@@ -1071,7 +1071,7 @@ if showTrend and barstate.islast
         futureBars = 30
         downtrendLine := line.new(dnB2, dnV2, bar_index + futureBars, dnV1 + slope * futureBars, 
                                   color=color.new(#ff1744, 40), width=2)
-        dnLabel := label.new(dnB1, dnV1, "▼TL", color=color.new(#ff1744, 30), 
+        dnLabel := label.new(dnB1, dnV1, "vTL", color=color.new(#ff1744, 30), 
                             textcolor=color.white, style=label.style_label_down, size=size.tiny)
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1139,8 +1139,8 @@ if showSR and barstate.islast
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 alertcondition(bE, "SP2L Buy Signal", "⚡ SP2L: سیگنال خرید فعال!")
 alertcondition(sE, "SP2L Sell Signal", "⚡ SP2L: سیگنال فروش فعال!")
-alertcondition(bSpk, "SP2L Bull Spike", "◆ SP2L: اسپایک صعودی شناسایی شد")
-alertcondition(sSpk, "SP2L Bear Spike", "◆ SP2L: اسپایک نزولی شناسایی شد")
+alertcondition(bSpk, "SP2L Bull Spike", "* SP2L: اسپایک صعودی شناسایی شد")
+alertcondition(sSpk, "SP2L Bear Spike", "* SP2L: اسپایک نزولی شناسایی شد")
 alertcondition(bBOS or bCHoCH, "Structure Bull", "🏗️ ساختار صعودی (BOS/CHoCH↑)")
 alertcondition(sBOS or sCHoCH, "Structure Bear", "🏗️ ساختار نزولی (BOS/CHoCH↓)")
 alertcondition(t1h and not t1h[1], "TP1 Hit", "🎯 SP2L: هدف اول لمس شد!")
