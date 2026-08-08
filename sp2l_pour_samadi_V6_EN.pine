@@ -1,0 +1,875 @@
+//@version=5
+indicator("SP2L Pour Samadi V6", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// === SETTINGS ===
+g1 = "Spike"
+minSpk = input.int(3, "Min Spike Bars", 2, 10, group=g1)
+useMom = input.bool(true, "Momentum Filter", group=g1)
+momLvl = input.int(2, "Power Level", 1, 5, group=g1)
+
+g2 = "FVG"
+useFVG = input.bool(true, "FVG Filter", group=g2)
+fvgType = input.string("Significant", "Type", ["All","Significant","Structural","Major"], group=g2)
+fvgLife = input.int(20, "FVG Life", 5, 50, group=g2)
+mergeFVG = input.bool(true, "Merge FVGs", group=g2)
+
+g3 = "Doji"
+useDj = input.bool(true, "Doji Filter", group=g3)
+djBody = input.float(0.1, "Doji Body Ratio", 0.05, 0.3, 0.05, group=g3)
+djMax = input.float(0.25, "Max Doji %", 0.1, 0.5, 0.05, group=g3)
+
+g4 = "Structure"
+useStr = input.bool(true, "BOS/CHoCH", group=g4)
+swLen = input.int(5, "Swing Length", 2, 10, group=g4)
+useOB = input.bool(true, "Order Block", group=g4)
+
+g5 = "Entry"
+eMode = input.string("Aggressive", "Mode", ["Aggressive","Moderate","Defensive"], group=g5)
+sigBars = input.int(10, "Signal Validity", 3, 25, group=g5)
+secEntry = input.bool(true, "Secondary Entry", group=g5)
+secDepth = input.float(50.0, "2nd Entry Depth %", 10, 80, 5, group=g5) / 100
+coolBars = input.int(3, "Cooldown", 1, 10, group=g5)
+
+g6 = "Position"
+useSLBuf = input.bool(true, "SL Buffer", group=g6)
+slBuf = input.float(0.3, "Buffer %", 0.1, 3.0, 0.1, group=g6) / 100
+rr1 = input.float(1.0, "R:R Target 1", 0.5, 5.0, 0.5, group=g6)
+rr2 = input.float(2.0, "R:R Target 2", 1.0, 5.0, 0.5, group=g6)
+useTrail = input.bool(true, "Trailing Stop", group=g6)
+trR = input.float(0.5, "Trail Distance (R)", 0.2, 2.0, 0.1, group=g6)
+riskPerTrade = input.float(1.0, "Risk Per Trade %", 0.5, 5.0, 0.5, group=g6) / 100
+
+g7 = "Volume & RSI"
+useVol = input.bool(true, "Volume Filter", group=g7)
+vMul = input.float(1.2, "Volume Multiplier", 1.0, 3.0, 0.1, group=g7)
+vLen = input.int(20, "Volume Average", 5, 50, group=g7)
+useRSI = input.bool(true, "RSI Confirm", group=g7)
+rsiL = input.int(14, "RSI Period", 5, 30, group=g7)
+rsiHi = input.float(70.0, "RSI Overbought", 60, 90, group=g7)
+rsiLo = input.float(30.0, "RSI Oversold", 10, 40, group=g7)
+
+g8 = "Multi-Timeframe"
+useMTF = input.bool(true, "HTF Confirm", group=g8)
+htfTF = input.timeframe("60", "Higher TF", group=g8)
+
+g9 = "Scoring"
+useConf = input.bool(true, "Score System", group=g9)
+minC = input.int(2, "Min Score", 1, 10, group=g9)
+
+g10 = "Kill Zone"
+useKZ = input.bool(false, "Time Filter", group=g10)
+kzStart = input.int(7, "Start UTC", 0, 23, group=g10)
+kzEnd = input.int(20, "End UTC", 0, 23, group=g10)
+
+g11 = "Display"
+dMode = input.string("Signal", "Mode", ["Setup","Signal"], group=g11)
+showDash = input.bool(true, "Dashboard", group=g11)
+showGuide = input.bool(true, "Smart Guide", group=g11)
+showFVGs = input.bool(true, "FVG Zones", group=g11)
+showStr = input.bool(true, "Structure", group=g11)
+showHLs = input.bool(true, "HL/LH Levels", group=g11)
+showZone = input.bool(true, "Trade Zone", group=g11)
+showExpire = input.bool(true, "Expiry Alert", group=g11)
+showTrend = input.bool(true, "Auto Trendlines", group=g11)
+showSR = input.bool(true, "Auto Support/Resistance", group=g11)
+srLookback = input.int(50, "S/R Lookback", 20, 100, group=g11)
+srTouch = input.int(2, "Min S/R Touches", 2, 5, group=g11)
+
+// === BASE FUNCTIONS ===
+bdy() => math.abs(close - open)
+rng() => high - low
+brt() => rng() > 0 ? bdy() / rng() : 0
+isB() => close > open
+isS() => close < open
+
+atr14 = ta.atr(14)
+avgBdy = ta.sma(bdy(), 20)
+avgVol = ta.sma(volume, vLen)
+rsiVal = ta.rsi(close, rsiL)
+utcH = hour(time, "UTC")
+inKZ = not useKZ or (utcH >= kzStart and utcH <= kzEnd)
+
+// === FVG DETECTION ===
+rawBFVG = low > high[2]
+rawSFVG = high < low[2]
+gM = fvgType == "Major" ? 1.5 : fvgType == "Significant" ? 0.8 : fvgType == "Structural" ? 0.5 : 0.3
+mGap = atr14 * gM
+bFVGok = rawBFVG and (low - high[2]) >= mGap
+sFVGok = rawSFVG and (low[2] - high) >= mGap
+
+var float[] fBT = array.new_float(0)
+var float[] fBB = array.new_float(0)
+var int[] fBI = array.new_int(0)
+var float[] fST = array.new_float(0)
+var float[] fSB = array.new_float(0)
+var int[] fSI = array.new_int(0)
+
+overlapsBull(newTop, newBot) =>
+    if mergeFVG and array.size(fBT) > 0
+        lastIdx = array.size(fBT) - 1
+        array.set(fBT, lastIdx, math.max(newTop, array.get(fBT, lastIdx)))
+        array.set(fBB, lastIdx, math.min(newBot, array.get(fBB, lastIdx)))
+        true
+    else
+        false
+
+overlapsBear(newTop, newBot) =>
+    if mergeFVG and array.size(fST) > 0
+        lastIdx = array.size(fST) - 1
+        array.set(fST, lastIdx, math.max(newTop, array.get(fST, lastIdx)))
+        array.set(fSB, lastIdx, math.min(newBot, array.get(fSB, lastIdx)))
+        true
+    else
+        false
+
+if useFVG and bFVGok
+    if not overlapsBull(low, high[2])
+        array.push(fBT, low)
+        array.push(fBB, high[2])
+        array.push(fBI, bar_index)
+
+if useFVG and sFVGok
+    if not overlapsBear(low[2], high)
+        array.push(fST, low[2])
+        array.push(fSB, high)
+        array.push(fSI, bar_index)
+
+if array.size(fBT) > 0
+    for i = array.size(fBT) - 1 to 0
+        if i < array.size(fBT)
+            if bar_index - array.get(fBI, i) > fvgLife or low <= array.get(fBB, i)
+                array.remove(fBT, i)
+                array.remove(fBB, i)
+                array.remove(fBI, i)
+
+if array.size(fST) > 0
+    for i = array.size(fST) - 1 to 0
+        if i < array.size(fST)
+            if bar_index - array.get(fSI, i) > fvgLife or high >= array.get(fST, i)
+                array.remove(fST, i)
+                array.remove(fSB, i)
+                array.remove(fSI, i)
+
+if showFVGs
+    if useFVG and bFVGok
+        box.new(bar_index - 2, low, bar_index + fvgLife, high[2], bgcolor=color.new(#00c853, 85), border_color=color.new(#00c853, 60))
+    if useFVG and sFVGok
+        box.new(bar_index - 2, low[2], bar_index + fvgLife, high, bgcolor=color.new(#ff1744, 85), border_color=color.new(#ff1744, 60))
+
+nBFVG = array.size(fBT)
+nSFVG = array.size(fST)
+
+// === ORDER BLOCK ===
+isBullOB = isS()[1] and isB() and bdy() > avgBdy * 1.5
+isBearOB = isB()[1] and isS() and bdy() > avgBdy * 1.5
+var float obBH = na
+var float obBL = na
+var float obSH = na
+var float obSL2 = na
+if isBullOB
+    obBH := high[1]
+    obBL := low[1]
+if isBearOB
+    obSH := high[1]
+    obSL2 := low[1]
+nearBullOB = useOB and not na(obBL) and low <= obBH and low >= obBL - atr14
+nearBearOB = useOB and not na(obSH) and high >= obSL2 and high <= obSH + atr14
+
+// === MARKET STRUCTURE ===
+swH = ta.pivothigh(high, swLen, swLen)
+swL = ta.pivotlow(low, swLen, swLen)
+var float pSH = na
+var float pSL = na
+var int pSHb = na
+var int pSLb = na
+if not na(swH)
+    pSH := swH
+    pSHb := bar_index - swLen
+if not na(swL)
+    pSL := swL
+    pSLb := bar_index - swLen
+
+var int bias = 0
+bBOS = useStr and not na(pSH) and close > pSH and bias >= 0
+sBOS = useStr and not na(pSL) and close < pSL and bias <= 0
+bCHoCH = useStr and not na(pSH) and close > pSH and bias < 0
+sCHoCH = useStr and not na(pSL) and close < pSL and bias > 0
+if bBOS or bCHoCH
+    bias := 1
+if sBOS or sCHoCH
+    bias := -1
+
+if showStr
+    if bBOS and not na(pSHb)
+        line.new(pSHb, pSH, bar_index, pSH, color=color.new(#00c853, 50), style=line.style_dashed)
+        label.new(bar_index, pSH, "BOS+", color=color.new(#00c853, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
+    if sBOS and not na(pSLb)
+        line.new(pSLb, pSL, bar_index, pSL, color=color.new(#ff1744, 50), style=line.style_dashed)
+        label.new(bar_index, pSL, "BOS-", color=color.new(#ff1744, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
+
+// === MULTI-TIMEFRAME ===
+htf21 = request.security(syminfo.tickerid, htfTF, ta.ema(close, 21))
+htf50 = request.security(syminfo.tickerid, htfTF, ta.ema(close, 50))
+htfUp = htf21 > htf50
+htfDn = htf21 < htf50
+
+// === SPIKE DETECTION ===
+cntB() =>
+    c = 0
+    maxI = math.min(15, math.max(bar_index, 0))
+    if maxI >= 0
+        for i = 0 to maxI
+            if isB()[i]
+                c += 1
+            else
+                break
+    c
+
+cntS() =>
+    c = 0
+    maxI = math.min(15, math.max(bar_index, 0))
+    if maxI >= 0
+        for i = 0 to maxI
+            if isS()[i]
+                c += 1
+            else
+                break
+    c
+
+spkStr(dir) =>
+    cnt = dir == 1 ? cntB() : cntS()
+    s = 0.0
+    if cnt > 0 and bar_index >= cnt - 1
+        maxI = math.max(math.min(cnt - 1, bar_index), 0)
+        for i = 0 to maxI
+            a = atr14[i]
+            b = bdy()[i]
+            if not na(a) and a > 0
+                s += b / a
+    s / math.max(cnt, 1)
+
+chkMom(dir) => not useMom or bar_index > 15 ? spkStr(dir) >= (1.0 + momLvl * 0.3) : true
+
+chkDj(dir) =>
+    if not useDj
+        true
+    else
+        cnt = dir == 1 ? cntB() : cntS()
+        d = 0
+        if cnt > 0 and bar_index >= cnt - 1
+            maxI = math.max(math.min(cnt - 1, bar_index), 0)
+            for i = 0 to maxI
+                if brt()[i] < djBody
+                    d += 1
+        d / math.max(cnt, 1) <= djMax
+
+chkVol(dir) =>
+    if not useVol
+        true
+    else
+        cnt = dir == 1 ? cntB() : cntS()
+        v = 0.0
+        if cnt > 0 and bar_index >= cnt - 1
+            maxI = math.max(math.min(cnt - 1, bar_index), 0)
+            for i = 0 to maxI
+                v += volume[i]
+        v / math.max(cnt, 1) > avgVol * (vMul - 0.3)
+
+hasFVGInSpike(dir) =>
+    if not useFVG
+        true
+    else
+        cnt = dir == 1 ? cntB() : cntS()
+        found = false
+        maxI = math.min(cnt, math.max(bar_index, 1))
+        for i = 0 to maxI
+            if dir == 1
+                if low[i] > high[i + 2] and i + 2 <= bar_index
+                    found := true
+            else
+                if high[i] < low[i + 2] and i + 2 <= bar_index
+                    found := true
+        found
+
+chkFVG(dir) => hasFVGInSpike(dir)
+
+chkRSI(dir) =>
+    if not useRSI
+        true
+    else
+        dir == 1 ? rsiVal < rsiHi : rsiVal > rsiLo
+
+findOrg(dir) =>
+    cnt = dir == 1 ? cntB() : cntS()
+    safeCnt = math.min(cnt, math.max(bar_index, 1))
+    org = dir == 1 ? low[safeCnt] : high[safeCnt]
+    lb = math.min(cnt + 2, math.max(bar_index - 1, 0))
+    if lb >= 0
+        for i = 0 to lb
+            if dir == 1
+                if low[i] < org
+                    org := low[i]
+            else
+                if high[i] > org
+                    org := high[i]
+    org
+
+bC = cntB()
+sC = cntS()
+bSpk = bar_index > 15 and bC >= minSpk and chkMom(1) and chkDj(1) and chkFVG(1) and chkVol(1) and chkRSI(1) and inKZ
+sSpk = bar_index > 15 and sC >= minSpk and chkMom(-1) and chkDj(-1) and chkFVG(-1) and chkVol(-1) and chkRSI(-1) and inKZ
+bOrg = bSpk ? findOrg(1) : na
+sOrg = sSpk ? findOrg(-1) : na
+
+// === DYNAMIC HL/LH ===
+var int trk = 0
+var float cHL = na
+var float cLH = na
+var int trkB = na
+var float orgB = na
+var float orgS = na
+if bSpk
+    trk := 1
+    cHL := low
+    trkB := bar_index
+    orgB := bOrg
+if sSpk
+    trk := 2
+    cLH := high
+    trkB := bar_index
+    orgS := sOrg
+if trk == 1
+    if low > cHL
+        cHL := low
+        trkB := bar_index
+    if useStr and not na(pSL) and close < pSL
+        trk := 0
+if trk == 2
+    if high < cLH
+        cLH := high
+        trkB := bar_index
+    if useStr and not na(pSH) and close > pSH
+        trk := 0
+if showHLs and trk == 1 and not na(cHL)
+    line.new(trkB, cHL, bar_index + 3, cHL, color=color.new(#00e676, 40), style=line.style_dotted)
+if showHLs and trk == 2 and not na(cLH)
+    line.new(trkB, cLH, bar_index + 3, cLH, color=color.new(#ff5252, 40), style=line.style_dotted)
+
+// === SCORING ===
+rsiBDiv = rsiVal < rsiVal[5] and low < low[5] and rsiVal > rsiLo
+rsiSDiv = rsiVal > rsiVal[5] and high > high[5] and rsiVal < rsiHi
+
+calcConfBuy() =>
+    s = 0
+    if nBFVG > 0
+        s += 1
+    if useVol and volume > avgVol * vMul
+        s += 1
+    if not useStr or bias >= 0
+        s += 1
+    if not useMTF or htfUp
+        s += 1
+    if spkStr(1) > 1.5
+        s += 1
+    if bC > minSpk
+        s += 1
+    ema21 = ta.ema(close, 21)
+    ema50 = ta.ema(close, 50)
+    if ema21 > ema50 and close > ema21
+        s += 1
+    if rsiBDiv
+        s += 1
+    if useOB and nearBullOB
+        s += 1
+    if not useKZ or inKZ
+        s += 1
+    s
+
+calcConfSell() =>
+    s = 0
+    if nSFVG > 0
+        s += 1
+    if useVol and volume > avgVol * vMul
+        s += 1
+    if not useStr or bias <= 0
+        s += 1
+    if not useMTF or htfDn
+        s += 1
+    if spkStr(-1) > 1.5
+        s += 1
+    if sC > minSpk
+        s += 1
+    ema21 = ta.ema(close, 21)
+    ema50 = ta.ema(close, 50)
+    if ema21 < ema50 and close < ema21
+        s += 1
+    if rsiSDiv
+        s += 1
+    if useOB and nearBearOB
+        s += 1
+    if not useKZ or inKZ
+        s += 1
+    s
+
+// === STATE MACHINE ===
+var int st = 0
+var float ent = na
+var float slp = na
+var float tp1 = na
+var float tp2 = na
+var float tSL = na
+var int sB = na
+var bool t1h = false
+var bool sEnt = false
+var int lastEx = 0
+var float cS = 0.0
+var int tD = 0
+var float sOrg2 = na
+var bool expired = false
+canGo = bar_index - lastEx > coolBars
+
+if bSpk and canGo and (not useStr or bias >= 0) and (not useMTF or htfUp)
+    cs = useConf ? calcConfBuy() : 5
+    if cs >= minC
+        st := 1
+        sB := bar_index
+        t1h := false
+        sEnt := false
+        tSL := na
+        cS := cs
+        tD := 1
+        sOrg2 := bOrg
+        expired := false
+
+if sSpk and canGo and (not useStr or bias <= 0) and (not useMTF or htfDn)
+    cs = useConf ? calcConfSell() : 5
+    if cs >= minC
+        st := 2
+        sB := bar_index
+        t1h := false
+        sEnt := false
+        tSL := na
+        cS := cs
+        tD := -1
+        sOrg2 := sOrg
+        expired := false
+
+float d = 0.0
+if st == 1 and bar_index - sB <= sigBars
+    buf = useSLBuf ? sOrg2 * slBuf : 0
+    sv = sOrg2 - buf
+    el = 0.0
+    if eMode == "Aggressive"
+        el := high[1]
+    else if eMode == "Moderate"
+        el := not na(cHL) ? cHL : low[1]
+    else
+        el := not na(cHL) ? sOrg2 + (cHL - sOrg2) * 0.618 : sOrg2 + (low - sOrg2) * 0.618
+    if close > el and isB()
+        st := 3
+        ent := el
+        slp := sv
+        d := ent - slp
+        tp1 := ent + d * rr1
+        tp2 := ent + d * rr2
+        expired := false
+
+if st == 2 and bar_index - sB <= sigBars
+    buf = useSLBuf ? sOrg2 * slBuf : 0
+    sv = sOrg2 + buf
+    el = 0.0
+    if eMode == "Aggressive"
+        el := low[1]
+    else if eMode == "Moderate"
+        el := not na(cLH) ? cLH : high[1]
+    else
+        el := not na(cLH) ? sOrg2 - (sOrg2 - cLH) * 0.618 : sOrg2 - (sOrg2 - high) * 0.618
+    if close < el and isS()
+        st := 4
+        ent := el
+        slp := sv
+        d := slp - ent
+        tp1 := ent - d * rr1
+        tp2 := ent - d * rr2
+        expired := false
+
+if st == 3
+    if not t1h and high >= tp1
+        t1h := true
+    if useTrail and t1h
+        td = (ent - slp) * trR
+        nt = high - td
+        if na(tSL) or nt > tSL
+            tSL := nt
+    exL = useTrail and t1h and not na(tSL) ? tSL : slp
+    if low <= exL
+        lastEx := bar_index
+        st := 0
+    if secEntry and not sEnt and t1h
+        pd = (tp1 - ent) * secDepth
+        se = tp1 - pd
+        if low <= se and close > se
+            sEnt := true
+
+if st == 4
+    if not t1h and low <= tp1
+        t1h := true
+    if useTrail and t1h
+        td = (slp - ent) * trR
+        nt = low + td
+        if na(tSL) or nt < tSL
+            tSL := nt
+    exL = useTrail and t1h and not na(tSL) ? tSL : slp
+    if high >= exL
+        lastEx := bar_index
+        st := 0
+    if secEntry and not sEnt and t1h
+        pd = (ent - tp1) * secDepth
+        se = tp1 + pd
+        if high >= se and close < se
+            sEnt := true
+
+if (st == 1 or st == 2) and bar_index - sB > sigBars
+    expired := true
+    if showExpire
+        label.new(bar_index, close, "X", color=color.new(#ff6f00, 50), textcolor=color.white, style=label.style_label_up, size=size.tiny)
+    st := 0
+
+// === TRADE ZONE ===
+var box tZone = na
+if showZone
+    if st == 3 and st[1] != 3 and not na(ent) and not na(slp) and not na(tp2)
+        if not na(tZone)
+            box.delete(tZone)
+        tZone := box.new(bar_index, tp2, bar_index + 10, slp, bgcolor=color.new(#1565C0, 92), border_color=color.new(#1565C0, 70), border_width=1)
+    if st == 4 and st[1] != 4 and not na(ent) and not na(slp) and not na(tp2)
+        if not na(tZone)
+            box.delete(tZone)
+        tZone := box.new(bar_index, slp, bar_index + 10, tp2, bgcolor=color.new(#C62828, 92), border_color=color.new(#C62828, 70), border_width=1)
+    if st >= 3 and not na(tZone)
+        box.set_right(tZone, bar_index + 5)
+
+// === PLOTS ===
+isL = st == 3
+isS2 = st == 4
+plot(isL ? ent : na, "Entry Up", color.new(#2196F3, 20), style=plot.style_linebr, linewidth=2)
+plot(isS2 ? ent : na, "Entry Down", color.new(#FF9800, 20), style=plot.style_linebr, linewidth=2)
+plot(isL ? slp : na, "SL Up", color.new(#F44336, 30), style=plot.style_linebr)
+plot(isS2 ? slp : na, "SL Down", color.new(#F44336, 30), style=plot.style_linebr)
+plot(isL and t1h and not na(tSL) ? tSL : na, "Trail Up", color.new(#FFEB3B, 10), style=plot.style_linebr, linewidth=2)
+plot(isS2 and t1h and not na(tSL) ? tSL : na, "Trail Down", color.new(#FFEB3B, 10), style=plot.style_linebr, linewidth=2)
+plot(isL ? tp1 : na, "TP1 Up", color=color.new(#4CAF50, 40), style=plot.style_cross)
+plot(isL ? tp2 : na, "TP2 Up", color=color.new(#8BC34A, 40), style=plot.style_cross)
+plot(isS2 ? tp1 : na, "TP1 Down", color=color.new(#4CAF50, 40), style=plot.style_cross)
+plot(isS2 ? tp2 : na, "TP2 Down", color=color.new(#8BC34A, 40), style=plot.style_cross)
+
+bE = st == 3 and st[1] != 3
+sE = st == 4 and st[1] != 4
+plotshape(bE and dMode == "Signal", "BUY", shape.triangleup, location.belowbar, color.new(#00e676, 0), size=size.large)
+plotshape(sE and dMode == "Signal", "SELL", shape.triangledown, location.abovebar, color.new(#ff1744, 0), size=size.large)
+
+if bSpk
+    label.new(bar_index, low, "*SPK+", color=color.new(#00695C, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
+if sSpk
+    label.new(bar_index, high, "*SPK-", color=color.new(#B71C1C, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
+
+bgcolor(bSpk ? color.new(#00c853, 94) : sSpk ? color.new(#ff1744, 94) : na)
+
+// === STATISTICS ===
+var int tot = 0
+var int win = 0
+var int los = 0
+var float pnl = 0.0
+var string lR = "out"
+var float pkP = 0.0
+var float mDD = 0.0
+var int conLoss = 0
+var int maxCL = 0
+var float unrealPnL = 0.0
+
+if st == 3 and not na(ent)
+    unrealPnL := close - ent
+if st == 4 and not na(ent)
+    unrealPnL := ent - close
+if st < 3
+    unrealPnL := 0.0
+
+if st == 0 and (st[1] == 3 or st[1] == 4)
+    tot += 1
+    r = tD == 1 ? (t1h and not na(tSL) ? tSL - ent : t1h ? tp1 - ent : slp - ent) : (t1h and not na(tSL) ? ent - tSL : t1h ? ent - tp1 : ent - slp)
+    pnl += r
+    pkP := math.max(pkP, pnl)
+    dd = pkP - pnl
+    mDD := math.max(mDD, dd)
+    if r > 0
+        win += 1
+        conLoss := 0
+        lR := "+" + str.tostring(math.round(r, 4))
+    else
+        los += 1
+        conLoss += 1
+        maxCL := math.max(maxCL, conLoss)
+        lR := "-" + str.tostring(math.round(r, 4))
+
+wR = tot > 0 ? win / tot * 100 : 0.0
+pf = los > 0 ? win / los : win > 0 ? 99.0 : 0.0
+optRisk = wR > 0 and rr1 > 0 ? (wR / 100) * rr1 : riskPerTrade
+
+// === DASHBOARD ===
+if showDash and barstate.islast
+    var table d = table.new(position.top_right, 2, 18, bgcolor=color.new(#0d1117, 5), border_width=1, border_color=#30363d)
+    bg = #161b22
+    rw = 0
+    table.cell(d, 0, rw, "* SP2L V6 FINAL", text_color=#ffd700, text_size=size.normal, bgcolor=bg)
+    table.cell(d, 1, rw, "Pour Samadi", text_color=#ffd700, text_size=size.normal, bgcolor=bg)
+    rw += 1
+    table.cell(d, 0, rw, "Structure:", text_color=#c9d1d9, text_size=size.small)
+    table.cell(d, 1, rw, bias == 1 ? "Bullish" : bias == -1 ? "Bearish" : "Neutral", text_color=bias == 1 ? #00e676 : bias == -1 ? #ff1744 : #888888, text_size=size.small)
+    rw += 1
+    table.cell(d, 0, rw, "Higher TF:", text_color=#c9d1d9, text_size=size.small)
+    table.cell(d, 1, rw, htfUp ? "Bullish" : htfDn ? "Bearish" : "Neutral", text_color=htfUp ? #00e676 : htfDn ? #ff1744 : #888888, text_size=size.small)
+    rw += 1
+    table.cell(d, 0, rw, "FVG:", text_color=#c9d1d9, text_size=size.small)
+    table.cell(d, 1, rw, str.tostring(nBFVG) + " up / " + str.tostring(nSFVG) + " down", text_color=#58a6ff, text_size=size.small)
+    rw += 1
+    table.cell(d, 0, rw, "Volume:", text_color=#c9d1d9, text_size=size.small)
+    table.cell(d, 1, rw, volume > avgVol * vMul ? "High" : volume > avgVol ? "Medium" : "Low", text_color=volume > avgVol * vMul ? #00e676 : volume > avgVol ? #ffa726 : #888888, text_size=size.small)
+    rw += 1
+    table.cell(d, 0, rw, "RSI:", text_color=#c9d1d9, text_size=size.small)
+    table.cell(d, 1, rw, str.tostring(math.round(rsiVal, 1)) + (rsiBDiv ? " DivUp" : rsiSDiv ? " DivDown" : ""), text_color=rsiVal > rsiHi ? #ff1744 : rsiVal < rsiLo ? #00e676 : #c9d1d9, text_size=size.small)
+    rw += 1
+    if useKZ
+        table.cell(d, 0, rw, "Kill Zone:", text_color=#c9d1d9, text_size=size.small)
+        table.cell(d, 1, rw, inKZ ? "Active" : "Outside", text_color=inKZ ? #00e676 : #888888, text_size=size.small)
+        rw += 1
+    table.cell(d, 0, rw, "Status:", text_color=#c9d1d9, text_size=size.small)
+    stT = st == 1 ? "Setup Long" : st == 2 ? "Setup Short" : st == 3 ? "LONG" : st == 4 ? "SHORT" : "Idle"
+    stC = st >= 3 ? #00e676 : st >= 1 ? #ffa726 : #888888
+    table.cell(d, 1, rw, stT, text_color=stC, text_size=size.small)
+    rw += 1
+    table.cell(d, 0, rw, "Score:", text_color=#c9d1d9, text_size=size.small)
+    table.cell(d, 1, rw, str.tostring(math.round(cS)) + "/10", text_color=cS >= 7 ? #00e676 : cS >= 4 ? #ffa726 : #ff1744, text_size=size.small)
+    rw += 1
+    if st >= 3
+        table.cell(d, 0, rw, "Entry:", text_color=#c9d1d9, text_size=size.small)
+        table.cell(d, 1, rw, str.tostring(ent, "#.####"), text_color=#2196F3, text_size=size.small)
+        rw += 1
+        table.cell(d, 0, rw, "Stop Loss:", text_color=#c9d1d9, text_size=size.small)
+        sATR = not na(slp) and not na(ent) ? math.abs(ent - slp) / atr14 : 0
+        table.cell(d, 1, rw, str.tostring(slp, "#.####") + " (" + str.tostring(math.round(sATR, 1)) + " ATR)", text_color=#F44336, text_size=size.small)
+        rw += 1
+        table.cell(d, 0, rw, "Target 1:", text_color=#c9d1d9, text_size=size.small)
+        table.cell(d, 1, rw, str.tostring(tp1, "#.####") + (t1h ? " HIT" : " WAIT"), text_color=t1h ? #00e676 : #c9d1d9, text_size=size.small)
+        rw += 1
+        table.cell(d, 0, rw, "Target 2:", text_color=#c9d1d9, text_size=size.small)
+        table.cell(d, 1, rw, str.tostring(tp2, "#.####"), text_color=#8BC34A, text_size=size.small)
+        rw += 1
+        if t1h and not na(tSL)
+            table.cell(d, 0, rw, "Trailing:", text_color=#c9d1d9, text_size=size.small)
+            table.cell(d, 1, rw, str.tostring(tSL, "#.####"), text_color=#FFEB3B, text_size=size.small)
+            rw += 1
+        table.cell(d, 0, rw, "P&L:", text_color=#c9d1d9, text_size=size.small)
+        upClr = unrealPnL > 0 ? #00e676 : unrealPnL < 0 ? #ff1744 : #c9d1d9
+        upSign = unrealPnL > 0 ? "+" : ""
+        table.cell(d, 1, rw, upSign + str.tostring(math.round(unrealPnL, 4)), text_color=upClr, text_size=size.small)
+        rw += 1
+    table.cell(d, 0, rw, "=== STATS ===", text_color=#ffd700, text_size=size.small, bgcolor=bg)
+    table.cell(d, 1, rw, "", bgcolor=bg)
+    rw += 1
+    table.cell(d, 0, rw, "Trades:", text_color=#c9d1d9, text_size=size.small)
+    table.cell(d, 1, rw, str.tostring(tot) + " (" + str.tostring(win) + "W/" + str.tostring(los) + "L)", text_color=#58a6ff, text_size=size.small)
+    rw += 1
+    table.cell(d, 0, rw, "Win Rate:", text_color=#c9d1d9, text_size=size.small)
+    table.cell(d, 1, rw, str.tostring(math.round(wR, 1)) + "%", text_color=wR >= 50 ? #00e676 : #ffa726, text_size=size.small)
+    rw += 1
+    table.cell(d, 0, rw, "Profit Factor:", text_color=#c9d1d9, text_size=size.small)
+    table.cell(d, 1, rw, str.tostring(math.round(pf, 2)), text_color=pf >= 1.5 ? #00e676 : #ffa726, text_size=size.small)
+    rw += 1
+    table.cell(d, 0, rw, "Max Drawdown:", text_color=#c9d1d9, text_size=size.small)
+    table.cell(d, 1, rw, str.tostring(math.round(mDD, 4)), text_color=#ff1744, text_size=size.small)
+    rw += 1
+    if maxCL >= 3
+        table.cell(d, 0, rw, "WARNING:", text_color=#ff1744, text_size=size.small)
+        table.cell(d, 1, rw, str.tostring(maxCL) + " losses in row!", text_color=#ff1744, text_size=size.small)
+        rw += 1
+    table.cell(d, 0, rw, "Risk Suggest:", text_color=#c9d1d9, text_size=size.small)
+    table.cell(d, 1, rw, str.tostring(math.round(optRisk * 100, 1)) + "%", text_color=#ffd700, text_size=size.small)
+
+// === SMART GUIDE ===
+if showGuide and barstate.islast
+    var table g = table.new(position.bottom_right, 2, 8, bgcolor=color.new(#1a1a2e, 20), border_width=1, border_color=#30363d)
+    gb = #16213e
+    table.cell(g, 0, 0, "SMART GUIDE", text_color=#ffd700, text_size=size.small, bgcolor=gb)
+    table.cell(g, 1, 0, "", bgcolor=gb)
+    table.cell(g, 0, 1, "Action:", text_color=#c9d1d9, text_size=size.tiny)
+    act = "WAIT"
+    actC = #888888
+    if st == 3
+        act := "BUY NOW"
+        actC := #00e676
+    else if st == 4
+        act := "SELL NOW"
+        actC := #ff1744
+    else if st == 1
+        act := "Ready to Buy"
+        actC := #ffa726
+    else if st == 2
+        act := "Ready to Sell"
+        actC := #ffa726
+    else if bias == 1 and htfUp
+        act := "Wait for Buy"
+        actC := #58a6ff
+    else if bias == -1 and htfDn
+        act := "Wait for Sell"
+        actC := #58a6ff
+    table.cell(g, 1, 1, act, text_color=actC, text_size=size.tiny)
+    table.cell(g, 0, 2, "Score:", text_color=#c9d1d9, text_size=size.tiny)
+    table.cell(g, 1, 2, str.tostring(math.round(cS)) + "/10", text_color=cS >= minC ? #00e676 : #ff1744, text_size=size.tiny)
+    table.cell(g, 0, 3, "Why:", text_color=#c9d1d9, text_size=size.tiny)
+    why = "No signal yet"
+    if st >= 3
+        why := "Signal active"
+    else if cS < minC
+        why := "Score too low"
+    table.cell(g, 1, 3, why, text_color=#c9d1d9, text_size=size.tiny)
+    table.cell(g, 0, 4, "Levels:", text_color=#c9d1d9, text_size=size.tiny)
+    lvls = "No position"
+    if st >= 3 and not na(ent)
+        lvls := "E:" + str.tostring(ent, "#.##") + " SL:" + str.tostring(slp, "#.##")
+    table.cell(g, 1, 4, lvls, text_color=#58a6ff, text_size=size.tiny)
+    table.cell(g, 0, 5, "Strengths:", text_color=#c9d1d9, text_size=size.tiny)
+    str1 = "None"
+    if bias > 0
+        str1 := "UpTrend"
+    if htfUp
+        str1 := str1 + ",HTF-Up"
+    if nBFVG > 0
+        str1 := str1 + ",FVG"
+    table.cell(g, 1, 5, str1, text_color=#00e676, text_size=size.tiny)
+    table.cell(g, 0, 6, "RSI:", text_color=#c9d1d9, text_size=size.tiny)
+    rsiT = str.tostring(math.round(rsiVal, 1))
+    if rsiVal > rsiHi
+        rsiT := rsiT + " HIGH!"
+    else if rsiVal < rsiLo
+        rsiT := rsiT + " LOW!"
+    table.cell(g, 1, 6, rsiT, text_color=rsiVal > rsiHi or rsiVal < rsiLo ? #ff1744 : #c9d1d9, text_size=size.tiny)
+    table.cell(g, 0, 7, "Risk:", text_color=#c9d1d9, text_size=size.tiny)
+    rsk = str.tostring(math.round(optRisk * 100, 1)) + "%"
+    table.cell(g, 1, 7, rsk, text_color=#ffd700, text_size=size.tiny)
+
+// === AUTO TRENDLINES ===
+if showTrend and barstate.islast
+    var line uptrendLine = na
+    var line downtrendLine = na
+    var label upLabel = na
+    var label dnLabel = na
+    if not na(uptrendLine)
+        line.delete(uptrendLine)
+    if not na(downtrendLine)
+        line.delete(downtrendLine)
+    if not na(upLabel)
+        label.delete(upLabel)
+    if not na(dnLabel)
+        label.delete(dnLabel)
+    var float upV1 = na
+    var int upB1 = na
+    var float upV2 = na
+    var int upB2 = na
+    var float dnV1 = na
+    var int dnB1 = na
+    var float dnV2 = na
+    var int dnB2 = na
+    for i = 0 to 100
+        if not na(swL[i])
+            if na(upB1) or bar_index - i > upB1
+                upV2 := upV1
+                upB2 := upB1
+                upV1 := swL[i]
+                upB1 := bar_index - i
+        if not na(swH[i])
+            if na(dnB1) or bar_index - i > dnB1
+                dnV2 := dnV1
+                dnB2 := dnB1
+                dnV1 := swH[i]
+                dnB1 := bar_index - i
+    if not na(upB1) and not na(upB2) and upB1 > upB2 and upV1 > upV2
+        slope = (upV1 - upV2) / (upB1 - upB2)
+        futureBars = 30
+        uptrendLine := line.new(upB2, upV2, bar_index + futureBars, upV1 + slope * futureBars, color=color.new(#00e676, 40), width=2)
+        upLabel := label.new(upB1, upV1, "TL-Up", color=color.new(#00e676, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
+    if not na(dnB1) and not na(dnB2) and dnB1 > dnB2 and dnV1 < dnV2
+        slope = (dnV1 - dnV2) / (dnB1 - dnB2)
+        futureBars = 30
+        downtrendLine := line.new(dnB2, dnV2, bar_index + futureBars, dnV1 + slope * futureBars, color=color.new(#ff1744, 40), width=2)
+        dnLabel := label.new(dnB1, dnV1, "TL-Dn", color=color.new(#ff1744, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
+
+// === AUTO SUPPORT/RESISTANCE ===
+if showSR and barstate.islast
+    var float[] srLvl = array.new_float(0)
+    var int[] srTch = array.new_int(0)
+    var bool[] srSup = array.new_bool(0)
+    array.clear(srLvl)
+    array.clear(srTch)
+    array.clear(srSup)
+    for i = 0 to 100
+        if not na(swH[i])
+            array.push(srLvl, swH[i])
+            array.push(srTch, 1)
+            array.push(srSup, false)
+        if not na(swL[i])
+            array.push(srLvl, swL[i])
+            array.push(srTch, 1)
+            array.push(srSup, true)
+    // Safe merge: collect kept indices instead of removing during iteration
+    var bool[] srKeep = array.new_bool(true, array.size(srLvl))
+    array.clear(srKeep)
+    for _k = 0 to array.size(srLvl) - 1
+        array.push(srKeep, true)
+    // Mark duplicates
+    sz = array.size(srLvl)
+    for i = 0 to sz - 1
+        if not array.get(srKeep, i)
+            continue
+        for j = i + 1 to sz - 1
+            if not array.get(srKeep, j)
+                continue
+            dist = math.abs(array.get(srLvl, i) - array.get(srLvl, j))
+            if dist < atr14 * 0.3
+                array.set(srKeep, j, false)
+                array.set(srTch, i, array.get(srTch, i) + array.get(srTch, j))
+    // Build clean arrays
+    var float[] srLvl2 = array.new_float(0)
+    var int[] srTch2 = array.new_int(0)
+    var bool[] srSup2 = array.new_bool(0)
+    array.clear(srLvl2)
+    array.clear(srTch2)
+    array.clear(srSup2)
+    for i = 0 to array.size(srLvl) - 1
+        if array.get(srKeep, i)
+            array.push(srLvl2, array.get(srLvl, i))
+            array.push(srTch2, array.get(srTch, i))
+            array.push(srSup2, array.get(srSup, i))
+    drawn = 0
+    for i = 0 to array.size(srLvl2) - 1
+        if drawn >= 6
+            break
+        if array.get(srTch2, i) >= srTouch
+            lvl = array.get(srLvl2, i)
+            touches = array.get(srTch2, i)
+            isSup = array.get(srSup2, i)
+            clr = isSup ? #00e676 : #ff1744
+            line.new(bar_index - 100, lvl, bar_index + 20, lvl, color=color.new(clr, 60), width=1, style=line.style_dashed)
+            labelText = (isSup ? "Support" : "Resistance") + " " + str.tostring(touches)
+            label.new(bar_index + 5, lvl, labelText, color=color.new(clr, 20), textcolor=color.white, style=isSup ? label.style_label_left : label.style_label_right, size=size.tiny)
+            drawn += 1
+
+// === ALERTS ===
+alertcondition(bE, "SP2L Buy", "SP2L: Buy Signal Active!")
+alertcondition(sE, "SP2L Sell", "SP2L: Sell Signal Active!")
+alertcondition(bSpk, "SP2L Bull Spike", "SP2L: Bullish Spike Detected")
+alertcondition(sSpk, "SP2L Bear Spike", "SP2L: Bearish Spike Detected")
+alertcondition(bBOS or bCHoCH, "Structure Bull", "SP2L: Bullish Structure")
+alertcondition(sBOS or sCHoCH, "Structure Bear", "SP2L: Bearish Structure")
+alertcondition(t1h and not t1h[1], "TP1 Hit", "SP2L: Target 1 Hit!")
+alertcondition(sEnt and not sEnt[1], "Secondary Entry", "SP2L: 2nd Entry Active!")
+alertcondition(expired, "Signal Expired", "SP2L: Signal Expired")
