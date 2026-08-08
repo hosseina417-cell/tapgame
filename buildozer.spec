@@ -1,22 +1,25 @@
 [app]
 
 # نام و مشخصات برنامه
-title = شکار هدف
-package.name = tapgame
-package.domain = org.mygame
+title = آربیتراژیار
+package.name = arbitrajyar
+package.domain = org.arenaai
 
 # کد منبع (فایل اصلی)
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,txt
+source.include_exts = py,png,jpg,kv,atlas,txt,md
 
 # نسخه برنامه
-version = 1.0.0
+version = 2.0.0
 
 # تنظیمات پایتون
 requirements = python3,kivy
 
 # تنظیمات نمایش
 orientation = portrait
+
+# دسترسی اینترنت برای APIهای عمومی صرافی‌ها
+android.permissions = INTERNET
 
 # آیکون و تصویر بارگذاری (اختیاری - فعلاً خالی)
 # icon.filename = icon.png
