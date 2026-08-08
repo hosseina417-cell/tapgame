@@ -1,916 +1,1153 @@
-// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
-// https://mozilla.org/MPL/2.0/
-// © SP2L Pour Samadi Strategy - Version 5.0 FINAL
-// استراتژی اسپایک تو لگ (Spike 2 Leg) استاد محمدعلی پورصمدی
-// نسخه نهایی و بهینهسازی شده برای بازار کریپتو
-// 
-
-//@version=5
-indicator("SP2L Pour Samadi [V5 FINAL]", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
-
-// 
-//                        تنظیمات
-// 
-
-//  اسپایک 
-g1 = " اسپایک "
-minSpk     = input.int(3, "حداقل کندل اسپایک", 2, 10, group=g1)
-useMom     = input.bool(true, "فیلتر مومنتوم", group=g1)
-momLvl     = input.int(2, "سطح قدرت (1-5)", 1, 5, group=g1)
-
-//  FVG 
-g2 = " FVG "
-useFVG     = input.bool(true, "فیلتر FVG", group=g2)
-fvgType    = input.string("Significant", "نوع", ["All", "Significant", "Structural", "Major"], group=g2)
-fvgLife    = input.int(20, "عمر (کندل)", 5, 50, group=g2)
-mergeFVG   = input.bool(true, "ادغام FVG همپوشان", group=g2)
-
-//  دوجی 
-g3 = " دوجی "
-useDj      = input.bool(true, "فیلتر دوجی", group=g3)
-djBody     = input.float(0.1, "نسبت بدنه دوجی", 0.05, 0.3, 0.05, group=g3)
-djMax      = input.float(0.25, "حداکثر % دوجی", 0.1, 0.5, 0.05, group=g3)
-
-//  ساختار 
-g4 = " ساختار "
-useStr     = input.bool(true, "BOS / CHoCH", group=g4)
-swLen      = input.int(5, "طول Swing", 2, 10, group=g4)
-useOB      = input.bool(true, "Order Block", group=g4)
-
-//  ورود 
-g5 = " ورود "
-eMode      = input.string("Aggressive", "حالت", ["Aggressive", "Moderate", "Defensive"], group=g5)
-sigBars    = input.int(10, "اعتبار سیگنال", 3, 25, group=g5)
-secEntry   = input.bool(true, "ورود دوم", group=g5)
-secDepth   = input.float(50.0, "عمق ورود۲ %", 10, 80, 5, group=g5) / 100
-coolBars   = input.int(3, "Cooldown", 1, 10, group=g5)
-
-//  پوزیشن 
-g6 = " پوزیشن "
-useSLBuf   = input.bool(true, "آستانه SL", group=g6)
-slBuf      = input.float(0.3, "آستانه %", 0.1, 3.0, 0.1, group=g6) / 100
-rr1        = input.float(1.0, "R:R هدف۱", 0.5, 5.0, 0.5, group=g6)
-rr2        = input.float(2.0, "R:R هدف۲", 1.0, 5.0, 0.5, group=g6)
-useTrail   = input.bool(true, "تریلینگ استاپ", group=g6)
-trR        = input.float(0.5, "فاصله تریلینگ (R)", 0.2, 2.0, 0.1, group=g6)
-riskPerTrade = input.float(1.0, "ریسک هر معامله %", 0.5, 5.0, 0.5, group=g6) / 100
-
-//  حجم و RSI 
-g7 = " حجم و RSI "
-useVol     = input.bool(true, "فیلتر حجم", group=g7)
-vMul       = input.float(1.2, "ضریب حجم", 1.0, 3.0, 0.1, group=g7)
-vLen       = input.int(20, "میانگین حجم", 5, 50, group=g7)
-useRSI     = input.bool(true, "تأیید RSI", group=g7)
-rsiL       = input.int(14, "دوره RSI", 5, 30, group=g7)
-rsiHi      = input.float(70.0, "OB", 60, 90, group=g7)
-rsiLo      = input.float(30.0, "OS", 10, 40, group=g7)
-
-//  مولتی تایمفریم 
-g8 = " مولتی تایمفریم "
-useMTF     = input.bool(true, "تأیید HTF", group=g8)
-htfTF      = input.timeframe("60", "تایمفریم", group=g8)
-
-//  امتیازدهی 
-g9 = " امتیازدهی "
-useConf    = input.bool(true, "سیستم امتیاز", group=g9)
-minC       = input.int(2, "حداقل امتیاز", 1, 10, group=g9)
-
-//  فیلتر زمانی 
-g10 = " Kill Zone "
-useKZ      = input.bool(false, "فیلتر Kill Zone", group=g10)
-kzStart    = input.int(7, "شروع UTC", 0, 23, group=g10)
-kzEnd      = input.int(20, "پایان UTC", 0, 23, group=g10)
-
-//  نمایش 
-g11 = " نمایش "
-dMode      = input.string("Signal", "حالت", ["Setup", "Signal"], group=g11)
-showDash   = input.bool(true, "داشبورد", group=g11)
-showGuide  = input.bool(false, " راهنمای هوشمند (کلیک=باز)", group=g11)
-showFVGs   = input.bool(true, "FVG ها", group=g11)
-showStr    = input.bool(true, "ساختار", group=g11)
-showHLs    = input.bool(true, "سطوح HL/LH", group=g11)
-showZone   = input.bool(true, "ناحیه ترید", group=g11)
-showExpire = input.bool(true, "هشدار انقضا", group=g11)
-showTrend  = input.bool(false, " خطوط روند (خودکار)", group=g11)
-showSR     = input.bool(false, " حمایت/مقاومت (خودکار)", group=g11)
-srLookback = input.int(50, "دوره بررسی S/R", 20, 100, group=g11)
-srTouch    = input.int(2, "حداقل برخورد S/R", 2, 5, group=g11)
-
-// 
-//                     توابع پایه
-// 
-bdy() => math.abs(close - open)
-rng() => high - low
-brt() => rng() > 0 ? bdy() / rng() : 0
-isB() => close > open
-isS() => close < open
-
-atr14    = ta.atr(14)
-avgBdy   = ta.sma(bdy(), 20)
-avgVol   = ta.sma(volume, vLen)
-rsiVal   = ta.rsi(close, rsiL)
-strThr   = avgBdy * (1 + momLvl * 0.3)
-
-// Kill Zone
-utcH     = hour(time, "UTC")
-inKZ     = not useKZ or (utcH >= kzStart and utcH <= kzEnd)
-
-// 
-//                   تشخیص FVG + ادغام
-// 
-rawBFVG = low > high[2]
-rawSFVG = high < low[2]
-
-gM = fvgType == "Major" ? 1.5 : fvgType == "Significant" ? 0.8 : fvgType == "Structural" ? 0.5 : 0.3
-mGap = atr14 * gM
-
-bFVGok = rawBFVG and (low - high[2]) >= mGap
-sFVGok = rawSFVG and (low[2] - high) >= mGap
-
-// آرایه FVG
-var float[] fBT = array.new_float(0)
-var float[] fBB = array.new_float(0)
-var int[]   fBI = array.new_int(0)
-var float[] fST = array.new_float(0)
-var float[] fSB = array.new_float(0)
-var int[]   fSI = array.new_int(0)
-
-// بررسی همپوشانی و ادغام
-overlapsBull(newTop, newBot) =>
-    if mergeFVG and array.size(fBT) > 0
-        lastIdx = array.size(fBT) - 1
-        exTop = array.get(fBT, lastIdx)
-        exBot = array.get(fBB, lastIdx)
-        // ادغام: بزرگترین محدوده
-        array.set(fBT, lastIdx, math.max(newTop, exTop))
-        array.set(fBB, lastIdx, math.min(newBot, exBot))
-        true
-    else
-        false
-
-overlapsBear(newTop, newBot) =>
-    if mergeFVG and array.size(fST) > 0
-        lastIdx = array.size(fST) - 1
-        exTop = array.get(fST, lastIdx)
-        exBot = array.get(fSB, lastIdx)
-        array.set(fST, lastIdx, math.max(newTop, exTop))
-        array.set(fSB, lastIdx, math.min(newBot, exBot))
-        true
-    else
-        false
-
-if useFVG and bFVGok
-    if not overlapsBull(low, high[2])
-        array.push(fBT, low)
-        array.push(fBB, high[2])
-        array.push(fBI, bar_index)
-
-if useFVG and sFVGok
-    if not overlapsBear(low[2], high)
-        array.push(fST, low[2])
-        array.push(fSB, high)
-        array.push(fSI, bar_index)
-
-// پاکسازی
-if array.size(fBT) > 0
-    for i = array.size(fBT) - 1 to 0
-        if i < array.size(fBT)
-            if bar_index - array.get(fBI, i) > fvgLife or low <= array.get(fBB, i)
-                array.remove(fBT, i)
-                array.remove(fBB, i)
-                array.remove(fBI, i)
-
-if array.size(fST) > 0
-    for i = array.size(fST) - 1 to 0
-        if i < array.size(fST)
-            if bar_index - array.get(fSI, i) > fvgLife or high >= array.get(fST, i)
-                array.remove(fST, i)
-                array.remove(fSB, i)
-                array.remove(fSI, i)
-
-// رسم
-if showFVGs
-    if useFVG and bFVGok
-        box.new(bar_index - 2, low, bar_index + fvgLife, high[2], bgcolor=color.new(#00c853, 85), border_color=color.new(#00c853, 60))
-    if useFVG and sFVGok
-        box.new(bar_index - 2, low[2], bar_index + fvgLife, high, bgcolor=color.new(#ff1744, 85), border_color=color.new(#ff1744, 60))
-
-nBFVG = array.size(fBT)
-nSFVG = array.size(fST)
-
-// 
-//                تشخیص Order Block
-// 
-isBullOB = isS()[1] and isB() and bdy() > avgBdy * 1.5
-isBearOB = isB()[1] and isS() and bdy() > avgBdy * 1.5
-
-var float obBH = na
-var float obBL = na
-var int   obBB = na
-var float obSH = na
-var float obSL2 = na
-var int   obSB = na
-
-if isBullOB
-    obBH := high[1]
-    obBL := low[1]
-    obBB := bar_index - 1
-
-if isBearOB
-    obSH := high[1]
-    obSL2 := low[1]
-    obSB := bar_index - 1
-
-nearBullOB = useOB and not na(obBL) and low <= obBH and low >= obBL - atr14
-nearBearOB = useOB and not na(obSH) and high >= obSL2 and high <= obSH + atr14
-
-// 
-//           ساختار بازار + Pivot Tracking
-// 
-swH = ta.pivothigh(high, swLen, swLen)
-swL = ta.pivotlow(low, swLen, swLen)
-
-var float pSH = na
-var float pSL = na
-var int   pSHb = na
-var int   pSLb = na
-
-if not na(swH)
-    pSH := swH
-    pSHb := bar_index - swLen
-if not na(swL)
-    pSL := swL
-    pSLb := bar_index - swLen
-
-var int bias = 0
-
-bBOS   = useStr and not na(pSH) and close > pSH and bias >= 0
-sBOS   = useStr and not na(pSL) and close < pSL and bias <= 0
-bCHoCH = useStr and not na(pSH) and close > pSH and bias < 0
-sCHoCH = useStr and not na(pSL) and close < pSL and bias > 0
-
-if bBOS or bCHoCH
-    bias := 1
-if sBOS or sCHoCH
-    bias := -1
-
-if showStr
-    if bBOS and not na(pSHb)
-        line.new(pSHb, pSH, bar_index, pSH, color=color.new(#00c853, 50), style=line.style_dashed)
-        label.new(bar_index, pSH, "BOS", color=color.new(#00c853, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
-    if sBOS and not na(pSLb)
-        line.new(pSLb, pSL, bar_index, pSL, color=color.new(#ff1744, 50), style=line.style_dashed)
-        label.new(bar_index, pSL, "BOS", color=color.new(#ff1744, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
-    if bCHoCH and not na(pSHb)
-        label.new(bar_index, pSH, "CHoCH", color=color.new(#26A69A, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
-    if sCHoCH and not na(pSLb)
-        label.new(bar_index, pSL, "CHoCH", color=color.new(#EF5350, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
-
-// 
-//                مولتی تایمفریم
-// 
-htf21 = request.security(syminfo.tickerid, htfTF, ta.ema(close, 21))
-htf50 = request.security(syminfo.tickerid, htfTF, ta.ema(close, 50))
-htfUp = htf21 > htf50
-htfDn = htf21 < htf50
-
-// 
-//                تشخیص اسپایک
-// 
-cntB() =>
-    c = 0
-    maxI = math.min(15, math.max(bar_index, 0))
-    if maxI >= 0
-        for i = 0 to maxI
-            if isB()[i]
-                c += 1
-            else
-                break
-    c
-
-cntS() =>
-    c = 0
-    maxI = math.min(15, math.max(bar_index, 0))
-    if maxI >= 0
-        for i = 0 to maxI
-            if isS()[i]
-                c += 1
-            else
-                break
-    c
-
-spkStr(dir) =>
-    cnt = dir == 1 ? cntB() : cntS()
-    s = 0.0
-    if cnt > 0 and bar_index >= cnt - 1
-        maxI = math.max(math.min(cnt - 1, bar_index), 0)
-        for i = 0 to maxI
-            a = atr14[i]
-            b = bdy()[i]
-            if not na(a) and a > 0
-                s += b / a
-    s / math.max(cnt, 1)
-
-chkMom(dir) => not useMom or bar_index > 15 ? spkStr(dir) >= (1.0 + momLvl * 0.3) : true
-
-chkDj(dir) =>
-    if not useDj
-        true
-    else
-        cnt = dir == 1 ? cntB() : cntS()
-        d = 0
-        if cnt > 0 and bar_index >= cnt - 1
-            maxI = math.max(math.min(cnt - 1, bar_index), 0)
-            for i = 0 to maxI
-                if brt()[i] < djBody
-                    d += 1
-        d / math.max(cnt, 1) <= djMax
-
-chkVol(dir) =>
-    if not useVol
-        true
-    else
-        cnt = dir == 1 ? cntB() : cntS()
-        v = 0.0
-        if cnt > 0 and bar_index >= cnt - 1
-            maxI = math.max(math.min(cnt - 1, bar_index), 0)
-            for i = 0 to maxI
-                v += volume[i]
-        v / math.max(cnt, 1) > avgVol * (vMul - 0.3)
-
-// بررسی FVG در محدوده اسپایک (نه FVG فعال)
-hasFVGInSpike(dir) =>
-    if not useFVG
-        true
-    else
-        cnt = dir == 1 ? cntB() : cntS()
-        found = false
-        maxI = math.min(cnt, math.max(bar_index, 1))
-        for i = 0 to maxI
-            if dir == 1
-                if low[i] > high[i + 2] and i + 2 <= bar_index
-                    found := true
-            else
-                if high[i] < low[i + 2] and i + 2 <= bar_index
-                    found := true
-        found
-
-chkFVG(dir) => hasFVGInSpike(dir)
-
-chkRSI(dir) =>
-    if not useRSI
-        true
-    else
-        dir == 1 ? rsiVal < rsiHi : rsiVal > rsiLo
-
-findOrg(dir) =>
-    cnt = dir == 1 ? cntB() : cntS()
-    safeCnt = math.min(cnt, math.max(bar_index, 1))
-    org = dir == 1 ? low[safeCnt] : high[safeCnt]
-    lb = math.min(cnt + 2, math.max(bar_index - 1, 0))
-    if lb >= 0
-        for i = 0 to lb
-            if dir == 1
-                if low[i] < org
-                    org := low[i]
-            else
-                if high[i] > org
-                    org := high[i]
-    org
-
-bC = cntB()
-sC = cntS()
-
-bSpk = bar_index > 15 and bC >= minSpk and chkMom(1) and chkDj(1) and chkFVG(1) and chkVol(1) and chkRSI(1) and inKZ
-sSpk = bar_index > 15 and sC >= minSpk and chkMom(-1) and chkDj(-1) and chkFVG(-1) and chkVol(-1) and chkRSI(-1) and inKZ
-
-bOrg = bSpk ? findOrg(1) : na
-sOrg = sSpk ? findOrg(-1) : na
-
-// 
-//            ردیابی داینامیک HL/LH
-// 
-var int   trk = 0     // 0=none 1=bull 2=bear
-var float cHL = na
-var float cLH = na
-var int   trkB = na
-var float orgB = na
-var float orgS = na
-
-if bSpk
-    trk := 1
-    cHL := low
-    trkB := bar_index
-    orgB := bOrg
-
-if sSpk
-    trk := 2
-    cLH := high
-    trkB := bar_index
-    orgS := sOrg
-
-if trk == 1
-    if low > cHL
-        cHL := low
-        trkB := bar_index
-    if useStr and not na(pSL) and close < pSL
-        trk := 0
-
-if trk == 2
-    if high < cLH
-        cLH := high
-        trkB := bar_index
-    if useStr and not na(pSH) and close > pSH
-        trk := 0
-
-if showHLs and trk == 1 and not na(cHL)
-    line.new(trkB, cHL, bar_index + 3, cHL, color=color.new(#00e676, 40), style=line.style_dotted)
-if showHLs and trk == 2 and not na(cLH)
-    line.new(trkB, cLH, bar_index + 3, cLH, color=color.new(#ff5252, 40), style=line.style_dotted)
-
-// 
-//        واگرایی RSI + سیستم امتیازدهی
-// 
-rsiBDiv = rsiVal < rsiVal[5] and low < low[5] and rsiVal > rsiLo
-rsiSDiv = rsiVal > rsiVal[5] and high > high[5] and rsiVal < rsiHi
-
-// محاسبه امتیاز برای خرید
-calcConfBuy() =>
-    s = 0
-    if nBFVG > 0
-        s += 1
-    if useVol and volume > avgVol * vMul
-        s += 1
-    if not useStr or bias >= 0
-        s += 1
-    if not useMTF or htfUp
-        s += 1
-    if spkStr(1) > 1.5
-        s += 1
-    if bC > minSpk
-        s += 1
-    ema21 = ta.ema(close, 21)
-    ema50 = ta.ema(close, 50)
-    if ema21 > ema50 and close > ema21
-        s += 1
-    if rsiBDiv
-        s += 1
-    if useOB and nearBullOB
-        s += 1
-    if not useKZ or inKZ
-        s += 1
-    s
-
-// محاسبه امتیاز برای فروش
-calcConfSell() =>
-    s = 0
-    if nSFVG > 0
-        s += 1
-    if useVol and volume > avgVol * vMul
-        s += 1
-    if not useStr or bias <= 0
-        s += 1
-    if not useMTF or htfDn
-        s += 1
-    if spkStr(-1) > 1.5
-        s += 1
-    if sC > minSpk
-        s += 1
-    ema21 = ta.ema(close, 21)
-    ema50 = ta.ema(close, 50)
-    if ema21 < ema50 and close < ema21
-        s += 1
-    if rsiSDiv
-        s += 1
-    if useOB and nearBearOB
-        s += 1
-    if not useKZ or inKZ
-        s += 1
-    s
-
-// 
-//           ماشین حالت نهایی
-// 
-var int   st    = 0     // 0=idle 1=setup 2=setup 3=long 4=short
-var float ent   = na
-var float slp   = na
-var float tp1   = na
-var float tp2   = na
-var float tSL   = na
-var int   sB    = na
-var bool  t1h   = false
-var bool  sEnt  = false
-var int   lastEx = 0
-var float cS    = 0.0
-var int   tD    = 0
-var float sOrg2 = na
-var bool  expired = false
-
-canGo = bar_index - lastEx > coolBars
-
-//  ستاپ 
-if bSpk and canGo and (not useStr or bias >= 0) and (not useMTF or htfUp)
-    cs = useConf ? calcConfBuy() : 5
-    if cs >= minC
-        st := 1
-        sB := bar_index
-        t1h := false
-        sEnt := false
-        tSL := na
-        cS := cs
-        tD := 1
-        sOrg2 := bOrg
-        expired := false
-
-if sSpk and canGo and (not useStr or bias <= 0) and (not useMTF or htfDn)
-    cs = useConf ? calcConfSell() : 5
-    if cs >= minC
-        st := 2
-        sB := bar_index
-        t1h := false
-        sEnt := false
-        tSL := na
-        cS := cs
-        tD := -1
-        sOrg2 := sOrg
-        expired := false
-
-//  ورود خرید 
-float d = 0.0
-if st == 1 and bar_index - sB <= sigBars
-    buf = useSLBuf ? sOrg2 * slBuf : 0
-    sv = sOrg2 - buf
-    
-    el = 0.0
-    if eMode == "Aggressive"
-        el := high[1]
-    else if eMode == "Moderate"
-        el := not na(cHL) ? cHL : low[1]
-    else
-        el := not na(cHL) ? sOrg2 + (cHL - sOrg2) * 0.618 : sOrg2 + (low - sOrg2) * 0.618
-    
-    if close > el and isB()
-        st := 3
-        ent := el
-        slp := sv
-        d := ent - slp
-        tp1 := ent + d * rr1
-        tp2 := ent + d * rr2
-        expired := false
-
-if st == 2 and bar_index - sB <= sigBars
-    buf = useSLBuf ? sOrg2 * slBuf : 0
-    sv = sOrg2 + buf
-    
-    el = 0.0
-    if eMode == "Aggressive"
-        el := low[1]
-    else if eMode == "Moderate"
-        el := not na(cLH) ? cLH : high[1]
-    else
-        el := not na(cLH) ? sOrg2 - (sOrg2 - cLH) * 0.618 : sOrg2 - (sOrg2 - high) * 0.618
-    
-    if close < el and isS()
-        st := 4
-        ent := el
-        slp := sv
-        d := slp - ent
-        tp1 := ent - d * rr1
-        tp2 := ent - d * rr2
-        expired := false
-
-//  مدیریت Long 
-if st == 3
-    if not t1h and high >= tp1
-        t1h := true
-    if useTrail and t1h
-        td = (ent - slp) * trR
-        nt = high - td
-        if na(tSL) or nt > tSL
-            tSL := nt
-    exL = useTrail and t1h and not na(tSL) ? tSL : slp
-    if low <= exL
-        lastEx := bar_index
-        st := 0
-    if secEntry and not sEnt and t1h
-        pd = (tp1 - ent) * secDepth
-        se = tp1 - pd
-        if low <= se and close > se
-            sEnt := true
-
-//  مدیریت Short 
-if st == 4
-    if not t1h and low <= tp1
-        t1h := true
-    if useTrail and t1h
-        td = (slp - ent) * trR
-        nt = low + td
-        if na(tSL) or nt < tSL
-            tSL := nt
-    exL = useTrail and t1h and not na(tSL) ? tSL : slp
-    if high >= exL
-        lastEx := bar_index
-        st := 0
-    if secEntry and not sEnt and t1h
-        pd = (ent - tp1) * secDepth
-        se = tp1 + pd
-        if high >= se and close < se
-            sEnt := true
-
-//  انقضا 
-if (st == 1 or st == 2) and bar_index - sB > sigBars
-    expired := true
-    if showExpire
-        label.new(bar_index, close, "⏰", color=color.new(#ff6f00, 50), textcolor=color.white, style=label.style_label_up, size=size.tiny)
-    st := 0
-
-// 
-//              ناحیه ترید
-// 
-var box tZone = na
-
-if showZone
-    if st == 3 and st[1] != 3 and not na(ent) and not na(slp) and not na(tp2)
-        if not na(tZone)
-            box.delete(tZone)
-        tZone := box.new(bar_index, tp2, bar_index + 10, slp, bgcolor=color.new(#1565C0, 92), border_color=color.new(#1565C0, 70), border_width=1)
-    if st == 4 and st[1] != 4 and not na(ent) and not na(slp) and not na(tp2)
-        if not na(tZone)
-            box.delete(tZone)
-        tZone := box.new(bar_index, slp, bar_index + 10, tp2, bgcolor=color.new(#C62828, 92), border_color=color.new(#C62828, 70), border_width=1)
-    if st >= 3 and not na(tZone)
-        box.set_right(tZone, bar_index + 5)
-
-// 
-//              رسم سطوح
-// 
-isL = st == 3
-isS2 = st == 4
-
-plot(isL ? ent : na, "E", color.new(#2196F3, 20), style=plot.style_linebr, linewidth=2)
-plot(isS2 ? ent : na, "E", color.new(#FF9800, 20), style=plot.style_linebr, linewidth=2)
-plot(isL ? slp : na, "SL", color.new(#F44336, 30), style=plot.style_linebr)
-plot(isS2 ? slp : na, "SL", color.new(#F44336, 30), style=plot.style_linebr)
-plot(isL and t1h and not na(tSL) ? tSL : na, "Tr", color.new(#FFEB3B, 10), style=plot.style_linebr, linewidth=2)
-plot(isS2 and t1h and not na(tSL) ? tSL : na, "Tr", color.new(#FFEB3B, 10), style=plot.style_linebr, linewidth=2)
-plot(isL ? tp1 : na, "TP1", color=color.new(#4CAF50, 40), style=plot.style_cross)
-plot(isL ? tp2 : na, "TP2", color=color.new(#8BC34A, 40), style=plot.style_cross)
-plot(isS2 ? tp1 : na, "TP1", color=color.new(#4CAF50, 40), style=plot.style_cross)
-plot(isS2 ? tp2 : na, "TP2", color=color.new(#8BC34A, 40), style=plot.style_cross)
-
-bE = st == 3 and st[1] != 3
-sE = st == 4 and st[1] != 4
-
-plotshape(bE and dMode == "Signal", "BUY", shape.triangleup, location.belowbar, color.new(#00e676, 0), size=size.large)
-plotshape(sE and dMode == "Signal", "SELL", shape.triangledown, location.abovebar, color.new(#ff1744, 0), size=size.large)
-
-// لیبل اسپایک (تفکیک از سیگنال)
-if bSpk
-    label.new(bar_index, low, "*SPK", color=color.new(#00695C, 30), textcolor=color.white, style=label.style_label_up, size=size.tiny)
-if sSpk
-    label.new(bar_index, high, "*SPK", color=color.new(#B71C1C, 30), textcolor=color.white, style=label.style_label_down, size=size.tiny)
-
-bgcolor(bSpk ? color.new(#00c853, 94) : sSpk ? color.new(#ff1744, 94) : na)
-
-// 
-//              آمار و نتایج
-// 
-var int   tot = 0
-var int   win = 0
-var int   los = 0
-var float pnl = 0.0
-var string lR  = " خارج"
-var float pkP = 0.0
-var float mDD = 0.0
-var int   conLoss = 0
-var int   maxCL = 0
-var float unrealPnL = 0.0
-
-// P&L لحظهای
-if st == 3 and not na(ent)
-    unrealPnL := close - ent
-if st == 4 and not na(ent)
-    unrealPnL := ent - close
-if st < 3
-    unrealPnL := 0.0
-
-if st == 0 and (st[1] == 3 or st[1] == 4)
-    tot += 1
-    r = tD == 1 ? (t1h and not na(tSL) ? tSL - ent : t1h ? tp1 - ent : slp - ent) : (t1h and not na(tSL) ? ent - tSL : t1h ? ent - tp1 : ent - slp)
-    pnl += r
-    pkP := math.max(pkP, pnl)
-    dd = pkP - pnl
-    mDD := math.max(mDD, dd)
-    if r > 0
-        win += 1
-        conLoss := 0
-        lR := "V +" + str.tostring(math.round(r, 4))
-    else
-        los += 1
-        conLoss += 1
-        maxCL := math.max(maxCL, conLoss)
-        lR := " " + str.tostring(math.round(r, 4))
-
-wR = tot > 0 ? win / tot * 100 : 0.0
-pf = los > 0 ? win / los : win > 0 ? 99.0 : 0.0
-
-// پیشنهاد ریسک بهینه
-optRisk = wR > 0 and rr1 > 0 ? (wR / 100) * rr1 : riskPerTrade
-
-// 
-//         داشبورد حرفهای (نسخه نهایی)
-// 
-if showDash and barstate.islast
-    var table d = table.new(position.top_right, 2, 18, bgcolor=color.new(#0d1117, 5), border_width=1, border_color=#30363d)
-    
-    bg = #161b22
-    rw = 0
-    
-    //  هدر 
-    table.cell(d, 0, rw, " SP2L V5 FINAL", text_color=#ffd700, text_size=size.normal, bgcolor=bg)
-    table.cell(d, 1, rw, "پور صمدی", text_color=#ffd700, text_size=size.normal, bgcolor=bg)
-    rw += 1
-    
-    //  ساختار 
-    table.cell(d, 0, rw, "ساختار:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, bias == 1 ? "[+] صعودی" : bias == -1 ? "[-] نزولی" : "[o] خنثی", text_color=bias == 1 ? #00e676 : bias == -1 ? #ff1744 : #888888, text_size=size.small)
-    rw += 1
-    
-    //  HTF 
-    table.cell(d, 0, rw, "روند بالا:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, htfUp ? "[+] صعودی" : htfDn ? "[-] نزولی" : "[o] خنثی", text_color=htfUp ? #00e676 : htfDn ? #ff1744 : #888888, text_size=size.small)
-    rw += 1
-    
-    //  FVG 
-    table.cell(d, 0, rw, "FVG:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, str.tostring(nBFVG) + " " + str.tostring(nSFVG) + "", text_color=#58a6ff, text_size=size.small)
-    rw += 1
-    
-    //  حجم 
-    table.cell(d, 0, rw, "حجم:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, volume > avgVol * vMul ? " بالا" : volume > avgVol ? "* متوسط" : "- کم", text_color=volume > avgVol * vMul ? #00e676 : volume > avgVol ? #ffa726 : #888888, text_size=size.small)
-    rw += 1
-    
-    //  RSI 
-    table.cell(d, 0, rw, "RSI:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, str.tostring(math.round(rsiVal, 1)) + (rsiBDiv ? " واگرایی" : rsiSDiv ? " واگرایی" : ""), text_color=rsiVal > rsiHi ? #ff1744 : rsiVal < rsiLo ? #00e676 : #c9d1d9, text_size=size.small)
-    rw += 1
-    
-    //  Kill Zone 
-    if useKZ
-        table.cell(d, 0, rw, "منطقه زمانی:", text_color=#c9d1d9, text_size=size.small)
-        table.cell(d, 1, rw, inKZ ? "V فعال" : "", text_color=inKZ ? #00e676 : #888888, text_size=size.small)
-        rw += 1
-    
-    //  وضعیت 
-    table.cell(d, 0, rw, "وضعیت:", text_color=#c9d1d9, text_size=size.small)
-    stT = st == 1 ? "[!] ستاپ خرید" : st == 2 ? "[!] ستاپ فروش" : st == 3 ? "[+] خرید" : st == 4 ? "[-] فروش" : "[o] آزاد"
-    stC = st >= 3 ? #00e676 : st >= 1 ? #ffa726 : #888888
-    table.cell(d, 1, rw, stT, text_color=stC, text_size=size.small)
-    rw += 1
-    
-    //  امتیاز 
-    table.cell(d, 0, rw, "امتیاز اطمینان:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, str.tostring(math.round(cS)) + " از 10", text_color=cS >= 7 ? #00e676 : cS >= 4 ? #ffa726 : #ff1744, text_size=size.small)
-    rw += 1
-    
-    //  پوزیشن 
-    if st >= 3
-        table.cell(d, 0, rw, "قیمت ورود:", text_color=#c9d1d9, text_size=size.small)
-        table.cell(d, 1, rw, str.tostring(ent, "#.####"), text_color=#2196F3, text_size=size.small)
-        rw += 1
-        
-        table.cell(d, 0, rw, "حد ضرر:", text_color=#c9d1d9, text_size=size.small)
-        sATR = not na(slp) and not na(ent) ? math.abs(ent - slp) / atr14 : 0
-        table.cell(d, 1, rw, str.tostring(slp, "#.####") + " (" + str.tostring(math.round(sATR, 1)) + " ATR)", text_color=#F44336, text_size=size.small)
-        rw += 1
-        
-        table.cell(d, 0, rw, "هدف اول:", text_color=#c9d1d9, text_size=size.small)
-        table.cell(d, 1, rw, str.tostring(tp1, "#.####") + (t1h ? " V لمس شد" : " ... در انتظار"), text_color=t1h ? #00e676 : #c9d1d9, text_size=size.small)
-        rw += 1
-        
-        table.cell(d, 0, rw, "هدف دوم:", text_color=#c9d1d9, text_size=size.small)
-        table.cell(d, 1, rw, str.tostring(tp2, "#.####"), text_color=#8BC34A, text_size=size.small)
-        rw += 1
-        
-        if t1h and not na(tSL)
-            table.cell(d, 0, rw, "تریلینگ:", text_color=#c9d1d9, text_size=size.small)
-            table.cell(d, 1, rw, str.tostring(tSL, "#.####"), text_color=#FFEB3B, text_size=size.small)
-            rw += 1
-        
-        // P&L لحظهای
-        table.cell(d, 0, rw, "سود/ضرر لحظهای:", text_color=#c9d1d9, text_size=size.small)
-        upClr = unrealPnL > 0 ? #00e676 : unrealPnL < 0 ? #ff1744 : #c9d1d9
-        upSign = unrealPnL > 0 ? "+" : ""
-        table.cell(d, 1, rw, upSign + str.tostring(math.round(unrealPnL, 4)), text_color=upClr, text_size=size.small)
-        rw += 1
-    
-    //  آمار 
-    table.cell(d, 0, rw, " آمار ", text_color=#ffd700, text_size=size.small, bgcolor=bg)
-    table.cell(d, 1, rw, "", bgcolor=bg)
-    rw += 1
-    
-    table.cell(d, 0, rw, "تعداد معاملات:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, str.tostring(tot) + " (" + str.tostring(win) + " برد / " + str.tostring(los) + " ضرر)", text_color=#58a6ff, text_size=size.small)
-    rw += 1
-    
-    table.cell(d, 0, rw, "وین ریت:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, str.tostring(math.round(wR, 1)) + "%", text_color=wR >= 50 ? #00e676 : #ffa726, text_size=size.small)
-    rw += 1
-    
-    table.cell(d, 0, rw, "ضریب سود:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, str.tostring(math.round(pf, 2)), text_color=pf >= 1.5 ? #00e676 : #ffa726, text_size=size.small)
-    rw += 1
-    
-    table.cell(d, 0, rw, "حداکثر ضرر:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, str.tostring(math.round(mDD, 4)), text_color=#ff1744, text_size=size.small)
-    rw += 1
-    
-    //  هشدار ضرر متوالی 
-    if maxCL >= 3
-        table.cell(d, 0, rw, "! ضرر متوالی:", text_color=#ff1744, text_size=size.small)
-        table.cell(d, 1, rw, str.tostring(maxCL) + "x", text_color=#ff1744, text_size=size.small)
-        rw += 1
-    
-    //  پیشنهاد ریسک 
-    table.cell(d, 0, rw, "ریسک پیشنهادی:", text_color=#c9d1d9, text_size=size.small)
-    table.cell(d, 1, rw, str.tostring(math.round(optRisk * 100, 1)) + "%", text_color=#ffd700, text_size=size.small)
-
-// 
-//         راهنمای هوشمند (با کلیک روی input باز میشه)
-// 
-if showGuide and barstate.islast
-    var table g = table.new(position.bottom_right, 2, 8, bgcolor=color.new(#1a1a2e, 20), border_width=1, border_color=#30363d)
-    gb = #16213e
-    table.cell(g, 0, 0, "GUIDE", text_color=#ffd700, text_size=size.small, bgcolor=gb)
-    table.cell(g, 1, 0, "", bgcolor=gb)
-    table.cell(g, 0, 1, "Action:", text_color=#c9d1d9, text_size=size.tiny)
-    act = "WAIT"
-    actC = #888888
-    if st == 3
-        act := "BUY NOW"
-        actC := #00e676
-    else if st == 4
-        act := "SELL NOW"
-        actC := #ff1744
-    else if st == 1
-        act := "Ready Buy"
-        actC := #ffa726
-    else if st == 2
-        act := "Ready Sell"
-        actC := #ffa726
-    else if bias == 1 and htfUp
-        act := "Wait Buy"
-        actC := #58a6ff
-    else if bias == -1 and htfDn
-        act := "Wait Sell"
-        actC := #58a6ff
-    table.cell(g, 1, 1, act, text_color=actC, text_size=size.tiny)
-    table.cell(g, 0, 2, "Score:", text_color=#c9d1d9, text_size=size.tiny)
-    table.cell(g, 1, 2, str.tostring(math.round(cS)) + "/10", text_color=cS >= minC ? #00e676 : #ff1744, text_size=size.tiny)
-    table.cell(g, 0, 3, "Why:", text_color=#c9d1d9, text_size=size.tiny)
-    why = "No signal yet"
-    if st >= 3
-        why := "Signal active"
-    else if cS < minC
-        why := "Score too low"
-    table.cell(g, 1, 3, why, text_color=#c9d1d9, text_size=size.tiny)
-    table.cell(g, 0, 4, "Levels:", text_color=#c9d1d9, text_size=size.tiny)
-    lvls = "No position"
-    if st >= 3 and not na(ent)
-        lvls := "E:" + str.tostring(ent, "#.##")
-        lvls := lvls + " SL:" + str.tostring(slp, "#.##")
-    table.cell(g, 1, 4, lvls, text_color=#58a6ff, text_size=size.tiny)
-    table.cell(g, 0, 5, "Strengths:", text_color=#c9d1d9, text_size=size.tiny)
-    str1 = "None"
-    if bias > 0
-        str1 := "UpTrend"
-    if htfUp
-        str1 := str1 + ",HTF-Up"
-    if nBFVG > 0
-        str1 := str1 + ",FVG"
-    table.cell(g, 1, 5, str1, text_color=#00e676, text_size=size.tiny)
-    table.cell(g, 0, 6, "RSI:", text_color=#c9d1d9, text_size=size.tiny)
-    rsiT = str.tostring(math.round(rsiVal, 1))
-    if rsiVal > rsiHi
-        rsiT := rsiT + " HIGH!"
-    else if rsiVal < rsiLo
-        rsiT := rsiT + " LOW!"
-    table.cell(g, 1, 6, rsiT, text_color=rsiVal > rsiHi or rsiVal < rsiLo ? #ff1744 : #c9d1d9, text_size=size.tiny)
-    table.cell(g, 0, 7, "Risk:", text_color=#c9d1d9, text_size=size.tiny)
-    rsk = str.tostring(math.round(optRisk * 100, 1)) + "%"
-    table.cell(g, 1, 7, rsk, text_color=#ffd700, text_size=size.tiny)
-
-alertcondition(bE, "SP2L Buy Signal", " SP2L: سیگنال خرید فعال!")
-alertcondition(sE, "SP2L Sell Signal", " SP2L: سیگنال فروش فعال!")
-alertcondition(bSpk, "SP2L Bull Spike", "* SP2L: اسپایک صعودی شناسایی شد")
-alertcondition(sSpk, "SP2L Bear Spike", "* SP2L: اسپایک نزولی شناسایی شد")
-alertcondition(bBOS or bCHoCH, "Structure Bull", " ساختار صعودی (BOS/CHoCH)")
-alertcondition(sBOS or sCHoCH, "Structure Bear", " ساختار نزولی (BOS/CHoCH)")
-alertcondition(t1h and not t1h[1], "TP1 Hit", " SP2L: هدف اول لمس شد!")
-alertcondition(sEnt and not sEnt[1], "Secondary Entry", " SP2L: ورود دوم فعال!")
-alertcondition(expired, "Signal Expired", "⏰ SP2L: سیگنال منقضی شد")
-
-// 
-//  پایان - SP2L Pour Samadi Strategy V5 FINAL
-// 
+!/!/! !T!h!i!s! !P!i!n!e! !S!c!r!i!p!t!™! !c!o!d!e! !i!s! !s!u!b!j!e!c!t! !t!o! !t!h!e! !t!e!r!m!s! !o!f! !t!h!e! !M!o!z!i!l!l!a! !P!u!b!l!i!c! !L!i!c!e!n!s!e! !2!.!0!
+!/!/! !h!t!t!p!s!:!/!/!m!o!z!i!l!l!a!.!o!r!g!/!M!P!L!/!2!.!0!/!
+!/!/! !©! !S!P!2!L! !P!o!u!r! !S!a!m!a!d!i! !S!t!r!a!t!e!g!y! !-! !V!e!r!s!i!o!n! !5!.!0! !F!I!N!A!L!
+!/!/! !ا!س!ت!ر!ا!ت!ژ!ی! !ا!س!پ!ا!ی!ک! !ت!و! !ل!گ! !(!S!p!i!k!e! !2! !L!e!g!)! !ا!س!ت!ا!د! !م!ح!م!د!ع!ل!ی! !پ!و!ر!ص!م!د!ی!
+!/!/! !ن!س!خ!ه! !ن!ه!ا!ی!ی! !و! !ب!ه!ی!ن!ه!!س!ا!ز!ی! !ش!د!ه! !ب!ر!ا!ی! !ب!ا!ز!ا!ر! !ک!ر!ی!پ!ت!و!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!/!/!@!v!e!r!s!i!o!n!=!5!
+!i!n!d!i!c!a!t!o!r!(!"!S!P!2!L! !P!o!u!r! !S!a!m!a!d!i! ![!V!5! !F!I!N!A!L!]!"!,! !o!v!e!r!l!a!y!=!t!r!u!e!,! !m!a!x!_!b!o!x!e!s!_!c!o!u!n!t!=!5!0!0!,! !m!a!x!_!l!i!n!e!s!_!c!o!u!n!t!=!5!0!0!,! !m!a!x!_!l!a!b!e!l!s!_!c!o!u!n!t!=!5!0!0!)!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !ت!ن!ظ!ی!م!ا!ت!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!/!/! !!!!! !ا!س!پ!ا!ی!ک! !!!!!
+!g!1! !=! !"!!!! !ا!س!پ!ا!ی!ک! !!!!"!
+!m!i!n!S!p!k! ! ! ! ! !=! !i!n!p!u!t!.!i!n!t!(!3!,! !"!ح!د!ا!ق!ل! !ک!ن!د!ل! !ا!س!پ!ا!ی!ک!"!,! !2!,! !1!0!,! !g!r!o!u!p!=!g!1!)!
+!u!s!e!M!o!m! ! ! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!ف!ی!ل!ت!ر! !م!و!م!ن!ت!و!م!"!,! !g!r!o!u!p!=!g!1!)!
+!m!o!m!L!v!l! ! ! ! ! !=! !i!n!p!u!t!.!i!n!t!(!2!,! !"!س!ط!ح! !ق!د!ر!ت! !(!1!-!5!)!"!,! !1!,! !5!,! !g!r!o!u!p!=!g!1!)!
+!
+!/!/! !!!!! !F!V!G! !!!!!
+!g!2! !=! !"!!!! !F!V!G! !!!!"!
+!u!s!e!F!V!G! ! ! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!ف!ی!ل!ت!ر! !F!V!G!"!,! !g!r!o!u!p!=!g!2!)!
+!f!v!g!T!y!p!e! ! ! ! !=! !i!n!p!u!t!.!s!t!r!i!n!g!(!"!S!i!g!n!i!f!i!c!a!n!t!"!,! !"!ن!و!ع!"!,! ![!"!A!l!l!"!,! !"!S!i!g!n!i!f!i!c!a!n!t!"!,! !"!S!t!r!u!c!t!u!r!a!l!"!,! !"!M!a!j!o!r!"!]!,! !g!r!o!u!p!=!g!2!)!
+!f!v!g!L!i!f!e! ! ! ! !=! !i!n!p!u!t!.!i!n!t!(!2!0!,! !"!ع!م!ر! !(!ک!ن!د!ل!)!"!,! !5!,! !5!0!,! !g!r!o!u!p!=!g!2!)!
+!m!e!r!g!e!F!V!G! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!ا!د!غ!ا!م! !F!V!G! !ه!م!پ!و!ش!ا!ن!"!,! !g!r!o!u!p!=!g!2!)!
+!
+!/!/! !!!!! !د!و!ج!ی! !!!!!
+!g!3! !=! !"!!!! !د!و!ج!ی! !!!!"!
+!u!s!e!D!j! ! ! ! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!ف!ی!ل!ت!ر! !د!و!ج!ی!"!,! !g!r!o!u!p!=!g!3!)!
+!d!j!B!o!d!y! ! ! ! ! !=! !i!n!p!u!t!.!f!l!o!a!t!(!0!.!1!,! !"!ن!س!ب!ت! !ب!د!ن!ه! !د!و!ج!ی!"!,! !0!.!0!5!,! !0!.!3!,! !0!.!0!5!,! !g!r!o!u!p!=!g!3!)!
+!d!j!M!a!x! ! ! ! ! ! !=! !i!n!p!u!t!.!f!l!o!a!t!(!0!.!2!5!,! !"!ح!د!ا!ک!ث!ر! !%! !د!و!ج!ی!"!,! !0!.!1!,! !0!.!5!,! !0!.!0!5!,! !g!r!o!u!p!=!g!3!)!
+!
+!/!/! !!!!! !س!ا!خ!ت!ا!ر! !!!!!
+!g!4! !=! !"!!!! !س!ا!خ!ت!ا!ر! !!!!"!
+!u!s!e!S!t!r! ! ! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!B!O!S! !/! !C!H!o!C!H!"!,! !g!r!o!u!p!=!g!4!)!
+!s!w!L!e!n! ! ! ! ! ! !=! !i!n!p!u!t!.!i!n!t!(!5!,! !"!ط!و!ل! !S!w!i!n!g!"!,! !2!,! !1!0!,! !g!r!o!u!p!=!g!4!)!
+!u!s!e!O!B! ! ! ! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!O!r!d!e!r! !B!l!o!c!k!"!,! !g!r!o!u!p!=!g!4!)!
+!
+!/!/! !!!!! !و!ر!و!د! !!!!!
+!g!5! !=! !"!!!! !و!ر!و!د! !!!!"!
+!e!M!o!d!e! ! ! ! ! ! !=! !i!n!p!u!t!.!s!t!r!i!n!g!(!"!A!g!g!r!e!s!s!i!v!e!"!,! !"!ح!ا!ل!ت!"!,! ![!"!A!g!g!r!e!s!s!i!v!e!"!,! !"!M!o!d!e!r!a!t!e!"!,! !"!D!e!f!e!n!s!i!v!e!"!]!,! !g!r!o!u!p!=!g!5!)!
+!s!i!g!B!a!r!s! ! ! ! !=! !i!n!p!u!t!.!i!n!t!(!1!0!,! !"!ا!ع!ت!ب!ا!ر! !س!ی!گ!ن!ا!ل!"!,! !3!,! !2!5!,! !g!r!o!u!p!=!g!5!)!
+!s!e!c!E!n!t!r!y! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!و!ر!و!د! !د!و!م!"!,! !g!r!o!u!p!=!g!5!)!
+!s!e!c!D!e!p!t!h! ! ! !=! !i!n!p!u!t!.!f!l!o!a!t!(!5!0!.!0!,! !"!ع!م!ق! !و!ر!و!د!۲! !%!"!,! !1!0!,! !8!0!,! !5!,! !g!r!o!u!p!=!g!5!)! !/! !1!0!0!
+!c!o!o!l!B!a!r!s! ! ! !=! !i!n!p!u!t!.!i!n!t!(!3!,! !"!C!o!o!l!d!o!w!n!"!,! !1!,! !1!0!,! !g!r!o!u!p!=!g!5!)!
+!
+!/!/! !!!!! !پ!و!ز!ی!ش!ن! !!!!!
+!g!6! !=! !"!!!! !پ!و!ز!ی!ش!ن! !!!!"!
+!u!s!e!S!L!B!u!f! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!آ!س!ت!ا!ن!ه! !S!L!"!,! !g!r!o!u!p!=!g!6!)!
+!s!l!B!u!f! ! ! ! ! ! !=! !i!n!p!u!t!.!f!l!o!a!t!(!0!.!3!,! !"!آ!س!ت!ا!ن!ه! !%!"!,! !0!.!1!,! !3!.!0!,! !0!.!1!,! !g!r!o!u!p!=!g!6!)! !/! !1!0!0!
+!r!r!1! ! ! ! ! ! ! ! !=! !i!n!p!u!t!.!f!l!o!a!t!(!1!.!0!,! !"!R!:!R! !ه!د!ف!۱!"!,! !0!.!5!,! !5!.!0!,! !0!.!5!,! !g!r!o!u!p!=!g!6!)!
+!r!r!2! ! ! ! ! ! ! ! !=! !i!n!p!u!t!.!f!l!o!a!t!(!2!.!0!,! !"!R!:!R! !ه!د!ف!۲!"!,! !1!.!0!,! !5!.!0!,! !0!.!5!,! !g!r!o!u!p!=!g!6!)!
+!u!s!e!T!r!a!i!l! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!ت!ر!ی!ل!ی!ن!گ! !ا!س!ت!ا!پ!"!,! !g!r!o!u!p!=!g!6!)!
+!t!r!R! ! ! ! ! ! ! ! !=! !i!n!p!u!t!.!f!l!o!a!t!(!0!.!5!,! !"!ف!ا!ص!ل!ه! !ت!ر!ی!ل!ی!ن!گ! !(!R!)!"!,! !0!.!2!,! !2!.!0!,! !0!.!1!,! !g!r!o!u!p!=!g!6!)!
+!r!i!s!k!P!e!r!T!r!a!d!e! !=! !i!n!p!u!t!.!f!l!o!a!t!(!1!.!0!,! !"!ر!ی!س!ک! !ه!ر! !م!ع!ا!م!ل!ه! !%!"!,! !0!.!5!,! !5!.!0!,! !0!.!5!,! !g!r!o!u!p!=!g!6!)! !/! !1!0!0!
+!
+!/!/! !!!!! !ح!ج!م! !و! !R!S!I! !!!!!
+!g!7! !=! !"!!!! !ح!ج!م! !و! !R!S!I! !!!!"!
+!u!s!e!V!o!l! ! ! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!ف!ی!ل!ت!ر! !ح!ج!م!"!,! !g!r!o!u!p!=!g!7!)!
+!v!M!u!l! ! ! ! ! ! ! !=! !i!n!p!u!t!.!f!l!o!a!t!(!1!.!2!,! !"!ض!ر!ی!ب! !ح!ج!م!"!,! !1!.!0!,! !3!.!0!,! !0!.!1!,! !g!r!o!u!p!=!g!7!)!
+!v!L!e!n! ! ! ! ! ! ! !=! !i!n!p!u!t!.!i!n!t!(!2!0!,! !"!م!ی!ا!ن!گ!ی!ن! !ح!ج!م!"!,! !5!,! !5!0!,! !g!r!o!u!p!=!g!7!)!
+!u!s!e!R!S!I! ! ! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!ت!أ!ی!ی!د! !R!S!I!"!,! !g!r!o!u!p!=!g!7!)!
+!r!s!i!L! ! ! ! ! ! ! !=! !i!n!p!u!t!.!i!n!t!(!1!4!,! !"!د!و!ر!ه! !R!S!I!"!,! !5!,! !3!0!,! !g!r!o!u!p!=!g!7!)!
+!r!s!i!H!i! ! ! ! ! ! !=! !i!n!p!u!t!.!f!l!o!a!t!(!7!0!.!0!,! !"!O!B!"!,! !6!0!,! !9!0!,! !g!r!o!u!p!=!g!7!)!
+!r!s!i!L!o! ! ! ! ! ! !=! !i!n!p!u!t!.!f!l!o!a!t!(!3!0!.!0!,! !"!O!S!"!,! !1!0!,! !4!0!,! !g!r!o!u!p!=!g!7!)!
+!
+!/!/! !!!!! !م!و!ل!ت!ی! !ت!ا!ی!م!!ف!ر!ی!م! !!!!!
+!g!8! !=! !"!!!! !م!و!ل!ت!ی! !ت!ا!ی!م!!ف!ر!ی!م! !!!!"!
+!u!s!e!M!T!F! ! ! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!ت!أ!ی!ی!د! !H!T!F!"!,! !g!r!o!u!p!=!g!8!)!
+!h!t!f!T!F! ! ! ! ! ! !=! !i!n!p!u!t!.!t!i!m!e!f!r!a!m!e!(!"!6!0!"!,! !"!ت!ا!ی!م!!ف!ر!ی!م!"!,! !g!r!o!u!p!=!g!8!)!
+!
+!/!/! !!!!! !ا!م!ت!ی!ا!ز!د!ه!ی! !!!!!
+!g!9! !=! !"!!!! !ا!م!ت!ی!ا!ز!د!ه!ی! !!!!"!
+!u!s!e!C!o!n!f! ! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!س!ی!س!ت!م! !ا!م!ت!ی!ا!ز!"!,! !g!r!o!u!p!=!g!9!)!
+!m!i!n!C! ! ! ! ! ! ! !=! !i!n!p!u!t!.!i!n!t!(!2!,! !"!ح!د!ا!ق!ل! !ا!م!ت!ی!ا!ز!"!,! !1!,! !1!0!,! !g!r!o!u!p!=!g!9!)!
+!
+!/!/! !!!!! !ف!ی!ل!ت!ر! !ز!م!ا!ن!ی! !!!!!
+!g!1!0! !=! !"!!!! !K!i!l!l! !Z!o!n!e! !!!!"!
+!u!s!e!K!Z! ! ! ! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!f!a!l!s!e!,! !"!ف!ی!ل!ت!ر! !K!i!l!l! !Z!o!n!e!"!,! !g!r!o!u!p!=!g!1!0!)!
+!k!z!S!t!a!r!t! ! ! ! !=! !i!n!p!u!t!.!i!n!t!(!7!,! !"!ش!ر!و!ع! !U!T!C!"!,! !0!,! !2!3!,! !g!r!o!u!p!=!g!1!0!)!
+!k!z!E!n!d! ! ! ! ! ! !=! !i!n!p!u!t!.!i!n!t!(!2!0!,! !"!پ!ا!ی!ا!ن! !U!T!C!"!,! !0!,! !2!3!,! !g!r!o!u!p!=!g!1!0!)!
+!
+!/!/! !!!!! !ن!م!ا!ی!ش! !!!!!
+!g!1!1! !=! !"!!!! !ن!م!ا!ی!ش! !!!!"!
+!d!M!o!d!e! ! ! ! ! ! !=! !i!n!p!u!t!.!s!t!r!i!n!g!(!"!S!i!g!n!a!l!"!,! !"!ح!ا!ل!ت!"!,! ![!"!S!e!t!u!p!"!,! !"!S!i!g!n!a!l!"!]!,! !g!r!o!u!p!=!g!1!1!)!
+!s!h!o!w!D!a!s!h! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!د!ا!ش!ب!و!ر!د!"!,! !g!r!o!u!p!=!g!1!1!)!
+!s!h!o!w!G!u!i!d!e! ! !=! !i!n!p!u!t!.!b!o!o!l!(!f!a!l!s!e!,! !"!! !ر!ا!ه!ن!م!ا!ی! !ه!و!ش!م!ن!د! !(!ک!ل!ی!ک!=!ب!ا!ز!)!"!,! !g!r!o!u!p!=!g!1!1!)!
+!s!h!o!w!F!V!G!s! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!F!V!G! !ه!ا!"!,! !g!r!o!u!p!=!g!1!1!)!
+!s!h!o!w!S!t!r! ! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!س!ا!خ!ت!ا!ر!"!,! !g!r!o!u!p!=!g!1!1!)!
+!s!h!o!w!H!L!s! ! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!س!ط!و!ح! !H!L!/!L!H!"!,! !g!r!o!u!p!=!g!1!1!)!
+!s!h!o!w!Z!o!n!e! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!ن!ا!ح!ی!ه! !ت!ر!ی!د!"!,! !g!r!o!u!p!=!g!1!1!)!
+!s!h!o!w!E!x!p!i!r!e! !=! !i!n!p!u!t!.!b!o!o!l!(!t!r!u!e!,! !"!ه!ش!د!ا!ر! !ا!ن!ق!ض!ا!"!,! !g!r!o!u!p!=!g!1!1!)!
+!s!h!o!w!T!r!e!n!d! ! !=! !i!n!p!u!t!.!b!o!o!l!(!f!a!l!s!e!,! !"!! !خ!ط!و!ط! !ر!و!ن!د! !(!خ!و!د!ک!ا!ر!)!"!,! !g!r!o!u!p!=!g!1!1!)!
+!s!h!o!w!S!R! ! ! ! ! !=! !i!n!p!u!t!.!b!o!o!l!(!f!a!l!s!e!,! !"!! !ح!م!ا!ی!ت!/!م!ق!ا!و!م!ت! !(!خ!و!د!ک!ا!ر!)!"!,! !g!r!o!u!p!=!g!1!1!)!
+!s!r!L!o!o!k!b!a!c!k! !=! !i!n!p!u!t!.!i!n!t!(!5!0!,! !"!د!و!ر!ه! !ب!ر!ر!س!ی! !S!/!R!"!,! !2!0!,! !1!0!0!,! !g!r!o!u!p!=!g!1!1!)!
+!s!r!T!o!u!c!h! ! ! ! !=! !i!n!p!u!t!.!i!n!t!(!2!,! !"!ح!د!ا!ق!ل! !ب!ر!خ!و!ر!د! !S!/!R!"!,! !2!,! !5!,! !g!r!o!u!p!=!g!1!1!)!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !ت!و!ا!ب!ع! !پ!ا!ی!ه!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!b!d!y!(!)! !=!>! !m!a!t!h!.!a!b!s!(!c!l!o!s!e! !-! !o!p!e!n!)!
+!r!n!g!(!)! !=!>! !h!i!g!h! !-! !l!o!w!
+!b!r!t!(!)! !=!>! !r!n!g!(!)! !>! !0! !?! !b!d!y!(!)! !/! !r!n!g!(!)! !:! !0!
+!i!s!B!(!)! !=!>! !c!l!o!s!e! !>! !o!p!e!n!
+!i!s!S!(!)! !=!>! !c!l!o!s!e! !<! !o!p!e!n!
+!
+!a!t!r!1!4! ! ! ! !=! !t!a!.!a!t!r!(!1!4!)!
+!a!v!g!B!d!y! ! ! !=! !t!a!.!s!m!a!(!b!d!y!(!)!,! !2!0!)!
+!a!v!g!V!o!l! ! ! !=! !t!a!.!s!m!a!(!v!o!l!u!m!e!,! !v!L!e!n!)!
+!r!s!i!V!a!l! ! ! !=! !t!a!.!r!s!i!(!c!l!o!s!e!,! !r!s!i!L!)!
+!s!t!r!T!h!r! ! ! !=! !a!v!g!B!d!y! !*! !(!1! !+! !m!o!m!L!v!l! !*! !0!.!3!)!
+!
+!/!/! !K!i!l!l! !Z!o!n!e!
+!u!t!c!H! ! ! ! ! !=! !h!o!u!r!(!t!i!m!e!,! !"!U!T!C!"!)!
+!i!n!K!Z! ! ! ! ! !=! !n!o!t! !u!s!e!K!Z! !o!r! !(!u!t!c!H! !>!=! !k!z!S!t!a!r!t! !a!n!d! !u!t!c!H! !<!=! !k!z!E!n!d!)!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !ت!ش!خ!ی!ص! !F!V!G! !+! !ا!د!غ!ا!م!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!r!a!w!B!F!V!G! !=! !l!o!w! !>! !h!i!g!h![!2!]!
+!r!a!w!S!F!V!G! !=! !h!i!g!h! !<! !l!o!w![!2!]!
+!
+!g!M! !=! !f!v!g!T!y!p!e! !=!=! !"!M!a!j!o!r!"! !?! !1!.!5! !:! !f!v!g!T!y!p!e! !=!=! !"!S!i!g!n!i!f!i!c!a!n!t!"! !?! !0!.!8! !:! !f!v!g!T!y!p!e! !=!=! !"!S!t!r!u!c!t!u!r!a!l!"! !?! !0!.!5! !:! !0!.!3!
+!m!G!a!p! !=! !a!t!r!1!4! !*! !g!M!
+!
+!b!F!V!G!o!k! !=! !r!a!w!B!F!V!G! !a!n!d! !(!l!o!w! !-! !h!i!g!h![!2!]!)! !>!=! !m!G!a!p!
+!s!F!V!G!o!k! !=! !r!a!w!S!F!V!G! !a!n!d! !(!l!o!w![!2!]! !-! !h!i!g!h!)! !>!=! !m!G!a!p!
+!
+!/!/! !آ!ر!ا!ی!ه! !F!V!G!
+!v!a!r! !f!l!o!a!t![!]! !f!B!T! !=! !a!r!r!a!y!.!n!e!w!_!f!l!o!a!t!(!0!)!
+!v!a!r! !f!l!o!a!t![!]! !f!B!B! !=! !a!r!r!a!y!.!n!e!w!_!f!l!o!a!t!(!0!)!
+!v!a!r! !i!n!t![!]! ! ! !f!B!I! !=! !a!r!r!a!y!.!n!e!w!_!i!n!t!(!0!)!
+!v!a!r! !f!l!o!a!t![!]! !f!S!T! !=! !a!r!r!a!y!.!n!e!w!_!f!l!o!a!t!(!0!)!
+!v!a!r! !f!l!o!a!t![!]! !f!S!B! !=! !a!r!r!a!y!.!n!e!w!_!f!l!o!a!t!(!0!)!
+!v!a!r! !i!n!t![!]! ! ! !f!S!I! !=! !a!r!r!a!y!.!n!e!w!_!i!n!t!(!0!)!
+!
+!/!/! !ب!ر!ر!س!ی! !ه!م!پ!و!ش!ا!ن!ی! !و! !ا!د!غ!ا!م!
+!o!v!e!r!l!a!p!s!B!u!l!l!(!n!e!w!T!o!p!,! !n!e!w!B!o!t!)! !=!>!
+! ! ! ! !i!f! !m!e!r!g!e!F!V!G! !a!n!d! !a!r!r!a!y!.!s!i!z!e!(!f!B!T!)! !>! !0!
+! ! ! ! ! ! ! ! !l!a!s!t!I!d!x! !=! !a!r!r!a!y!.!s!i!z!e!(!f!B!T!)! !-! !1!
+! ! ! ! ! ! ! ! !e!x!T!o!p! !=! !a!r!r!a!y!.!g!e!t!(!f!B!T!,! !l!a!s!t!I!d!x!)!
+! ! ! ! ! ! ! ! !e!x!B!o!t! !=! !a!r!r!a!y!.!g!e!t!(!f!B!B!,! !l!a!s!t!I!d!x!)!
+! ! ! ! ! ! ! ! !/!/! !ا!د!غ!ا!م!:! !ب!ز!ر!گ!!ت!ر!ی!ن! !م!ح!د!و!د!ه!
+! ! ! ! ! ! ! ! !a!r!r!a!y!.!s!e!t!(!f!B!T!,! !l!a!s!t!I!d!x!,! !m!a!t!h!.!m!a!x!(!n!e!w!T!o!p!,! !e!x!T!o!p!)!)!
+! ! ! ! ! ! ! ! !a!r!r!a!y!.!s!e!t!(!f!B!B!,! !l!a!s!t!I!d!x!,! !m!a!t!h!.!m!i!n!(!n!e!w!B!o!t!,! !e!x!B!o!t!)!)!
+! ! ! ! ! ! ! ! !t!r!u!e!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !f!a!l!s!e!
+!
+!o!v!e!r!l!a!p!s!B!e!a!r!(!n!e!w!T!o!p!,! !n!e!w!B!o!t!)! !=!>!
+! ! ! ! !i!f! !m!e!r!g!e!F!V!G! !a!n!d! !a!r!r!a!y!.!s!i!z!e!(!f!S!T!)! !>! !0!
+! ! ! ! ! ! ! ! !l!a!s!t!I!d!x! !=! !a!r!r!a!y!.!s!i!z!e!(!f!S!T!)! !-! !1!
+! ! ! ! ! ! ! ! !e!x!T!o!p! !=! !a!r!r!a!y!.!g!e!t!(!f!S!T!,! !l!a!s!t!I!d!x!)!
+! ! ! ! ! ! ! ! !e!x!B!o!t! !=! !a!r!r!a!y!.!g!e!t!(!f!S!B!,! !l!a!s!t!I!d!x!)!
+! ! ! ! ! ! ! ! !a!r!r!a!y!.!s!e!t!(!f!S!T!,! !l!a!s!t!I!d!x!,! !m!a!t!h!.!m!a!x!(!n!e!w!T!o!p!,! !e!x!T!o!p!)!)!
+! ! ! ! ! ! ! ! !a!r!r!a!y!.!s!e!t!(!f!S!B!,! !l!a!s!t!I!d!x!,! !m!a!t!h!.!m!i!n!(!n!e!w!B!o!t!,! !e!x!B!o!t!)!)!
+! ! ! ! ! ! ! ! !t!r!u!e!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !f!a!l!s!e!
+!
+!i!f! !u!s!e!F!V!G! !a!n!d! !b!F!V!G!o!k!
+! ! ! ! !i!f! !n!o!t! !o!v!e!r!l!a!p!s!B!u!l!l!(!l!o!w!,! !h!i!g!h![!2!]!)!
+! ! ! ! ! ! ! ! !a!r!r!a!y!.!p!u!s!h!(!f!B!T!,! !l!o!w!)!
+! ! ! ! ! ! ! ! !a!r!r!a!y!.!p!u!s!h!(!f!B!B!,! !h!i!g!h![!2!]!)!
+! ! ! ! ! ! ! ! !a!r!r!a!y!.!p!u!s!h!(!f!B!I!,! !b!a!r!_!i!n!d!e!x!)!
+!
+!i!f! !u!s!e!F!V!G! !a!n!d! !s!F!V!G!o!k!
+! ! ! ! !i!f! !n!o!t! !o!v!e!r!l!a!p!s!B!e!a!r!(!l!o!w![!2!]!,! !h!i!g!h!)!
+! ! ! ! ! ! ! ! !a!r!r!a!y!.!p!u!s!h!(!f!S!T!,! !l!o!w![!2!]!)!
+! ! ! ! ! ! ! ! !a!r!r!a!y!.!p!u!s!h!(!f!S!B!,! !h!i!g!h!)!
+! ! ! ! ! ! ! ! !a!r!r!a!y!.!p!u!s!h!(!f!S!I!,! !b!a!r!_!i!n!d!e!x!)!
+!
+!/!/! !پ!ا!ک!س!ا!ز!ی!
+!i!f! !a!r!r!a!y!.!s!i!z!e!(!f!B!T!)! !>! !0!
+! ! ! ! !f!o!r! !i! !=! !a!r!r!a!y!.!s!i!z!e!(!f!B!T!)! !-! !1! !t!o! !0!
+! ! ! ! ! ! ! ! !i!f! !i! !<! !a!r!r!a!y!.!s!i!z!e!(!f!B!T!)!
+! ! ! ! ! ! ! ! ! ! ! ! !i!f! !b!a!r!_!i!n!d!e!x! !-! !a!r!r!a!y!.!g!e!t!(!f!B!I!,! !i!)! !>! !f!v!g!L!i!f!e! !o!r! !l!o!w! !<!=! !a!r!r!a!y!.!g!e!t!(!f!B!B!,! !i!)!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!r!e!m!o!v!e!(!f!B!T!,! !i!)!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!r!e!m!o!v!e!(!f!B!B!,! !i!)!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!r!e!m!o!v!e!(!f!B!I!,! !i!)!
+!
+!i!f! !a!r!r!a!y!.!s!i!z!e!(!f!S!T!)! !>! !0!
+! ! ! ! !f!o!r! !i! !=! !a!r!r!a!y!.!s!i!z!e!(!f!S!T!)! !-! !1! !t!o! !0!
+! ! ! ! ! ! ! ! !i!f! !i! !<! !a!r!r!a!y!.!s!i!z!e!(!f!S!T!)!
+! ! ! ! ! ! ! ! ! ! ! ! !i!f! !b!a!r!_!i!n!d!e!x! !-! !a!r!r!a!y!.!g!e!t!(!f!S!I!,! !i!)! !>! !f!v!g!L!i!f!e! !o!r! !h!i!g!h! !>!=! !a!r!r!a!y!.!g!e!t!(!f!S!T!,! !i!)!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!r!e!m!o!v!e!(!f!S!T!,! !i!)!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!r!e!m!o!v!e!(!f!S!B!,! !i!)!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!r!e!m!o!v!e!(!f!S!I!,! !i!)!
+!
+!/!/! !ر!س!م!
+!i!f! !s!h!o!w!F!V!G!s!
+! ! ! ! !i!f! !u!s!e!F!V!G! !a!n!d! !b!F!V!G!o!k!
+! ! ! ! ! ! ! ! !b!o!x!.!n!e!w!(!b!a!r!_!i!n!d!e!x! !-! !2!,! !l!o!w!,! !b!a!r!_!i!n!d!e!x! !+! !f!v!g!L!i!f!e!,! !h!i!g!h![!2!]!,! !b!g!c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!0!0!c!8!5!3!,! !8!5!)!,! !b!o!r!d!e!r!_!c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!0!0!c!8!5!3!,! !6!0!)!)!
+! ! ! ! !i!f! !u!s!e!F!V!G! !a!n!d! !s!F!V!G!o!k!
+! ! ! ! ! ! ! ! !b!o!x!.!n!e!w!(!b!a!r!_!i!n!d!e!x! !-! !2!,! !l!o!w![!2!]!,! !b!a!r!_!i!n!d!e!x! !+! !f!v!g!L!i!f!e!,! !h!i!g!h!,! !b!g!c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!f!f!1!7!4!4!,! !8!5!)!,! !b!o!r!d!e!r!_!c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!f!f!1!7!4!4!,! !6!0!)!)!
+!
+!n!B!F!V!G! !=! !a!r!r!a!y!.!s!i!z!e!(!f!B!T!)!
+!n!S!F!V!G! !=! !a!r!r!a!y!.!s!i!z!e!(!f!S!T!)!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !ت!ش!خ!ی!ص! !O!r!d!e!r! !B!l!o!c!k!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!i!s!B!u!l!l!O!B! !=! !i!s!S!(!)![!1!]! !a!n!d! !i!s!B!(!)! !a!n!d! !b!d!y!(!)! !>! !a!v!g!B!d!y! !*! !1!.!5!
+!i!s!B!e!a!r!O!B! !=! !i!s!B!(!)![!1!]! !a!n!d! !i!s!S!(!)! !a!n!d! !b!d!y!(!)! !>! !a!v!g!B!d!y! !*! !1!.!5!
+!
+!v!a!r! !f!l!o!a!t! !o!b!B!H! !=! !n!a!
+!v!a!r! !f!l!o!a!t! !o!b!B!L! !=! !n!a!
+!v!a!r! !i!n!t! ! ! !o!b!B!B! !=! !n!a!
+!v!a!r! !f!l!o!a!t! !o!b!S!H! !=! !n!a!
+!v!a!r! !f!l!o!a!t! !o!b!S!L!2! !=! !n!a!
+!v!a!r! !i!n!t! ! ! !o!b!S!B! !=! !n!a!
+!
+!i!f! !i!s!B!u!l!l!O!B!
+! ! ! ! !o!b!B!H! !:!=! !h!i!g!h![!1!]!
+! ! ! ! !o!b!B!L! !:!=! !l!o!w![!1!]!
+! ! ! ! !o!b!B!B! !:!=! !b!a!r!_!i!n!d!e!x! !-! !1!
+!
+!i!f! !i!s!B!e!a!r!O!B!
+! ! ! ! !o!b!S!H! !:!=! !h!i!g!h![!1!]!
+! ! ! ! !o!b!S!L!2! !:!=! !l!o!w![!1!]!
+! ! ! ! !o!b!S!B! !:!=! !b!a!r!_!i!n!d!e!x! !-! !1!
+!
+!n!e!a!r!B!u!l!l!O!B! !=! !u!s!e!O!B! !a!n!d! !n!o!t! !n!a!(!o!b!B!L!)! !a!n!d! !l!o!w! !<!=! !o!b!B!H! !a!n!d! !l!o!w! !>!=! !o!b!B!L! !-! !a!t!r!1!4!
+!n!e!a!r!B!e!a!r!O!B! !=! !u!s!e!O!B! !a!n!d! !n!o!t! !n!a!(!o!b!S!H!)! !a!n!d! !h!i!g!h! !>!=! !o!b!S!L!2! !a!n!d! !h!i!g!h! !<!=! !o!b!S!H! !+! !a!t!r!1!4!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! ! ! !س!ا!خ!ت!ا!ر! !ب!ا!ز!ا!ر! !+! !P!i!v!o!t! !T!r!a!c!k!i!n!g!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!s!w!H! !=! !t!a!.!p!i!v!o!t!h!i!g!h!(!h!i!g!h!,! !s!w!L!e!n!,! !s!w!L!e!n!)!
+!s!w!L! !=! !t!a!.!p!i!v!o!t!l!o!w!(!l!o!w!,! !s!w!L!e!n!,! !s!w!L!e!n!)!
+!
+!v!a!r! !f!l!o!a!t! !p!S!H! !=! !n!a!
+!v!a!r! !f!l!o!a!t! !p!S!L! !=! !n!a!
+!v!a!r! !i!n!t! ! ! !p!S!H!b! !=! !n!a!
+!v!a!r! !i!n!t! ! ! !p!S!L!b! !=! !n!a!
+!
+!i!f! !n!o!t! !n!a!(!s!w!H!)!
+! ! ! ! !p!S!H! !:!=! !s!w!H!
+! ! ! ! !p!S!H!b! !:!=! !b!a!r!_!i!n!d!e!x! !-! !s!w!L!e!n!
+!i!f! !n!o!t! !n!a!(!s!w!L!)!
+! ! ! ! !p!S!L! !:!=! !s!w!L!
+! ! ! ! !p!S!L!b! !:!=! !b!a!r!_!i!n!d!e!x! !-! !s!w!L!e!n!
+!
+!v!a!r! !i!n!t! !b!i!a!s! !=! !0!
+!
+!b!B!O!S! ! ! !=! !u!s!e!S!t!r! !a!n!d! !n!o!t! !n!a!(!p!S!H!)! !a!n!d! !c!l!o!s!e! !>! !p!S!H! !a!n!d! !b!i!a!s! !>!=! !0!
+!s!B!O!S! ! ! !=! !u!s!e!S!t!r! !a!n!d! !n!o!t! !n!a!(!p!S!L!)! !a!n!d! !c!l!o!s!e! !<! !p!S!L! !a!n!d! !b!i!a!s! !<!=! !0!
+!b!C!H!o!C!H! !=! !u!s!e!S!t!r! !a!n!d! !n!o!t! !n!a!(!p!S!H!)! !a!n!d! !c!l!o!s!e! !>! !p!S!H! !a!n!d! !b!i!a!s! !<! !0!
+!s!C!H!o!C!H! !=! !u!s!e!S!t!r! !a!n!d! !n!o!t! !n!a!(!p!S!L!)! !a!n!d! !c!l!o!s!e! !<! !p!S!L! !a!n!d! !b!i!a!s! !>! !0!
+!
+!i!f! !b!B!O!S! !o!r! !b!C!H!o!C!H!
+! ! ! ! !b!i!a!s! !:!=! !1!
+!i!f! !s!B!O!S! !o!r! !s!C!H!o!C!H!
+! ! ! ! !b!i!a!s! !:!=! !-!1!
+!
+!i!f! !s!h!o!w!S!t!r!
+! ! ! ! !i!f! !b!B!O!S! !a!n!d! !n!o!t! !n!a!(!p!S!H!b!)!
+! ! ! ! ! ! ! ! !l!i!n!e!.!n!e!w!(!p!S!H!b!,! !p!S!H!,! !b!a!r!_!i!n!d!e!x!,! !p!S!H!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!0!0!c!8!5!3!,! !5!0!)!,! !s!t!y!l!e!=!l!i!n!e!.!s!t!y!l!e!_!d!a!s!h!e!d!)!
+! ! ! ! ! ! ! ! !l!a!b!e!l!.!n!e!w!(!b!a!r!_!i!n!d!e!x!,! !p!S!H!,! !"!B!O!S!↑!"!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!0!0!c!8!5!3!,! !3!0!)!,! !t!e!x!t!c!o!l!o!r!=!c!o!l!o!r!.!w!h!i!t!e!,! !s!t!y!l!e!=!l!a!b!e!l!.!s!t!y!l!e!_!l!a!b!e!l!_!d!o!w!n!,! !s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !i!f! !s!B!O!S! !a!n!d! !n!o!t! !n!a!(!p!S!L!b!)!
+! ! ! ! ! ! ! ! !l!i!n!e!.!n!e!w!(!p!S!L!b!,! !p!S!L!,! !b!a!r!_!i!n!d!e!x!,! !p!S!L!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!f!f!1!7!4!4!,! !5!0!)!,! !s!t!y!l!e!=!l!i!n!e!.!s!t!y!l!e!_!d!a!s!h!e!d!)!
+! ! ! ! ! ! ! ! !l!a!b!e!l!.!n!e!w!(!b!a!r!_!i!n!d!e!x!,! !p!S!L!,! !"!B!O!S!↓!"!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!f!f!1!7!4!4!,! !3!0!)!,! !t!e!x!t!c!o!l!o!r!=!c!o!l!o!r!.!w!h!i!t!e!,! !s!t!y!l!e!=!l!a!b!e!l!.!s!t!y!l!e!_!l!a!b!e!l!_!u!p!,! !s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !i!f! !b!C!H!o!C!H! !a!n!d! !n!o!t! !n!a!(!p!S!H!b!)!
+! ! ! ! ! ! ! ! !l!a!b!e!l!.!n!e!w!(!b!a!r!_!i!n!d!e!x!,! !p!S!H!,! !"!C!H!o!C!H!↑!"!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!2!6!A!6!9!A!,! !3!0!)!,! !t!e!x!t!c!o!l!o!r!=!c!o!l!o!r!.!w!h!i!t!e!,! !s!t!y!l!e!=!l!a!b!e!l!.!s!t!y!l!e!_!l!a!b!e!l!_!d!o!w!n!,! !s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !i!f! !s!C!H!o!C!H! !a!n!d! !n!o!t! !n!a!(!p!S!L!b!)!
+! ! ! ! ! ! ! ! !l!a!b!e!l!.!n!e!w!(!b!a!r!_!i!n!d!e!x!,! !p!S!L!,! !"!C!H!o!C!H!↓!"!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!E!F!5!3!5!0!,! !3!0!)!,! !t!e!x!t!c!o!l!o!r!=!c!o!l!o!r!.!w!h!i!t!e!,! !s!t!y!l!e!=!l!a!b!e!l!.!s!t!y!l!e!_!l!a!b!e!l!_!u!p!,! !s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !م!و!ل!ت!ی! !ت!ا!ی!م!!ف!ر!ی!م!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!h!t!f!2!1! !=! !r!e!q!u!e!s!t!.!s!e!c!u!r!i!t!y!(!s!y!m!i!n!f!o!.!t!i!c!k!e!r!i!d!,! !h!t!f!T!F!,! !t!a!.!e!m!a!(!c!l!o!s!e!,! !2!1!)!)!
+!h!t!f!5!0! !=! !r!e!q!u!e!s!t!.!s!e!c!u!r!i!t!y!(!s!y!m!i!n!f!o!.!t!i!c!k!e!r!i!d!,! !h!t!f!T!F!,! !t!a!.!e!m!a!(!c!l!o!s!e!,! !5!0!)!)!
+!h!t!f!U!p! !=! !h!t!f!2!1! !>! !h!t!f!5!0!
+!h!t!f!D!n! !=! !h!t!f!2!1! !<! !h!t!f!5!0!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !ت!ش!خ!ی!ص! !ا!س!پ!ا!ی!ک!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!c!n!t!B!(!)! !=!>!
+! ! ! ! !c! !=! !0!
+! ! ! ! !m!a!x!I! !=! !m!a!t!h!.!m!i!n!(!1!5!,! !m!a!t!h!.!m!a!x!(!b!a!r!_!i!n!d!e!x!,! !0!)!)!
+! ! ! ! !i!f! !m!a!x!I! !>!=! !0!
+! ! ! ! ! ! ! ! !f!o!r! !i! !=! !0! !t!o! !m!a!x!I!
+! ! ! ! ! ! ! ! ! ! ! ! !i!f! !i!s!B!(!)![!i!]!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !c! !+!=! !1!
+! ! ! ! ! ! ! ! ! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !b!r!e!a!k!
+! ! ! ! !c!
+!
+!c!n!t!S!(!)! !=!>!
+! ! ! ! !c! !=! !0!
+! ! ! ! !m!a!x!I! !=! !m!a!t!h!.!m!i!n!(!1!5!,! !m!a!t!h!.!m!a!x!(!b!a!r!_!i!n!d!e!x!,! !0!)!)!
+! ! ! ! !i!f! !m!a!x!I! !>!=! !0!
+! ! ! ! ! ! ! ! !f!o!r! !i! !=! !0! !t!o! !m!a!x!I!
+! ! ! ! ! ! ! ! ! ! ! ! !i!f! !i!s!S!(!)![!i!]!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !c! !+!=! !1!
+! ! ! ! ! ! ! ! ! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !b!r!e!a!k!
+! ! ! ! !c!
+!
+!s!p!k!S!t!r!(!d!i!r!)! !=!>!
+! ! ! ! !c!n!t! !=! !d!i!r! !=!=! !1! !?! !c!n!t!B!(!)! !:! !c!n!t!S!(!)!
+! ! ! ! !s! !=! !0!.!0!
+! ! ! ! !i!f! !c!n!t! !>! !0! !a!n!d! !b!a!r!_!i!n!d!e!x! !>!=! !c!n!t! !-! !1!
+! ! ! ! ! ! ! ! !m!a!x!I! !=! !m!a!t!h!.!m!a!x!(!m!a!t!h!.!m!i!n!(!c!n!t! !-! !1!,! !b!a!r!_!i!n!d!e!x!)!,! !0!)!
+! ! ! ! ! ! ! ! !f!o!r! !i! !=! !0! !t!o! !m!a!x!I!
+! ! ! ! ! ! ! ! ! ! ! ! !a! !=! !a!t!r!1!4![!i!]!
+! ! ! ! ! ! ! ! ! ! ! ! !b! !=! !b!d!y!(!)![!i!]!
+! ! ! ! ! ! ! ! ! ! ! ! !i!f! !n!o!t! !n!a!(!a!)! !a!n!d! !a! !>! !0!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !s! !+!=! !b! !/! !a!
+! ! ! ! !s! !/! !m!a!t!h!.!m!a!x!(!c!n!t!,! !1!)!
+!
+!c!h!k!M!o!m!(!d!i!r!)! !=!>! !n!o!t! !u!s!e!M!o!m! !o!r! !b!a!r!_!i!n!d!e!x! !>! !1!5! !?! !s!p!k!S!t!r!(!d!i!r!)! !>!=! !(!1!.!0! !+! !m!o!m!L!v!l! !*! !0!.!3!)! !:! !t!r!u!e!
+!
+!c!h!k!D!j!(!d!i!r!)! !=!>!
+! ! ! ! !i!f! !n!o!t! !u!s!e!D!j!
+! ! ! ! ! ! ! ! !t!r!u!e!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !c!n!t! !=! !d!i!r! !=!=! !1! !?! !c!n!t!B!(!)! !:! !c!n!t!S!(!)!
+! ! ! ! ! ! ! ! !d! !=! !0!
+! ! ! ! ! ! ! ! !i!f! !c!n!t! !>! !0! !a!n!d! !b!a!r!_!i!n!d!e!x! !>!=! !c!n!t! !-! !1!
+! ! ! ! ! ! ! ! ! ! ! ! !m!a!x!I! !=! !m!a!t!h!.!m!a!x!(!m!a!t!h!.!m!i!n!(!c!n!t! !-! !1!,! !b!a!r!_!i!n!d!e!x!)!,! !0!)!
+! ! ! ! ! ! ! ! ! ! ! ! !f!o!r! !i! !=! !0! !t!o! !m!a!x!I!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !i!f! !b!r!t!(!)![!i!]! !<! !d!j!B!o!d!y!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !d! !+!=! !1!
+! ! ! ! ! ! ! ! !d! !/! !m!a!t!h!.!m!a!x!(!c!n!t!,! !1!)! !<!=! !d!j!M!a!x!
+!
+!c!h!k!V!o!l!(!d!i!r!)! !=!>!
+! ! ! ! !i!f! !n!o!t! !u!s!e!V!o!l!
+! ! ! ! ! ! ! ! !t!r!u!e!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !c!n!t! !=! !d!i!r! !=!=! !1! !?! !c!n!t!B!(!)! !:! !c!n!t!S!(!)!
+! ! ! ! ! ! ! ! !v! !=! !0!.!0!
+! ! ! ! ! ! ! ! !i!f! !c!n!t! !>! !0! !a!n!d! !b!a!r!_!i!n!d!e!x! !>!=! !c!n!t! !-! !1!
+! ! ! ! ! ! ! ! ! ! ! ! !m!a!x!I! !=! !m!a!t!h!.!m!a!x!(!m!a!t!h!.!m!i!n!(!c!n!t! !-! !1!,! !b!a!r!_!i!n!d!e!x!)!,! !0!)!
+! ! ! ! ! ! ! ! ! ! ! ! !f!o!r! !i! !=! !0! !t!o! !m!a!x!I!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !v! !+!=! !v!o!l!u!m!e![!i!]!
+! ! ! ! ! ! ! ! !v! !/! !m!a!t!h!.!m!a!x!(!c!n!t!,! !1!)! !>! !a!v!g!V!o!l! !*! !(!v!M!u!l! !-! !0!.!3!)!
+!
+!/!/! !ب!ر!ر!س!ی! !F!V!G! !د!ر! !م!ح!د!و!د!ه! !ا!س!پ!ا!ی!ک! !(!ن!ه! !F!V!G! !ف!ع!ا!ل!)!
+!h!a!s!F!V!G!I!n!S!p!i!k!e!(!d!i!r!)! !=!>!
+! ! ! ! !i!f! !n!o!t! !u!s!e!F!V!G!
+! ! ! ! ! ! ! ! !t!r!u!e!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !c!n!t! !=! !d!i!r! !=!=! !1! !?! !c!n!t!B!(!)! !:! !c!n!t!S!(!)!
+! ! ! ! ! ! ! ! !f!o!u!n!d! !=! !f!a!l!s!e!
+! ! ! ! ! ! ! ! !m!a!x!I! !=! !m!a!t!h!.!m!i!n!(!c!n!t!,! !m!a!t!h!.!m!a!x!(!b!a!r!_!i!n!d!e!x!,! !1!)!)!
+! ! ! ! ! ! ! ! !f!o!r! !i! !=! !0! !t!o! !m!a!x!I!
+! ! ! ! ! ! ! ! ! ! ! ! !i!f! !d!i!r! !=!=! !1!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !i!f! !l!o!w![!i!]! !>! !h!i!g!h![!i! !+! !2!]! !a!n!d! !i! !+! !2! !<!=! !b!a!r!_!i!n!d!e!x!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !f!o!u!n!d! !:!=! !t!r!u!e!
+! ! ! ! ! ! ! ! ! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !i!f! !h!i!g!h![!i!]! !<! !l!o!w![!i! !+! !2!]! !a!n!d! !i! !+! !2! !<!=! !b!a!r!_!i!n!d!e!x!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !f!o!u!n!d! !:!=! !t!r!u!e!
+! ! ! ! ! ! ! ! !f!o!u!n!d!
+!
+!c!h!k!F!V!G!(!d!i!r!)! !=!>! !h!a!s!F!V!G!I!n!S!p!i!k!e!(!d!i!r!)!
+!
+!c!h!k!R!S!I!(!d!i!r!)! !=!>!
+! ! ! ! !i!f! !n!o!t! !u!s!e!R!S!I!
+! ! ! ! ! ! ! ! !t!r!u!e!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !d!i!r! !=!=! !1! !?! !r!s!i!V!a!l! !<! !r!s!i!H!i! !:! !r!s!i!V!a!l! !>! !r!s!i!L!o!
+!
+!f!i!n!d!O!r!g!(!d!i!r!)! !=!>!
+! ! ! ! !c!n!t! !=! !d!i!r! !=!=! !1! !?! !c!n!t!B!(!)! !:! !c!n!t!S!(!)!
+! ! ! ! !s!a!f!e!C!n!t! !=! !m!a!t!h!.!m!i!n!(!c!n!t!,! !m!a!t!h!.!m!a!x!(!b!a!r!_!i!n!d!e!x!,! !1!)!)!
+! ! ! ! !o!r!g! !=! !d!i!r! !=!=! !1! !?! !l!o!w![!s!a!f!e!C!n!t!]! !:! !h!i!g!h![!s!a!f!e!C!n!t!]!
+! ! ! ! !l!b! !=! !m!a!t!h!.!m!i!n!(!c!n!t! !+! !2!,! !m!a!t!h!.!m!a!x!(!b!a!r!_!i!n!d!e!x! !-! !1!,! !0!)!)!
+! ! ! ! !i!f! !l!b! !>!=! !0!
+! ! ! ! ! ! ! ! !f!o!r! !i! !=! !0! !t!o! !l!b!
+! ! ! ! ! ! ! ! ! ! ! ! !i!f! !d!i!r! !=!=! !1!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !i!f! !l!o!w![!i!]! !<! !o!r!g!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !o!r!g! !:!=! !l!o!w![!i!]!
+! ! ! ! ! ! ! ! ! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !i!f! !h!i!g!h![!i!]! !>! !o!r!g!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !o!r!g! !:!=! !h!i!g!h![!i!]!
+! ! ! ! !o!r!g!
+!
+!b!C! !=! !c!n!t!B!(!)!
+!s!C! !=! !c!n!t!S!(!)!
+!
+!b!S!p!k! !=! !b!a!r!_!i!n!d!e!x! !>! !1!5! !a!n!d! !b!C! !>!=! !m!i!n!S!p!k! !a!n!d! !c!h!k!M!o!m!(!1!)! !a!n!d! !c!h!k!D!j!(!1!)! !a!n!d! !c!h!k!F!V!G!(!1!)! !a!n!d! !c!h!k!V!o!l!(!1!)! !a!n!d! !c!h!k!R!S!I!(!1!)! !a!n!d! !i!n!K!Z!
+!s!S!p!k! !=! !b!a!r!_!i!n!d!e!x! !>! !1!5! !a!n!d! !s!C! !>!=! !m!i!n!S!p!k! !a!n!d! !c!h!k!M!o!m!(!-!1!)! !a!n!d! !c!h!k!D!j!(!-!1!)! !a!n!d! !c!h!k!F!V!G!(!-!1!)! !a!n!d! !c!h!k!V!o!l!(!-!1!)! !a!n!d! !c!h!k!R!S!I!(!-!1!)! !a!n!d! !i!n!K!Z!
+!
+!b!O!r!g! !=! !b!S!p!k! !?! !f!i!n!d!O!r!g!(!1!)! !:! !n!a!
+!s!O!r!g! !=! !s!S!p!k! !?! !f!i!n!d!O!r!g!(!-!1!)! !:! !n!a!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! ! ! ! !ر!د!ی!ا!ب!ی! !د!ا!ی!ن!ا!م!ی!ک! !H!L!/!L!H!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!v!a!r! !i!n!t! ! ! !t!r!k! !=! !0! ! ! ! ! !/!/! !0!=!n!o!n!e! !1!=!b!u!l!l! !2!=!b!e!a!r!
+!v!a!r! !f!l!o!a!t! !c!H!L! !=! !n!a!
+!v!a!r! !f!l!o!a!t! !c!L!H! !=! !n!a!
+!v!a!r! !i!n!t! ! ! !t!r!k!B! !=! !n!a!
+!v!a!r! !f!l!o!a!t! !o!r!g!B! !=! !n!a!
+!v!a!r! !f!l!o!a!t! !o!r!g!S! !=! !n!a!
+!
+!i!f! !b!S!p!k!
+! ! ! ! !t!r!k! !:!=! !1!
+! ! ! ! !c!H!L! !:!=! !l!o!w!
+! ! ! ! !t!r!k!B! !:!=! !b!a!r!_!i!n!d!e!x!
+! ! ! ! !o!r!g!B! !:!=! !b!O!r!g!
+!
+!i!f! !s!S!p!k!
+! ! ! ! !t!r!k! !:!=! !2!
+! ! ! ! !c!L!H! !:!=! !h!i!g!h!
+! ! ! ! !t!r!k!B! !:!=! !b!a!r!_!i!n!d!e!x!
+! ! ! ! !o!r!g!S! !:!=! !s!O!r!g!
+!
+!i!f! !t!r!k! !=!=! !1!
+! ! ! ! !i!f! !l!o!w! !>! !c!H!L!
+! ! ! ! ! ! ! ! !c!H!L! !:!=! !l!o!w!
+! ! ! ! ! ! ! ! !t!r!k!B! !:!=! !b!a!r!_!i!n!d!e!x!
+! ! ! ! !i!f! !u!s!e!S!t!r! !a!n!d! !n!o!t! !n!a!(!p!S!L!)! !a!n!d! !c!l!o!s!e! !<! !p!S!L!
+! ! ! ! ! ! ! ! !t!r!k! !:!=! !0!
+!
+!i!f! !t!r!k! !=!=! !2!
+! ! ! ! !i!f! !h!i!g!h! !<! !c!L!H!
+! ! ! ! ! ! ! ! !c!L!H! !:!=! !h!i!g!h!
+! ! ! ! ! ! ! ! !t!r!k!B! !:!=! !b!a!r!_!i!n!d!e!x!
+! ! ! ! !i!f! !u!s!e!S!t!r! !a!n!d! !n!o!t! !n!a!(!p!S!H!)! !a!n!d! !c!l!o!s!e! !>! !p!S!H!
+! ! ! ! ! ! ! ! !t!r!k! !:!=! !0!
+!
+!i!f! !s!h!o!w!H!L!s! !a!n!d! !t!r!k! !=!=! !1! !a!n!d! !n!o!t! !n!a!(!c!H!L!)!
+! ! ! ! !l!i!n!e!.!n!e!w!(!t!r!k!B!,! !c!H!L!,! !b!a!r!_!i!n!d!e!x! !+! !3!,! !c!H!L!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!0!0!e!6!7!6!,! !4!0!)!,! !s!t!y!l!e!=!l!i!n!e!.!s!t!y!l!e!_!d!o!t!t!e!d!)!
+!i!f! !s!h!o!w!H!L!s! !a!n!d! !t!r!k! !=!=! !2! !a!n!d! !n!o!t! !n!a!(!c!L!H!)!
+! ! ! ! !l!i!n!e!.!n!e!w!(!t!r!k!B!,! !c!L!H!,! !b!a!r!_!i!n!d!e!x! !+! !3!,! !c!L!H!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!f!f!5!2!5!2!,! !4!0!)!,! !s!t!y!l!e!=!l!i!n!e!.!s!t!y!l!e!_!d!o!t!t!e!d!)!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! !و!ا!گ!ر!ا!ی!ی! !R!S!I! !+! !س!ی!س!ت!م! !ا!م!ت!ی!ا!ز!د!ه!ی!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!r!s!i!B!D!i!v! !=! !r!s!i!V!a!l! !<! !r!s!i!V!a!l![!5!]! !a!n!d! !l!o!w! !<! !l!o!w![!5!]! !a!n!d! !r!s!i!V!a!l! !>! !r!s!i!L!o!
+!r!s!i!S!D!i!v! !=! !r!s!i!V!a!l! !>! !r!s!i!V!a!l![!5!]! !a!n!d! !h!i!g!h! !>! !h!i!g!h![!5!]! !a!n!d! !r!s!i!V!a!l! !<! !r!s!i!H!i!
+!
+!/!/! !م!ح!ا!س!ب!ه! !ا!م!ت!ی!ا!ز! !ب!ر!ا!ی! !خ!ر!ی!د!
+!c!a!l!c!C!o!n!f!B!u!y!(!)! !=!>!
+! ! ! ! !s! !=! !0!
+! ! ! ! !i!f! !n!B!F!V!G! !>! !0!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !u!s!e!V!o!l! !a!n!d! !v!o!l!u!m!e! !>! !a!v!g!V!o!l! !*! !v!M!u!l!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !n!o!t! !u!s!e!S!t!r! !o!r! !b!i!a!s! !>!=! !0!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !n!o!t! !u!s!e!M!T!F! !o!r! !h!t!f!U!p!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !s!p!k!S!t!r!(!1!)! !>! !1!.!5!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !b!C! !>! !m!i!n!S!p!k!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !e!m!a!2!1! !=! !t!a!.!e!m!a!(!c!l!o!s!e!,! !2!1!)!
+! ! ! ! !e!m!a!5!0! !=! !t!a!.!e!m!a!(!c!l!o!s!e!,! !5!0!)!
+! ! ! ! !i!f! !e!m!a!2!1! !>! !e!m!a!5!0! !a!n!d! !c!l!o!s!e! !>! !e!m!a!2!1!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !r!s!i!B!D!i!v!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !u!s!e!O!B! !a!n!d! !n!e!a!r!B!u!l!l!O!B!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !n!o!t! !u!s!e!K!Z! !o!r! !i!n!K!Z!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !s!
+!
+!/!/! !م!ح!ا!س!ب!ه! !ا!م!ت!ی!ا!ز! !ب!ر!ا!ی! !ف!ر!و!ش!
+!c!a!l!c!C!o!n!f!S!e!l!l!(!)! !=!>!
+! ! ! ! !s! !=! !0!
+! ! ! ! !i!f! !n!S!F!V!G! !>! !0!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !u!s!e!V!o!l! !a!n!d! !v!o!l!u!m!e! !>! !a!v!g!V!o!l! !*! !v!M!u!l!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !n!o!t! !u!s!e!S!t!r! !o!r! !b!i!a!s! !<!=! !0!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !n!o!t! !u!s!e!M!T!F! !o!r! !h!t!f!D!n!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !s!p!k!S!t!r!(!-!1!)! !>! !1!.!5!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !s!C! !>! !m!i!n!S!p!k!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !e!m!a!2!1! !=! !t!a!.!e!m!a!(!c!l!o!s!e!,! !2!1!)!
+! ! ! ! !e!m!a!5!0! !=! !t!a!.!e!m!a!(!c!l!o!s!e!,! !5!0!)!
+! ! ! ! !i!f! !e!m!a!2!1! !<! !e!m!a!5!0! !a!n!d! !c!l!o!s!e! !<! !e!m!a!2!1!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !r!s!i!S!D!i!v!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !u!s!e!O!B! !a!n!d! !n!e!a!r!B!e!a!r!O!B!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !i!f! !n!o!t! !u!s!e!K!Z! !o!r! !i!n!K!Z!
+! ! ! ! ! ! ! ! !s! !+!=! !1!
+! ! ! ! !s!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! ! ! !م!ا!ش!ی!ن! !ح!ا!ل!ت! !ن!ه!ا!ی!ی!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!v!a!r! !i!n!t! ! ! !s!t! ! ! ! !=! !0! ! ! ! ! !/!/! !0!=!i!d!l!e! !1!=!s!e!t!u!p!↑! !2!=!s!e!t!u!p!↓! !3!=!l!o!n!g! !4!=!s!h!o!r!t!
+!v!a!r! !f!l!o!a!t! !e!n!t! ! ! !=! !n!a!
+!v!a!r! !f!l!o!a!t! !s!l!p! ! ! !=! !n!a!
+!v!a!r! !f!l!o!a!t! !t!p!1! ! ! !=! !n!a!
+!v!a!r! !f!l!o!a!t! !t!p!2! ! ! !=! !n!a!
+!v!a!r! !f!l!o!a!t! !t!S!L! ! ! !=! !n!a!
+!v!a!r! !i!n!t! ! ! !s!B! ! ! ! !=! !n!a!
+!v!a!r! !b!o!o!l! ! !t!1!h! ! ! !=! !f!a!l!s!e!
+!v!a!r! !b!o!o!l! ! !s!E!n!t! ! !=! !f!a!l!s!e!
+!v!a!r! !i!n!t! ! ! !l!a!s!t!E!x! !=! !0!
+!v!a!r! !f!l!o!a!t! !c!S! ! ! ! !=! !0!.!0!
+!v!a!r! !i!n!t! ! ! !t!D! ! ! ! !=! !0!
+!v!a!r! !f!l!o!a!t! !s!O!r!g!2! !=! !n!a!
+!v!a!r! !b!o!o!l! ! !e!x!p!i!r!e!d! !=! !f!a!l!s!e!
+!
+!c!a!n!G!o! !=! !b!a!r!_!i!n!d!e!x! !-! !l!a!s!t!E!x! !>! !c!o!o!l!B!a!r!s!
+!
+!/!/! !!!! !س!ت!ا!پ! !!!!
+!i!f! !b!S!p!k! !a!n!d! !c!a!n!G!o! !a!n!d! !(!n!o!t! !u!s!e!S!t!r! !o!r! !b!i!a!s! !>!=! !0!)! !a!n!d! !(!n!o!t! !u!s!e!M!T!F! !o!r! !h!t!f!U!p!)!
+! ! ! ! !c!s! !=! !u!s!e!C!o!n!f! !?! !c!a!l!c!C!o!n!f!B!u!y!(!)! !:! !5!
+! ! ! ! !i!f! !c!s! !>!=! !m!i!n!C!
+! ! ! ! ! ! ! ! !s!t! !:!=! !1!
+! ! ! ! ! ! ! ! !s!B! !:!=! !b!a!r!_!i!n!d!e!x!
+! ! ! ! ! ! ! ! !t!1!h! !:!=! !f!a!l!s!e!
+! ! ! ! ! ! ! ! !s!E!n!t! !:!=! !f!a!l!s!e!
+! ! ! ! ! ! ! ! !t!S!L! !:!=! !n!a!
+! ! ! ! ! ! ! ! !c!S! !:!=! !c!s!
+! ! ! ! ! ! ! ! !t!D! !:!=! !1!
+! ! ! ! ! ! ! ! !s!O!r!g!2! !:!=! !b!O!r!g!
+! ! ! ! ! ! ! ! !e!x!p!i!r!e!d! !:!=! !f!a!l!s!e!
+!
+!i!f! !s!S!p!k! !a!n!d! !c!a!n!G!o! !a!n!d! !(!n!o!t! !u!s!e!S!t!r! !o!r! !b!i!a!s! !<!=! !0!)! !a!n!d! !(!n!o!t! !u!s!e!M!T!F! !o!r! !h!t!f!D!n!)!
+! ! ! ! !c!s! !=! !u!s!e!C!o!n!f! !?! !c!a!l!c!C!o!n!f!S!e!l!l!(!)! !:! !5!
+! ! ! ! !i!f! !c!s! !>!=! !m!i!n!C!
+! ! ! ! ! ! ! ! !s!t! !:!=! !2!
+! ! ! ! ! ! ! ! !s!B! !:!=! !b!a!r!_!i!n!d!e!x!
+! ! ! ! ! ! ! ! !t!1!h! !:!=! !f!a!l!s!e!
+! ! ! ! ! ! ! ! !s!E!n!t! !:!=! !f!a!l!s!e!
+! ! ! ! ! ! ! ! !t!S!L! !:!=! !n!a!
+! ! ! ! ! ! ! ! !c!S! !:!=! !c!s!
+! ! ! ! ! ! ! ! !t!D! !:!=! !-!1!
+! ! ! ! ! ! ! ! !s!O!r!g!2! !:!=! !s!O!r!g!
+! ! ! ! ! ! ! ! !e!x!p!i!r!e!d! !:!=! !f!a!l!s!e!
+!
+!/!/! !!!! !و!ر!و!د! !خ!ر!ی!د! !!!!
+!f!l!o!a!t! !d! !=! !0!.!0!
+!i!f! !s!t! !=!=! !1! !a!n!d! !b!a!r!_!i!n!d!e!x! !-! !s!B! !<!=! !s!i!g!B!a!r!s!
+! ! ! ! !b!u!f! !=! !u!s!e!S!L!B!u!f! !?! !s!O!r!g!2! !*! !s!l!B!u!f! !:! !0!
+! ! ! ! !s!v! !=! !s!O!r!g!2! !-! !b!u!f!
+! ! ! ! !
+! ! ! ! !e!l! !=! !0!.!0!
+! ! ! ! !i!f! !e!M!o!d!e! !=!=! !"!A!g!g!r!e!s!s!i!v!e!"!
+! ! ! ! ! ! ! ! !e!l! !:!=! !h!i!g!h![!1!]!
+! ! ! ! !e!l!s!e! !i!f! !e!M!o!d!e! !=!=! !"!M!o!d!e!r!a!t!e!"!
+! ! ! ! ! ! ! ! !e!l! !:!=! !n!o!t! !n!a!(!c!H!L!)! !?! !c!H!L! !:! !l!o!w![!1!]!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !e!l! !:!=! !n!o!t! !n!a!(!c!H!L!)! !?! !s!O!r!g!2! !+! !(!c!H!L! !-! !s!O!r!g!2!)! !*! !0!.!6!1!8! !:! !s!O!r!g!2! !+! !(!l!o!w! !-! !s!O!r!g!2!)! !*! !0!.!6!1!8!
+! ! ! ! !
+! ! ! ! !i!f! !c!l!o!s!e! !>! !e!l! !a!n!d! !i!s!B!(!)!
+! ! ! ! ! ! ! ! !s!t! !:!=! !3!
+! ! ! ! ! ! ! ! !e!n!t! !:!=! !e!l!
+! ! ! ! ! ! ! ! !s!l!p! !:!=! !s!v!
+! ! ! ! ! ! ! ! !d! !:!=! !e!n!t! !-! !s!l!p!
+! ! ! ! ! ! ! ! !t!p!1! !:!=! !e!n!t! !+! !d! !*! !r!r!1!
+! ! ! ! ! ! ! ! !t!p!2! !:!=! !e!n!t! !+! !d! !*! !r!r!2!
+! ! ! ! ! ! ! ! !e!x!p!i!r!e!d! !:!=! !f!a!l!s!e!
+!
+!i!f! !s!t! !=!=! !2! !a!n!d! !b!a!r!_!i!n!d!e!x! !-! !s!B! !<!=! !s!i!g!B!a!r!s!
+! ! ! ! !b!u!f! !=! !u!s!e!S!L!B!u!f! !?! !s!O!r!g!2! !*! !s!l!B!u!f! !:! !0!
+! ! ! ! !s!v! !=! !s!O!r!g!2! !+! !b!u!f!
+! ! ! ! !
+! ! ! ! !e!l! !=! !0!.!0!
+! ! ! ! !i!f! !e!M!o!d!e! !=!=! !"!A!g!g!r!e!s!s!i!v!e!"!
+! ! ! ! ! ! ! ! !e!l! !:!=! !l!o!w![!1!]!
+! ! ! ! !e!l!s!e! !i!f! !e!M!o!d!e! !=!=! !"!M!o!d!e!r!a!t!e!"!
+! ! ! ! ! ! ! ! !e!l! !:!=! !n!o!t! !n!a!(!c!L!H!)! !?! !c!L!H! !:! !h!i!g!h![!1!]!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !e!l! !:!=! !n!o!t! !n!a!(!c!L!H!)! !?! !s!O!r!g!2! !-! !(!s!O!r!g!2! !-! !c!L!H!)! !*! !0!.!6!1!8! !:! !s!O!r!g!2! !-! !(!s!O!r!g!2! !-! !h!i!g!h!)! !*! !0!.!6!1!8!
+! ! ! ! !
+! ! ! ! !i!f! !c!l!o!s!e! !<! !e!l! !a!n!d! !i!s!S!(!)!
+! ! ! ! ! ! ! ! !s!t! !:!=! !4!
+! ! ! ! ! ! ! ! !e!n!t! !:!=! !e!l!
+! ! ! ! ! ! ! ! !s!l!p! !:!=! !s!v!
+! ! ! ! ! ! ! ! !d! !:!=! !s!l!p! !-! !e!n!t!
+! ! ! ! ! ! ! ! !t!p!1! !:!=! !e!n!t! !-! !d! !*! !r!r!1!
+! ! ! ! ! ! ! ! !t!p!2! !:!=! !e!n!t! !-! !d! !*! !r!r!2!
+! ! ! ! ! ! ! ! !e!x!p!i!r!e!d! !:!=! !f!a!l!s!e!
+!
+!/!/! !!!! !م!د!ی!ر!ی!ت! !L!o!n!g! !!!!
+!i!f! !s!t! !=!=! !3!
+! ! ! ! !i!f! !n!o!t! !t!1!h! !a!n!d! !h!i!g!h! !>!=! !t!p!1!
+! ! ! ! ! ! ! ! !t!1!h! !:!=! !t!r!u!e!
+! ! ! ! !i!f! !u!s!e!T!r!a!i!l! !a!n!d! !t!1!h!
+! ! ! ! ! ! ! ! !t!d! !=! !(!e!n!t! !-! !s!l!p!)! !*! !t!r!R!
+! ! ! ! ! ! ! ! !n!t! !=! !h!i!g!h! !-! !t!d!
+! ! ! ! ! ! ! ! !i!f! !n!a!(!t!S!L!)! !o!r! !n!t! !>! !t!S!L!
+! ! ! ! ! ! ! ! ! ! ! ! !t!S!L! !:!=! !n!t!
+! ! ! ! !e!x!L! !=! !u!s!e!T!r!a!i!l! !a!n!d! !t!1!h! !a!n!d! !n!o!t! !n!a!(!t!S!L!)! !?! !t!S!L! !:! !s!l!p!
+! ! ! ! !i!f! !l!o!w! !<!=! !e!x!L!
+! ! ! ! ! ! ! ! !l!a!s!t!E!x! !:!=! !b!a!r!_!i!n!d!e!x!
+! ! ! ! ! ! ! ! !s!t! !:!=! !0!
+! ! ! ! !i!f! !s!e!c!E!n!t!r!y! !a!n!d! !n!o!t! !s!E!n!t! !a!n!d! !t!1!h!
+! ! ! ! ! ! ! ! !p!d! !=! !(!t!p!1! !-! !e!n!t!)! !*! !s!e!c!D!e!p!t!h!
+! ! ! ! ! ! ! ! !s!e! !=! !t!p!1! !-! !p!d!
+! ! ! ! ! ! ! ! !i!f! !l!o!w! !<!=! !s!e! !a!n!d! !c!l!o!s!e! !>! !s!e!
+! ! ! ! ! ! ! ! ! ! ! ! !s!E!n!t! !:!=! !t!r!u!e!
+!
+!/!/! !!!! !م!د!ی!ر!ی!ت! !S!h!o!r!t! !!!!
+!i!f! !s!t! !=!=! !4!
+! ! ! ! !i!f! !n!o!t! !t!1!h! !a!n!d! !l!o!w! !<!=! !t!p!1!
+! ! ! ! ! ! ! ! !t!1!h! !:!=! !t!r!u!e!
+! ! ! ! !i!f! !u!s!e!T!r!a!i!l! !a!n!d! !t!1!h!
+! ! ! ! ! ! ! ! !t!d! !=! !(!s!l!p! !-! !e!n!t!)! !*! !t!r!R!
+! ! ! ! ! ! ! ! !n!t! !=! !l!o!w! !+! !t!d!
+! ! ! ! ! ! ! ! !i!f! !n!a!(!t!S!L!)! !o!r! !n!t! !<! !t!S!L!
+! ! ! ! ! ! ! ! ! ! ! ! !t!S!L! !:!=! !n!t!
+! ! ! ! !e!x!L! !=! !u!s!e!T!r!a!i!l! !a!n!d! !t!1!h! !a!n!d! !n!o!t! !n!a!(!t!S!L!)! !?! !t!S!L! !:! !s!l!p!
+! ! ! ! !i!f! !h!i!g!h! !>!=! !e!x!L!
+! ! ! ! ! ! ! ! !l!a!s!t!E!x! !:!=! !b!a!r!_!i!n!d!e!x!
+! ! ! ! ! ! ! ! !s!t! !:!=! !0!
+! ! ! ! !i!f! !s!e!c!E!n!t!r!y! !a!n!d! !n!o!t! !s!E!n!t! !a!n!d! !t!1!h!
+! ! ! ! ! ! ! ! !p!d! !=! !(!e!n!t! !-! !t!p!1!)! !*! !s!e!c!D!e!p!t!h!
+! ! ! ! ! ! ! ! !s!e! !=! !t!p!1! !+! !p!d!
+! ! ! ! ! ! ! ! !i!f! !h!i!g!h! !>!=! !s!e! !a!n!d! !c!l!o!s!e! !<! !s!e!
+! ! ! ! ! ! ! ! ! ! ! ! !s!E!n!t! !:!=! !t!r!u!e!
+!
+!/!/! !!!! !ا!ن!ق!ض!ا! !!!!
+!i!f! !(!s!t! !=!=! !1! !o!r! !s!t! !=!=! !2!)! !a!n!d! !b!a!r!_!i!n!d!e!x! !-! !s!B! !>! !s!i!g!B!a!r!s!
+! ! ! ! !e!x!p!i!r!e!d! !:!=! !t!r!u!e!
+! ! ! ! !i!f! !s!h!o!w!E!x!p!i!r!e!
+! ! ! ! ! ! ! ! !l!a!b!e!l!.!n!e!w!(!b!a!r!_!i!n!d!e!x!,! !c!l!o!s!e!,! !"!!!!"!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!f!f!6!f!0!0!,! !5!0!)!,! !t!e!x!t!c!o!l!o!r!=!c!o!l!o!r!.!w!h!i!t!e!,! !s!t!y!l!e!=!l!a!b!e!l!.!s!t!y!l!e!_!l!a!b!e!l!_!u!p!,! !s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !s!t! !:!=! !0!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! ! ! ! ! ! !ن!ا!ح!ی!ه! !ت!ر!ی!د!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!v!a!r! !b!o!x! !t!Z!o!n!e! !=! !n!a!
+!
+!i!f! !s!h!o!w!Z!o!n!e!
+! ! ! ! !i!f! !s!t! !=!=! !3! !a!n!d! !s!t![!1!]! !!!=! !3! !a!n!d! !n!o!t! !n!a!(!e!n!t!)! !a!n!d! !n!o!t! !n!a!(!s!l!p!)! !a!n!d! !n!o!t! !n!a!(!t!p!2!)!
+! ! ! ! ! ! ! ! !i!f! !n!o!t! !n!a!(!t!Z!o!n!e!)!
+! ! ! ! ! ! ! ! ! ! ! ! !b!o!x!.!d!e!l!e!t!e!(!t!Z!o!n!e!)!
+! ! ! ! ! ! ! ! !t!Z!o!n!e! !:!=! !b!o!x!.!n!e!w!(!b!a!r!_!i!n!d!e!x!,! !t!p!2!,! !b!a!r!_!i!n!d!e!x! !+! !1!0!,! !s!l!p!,! !b!g!c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!1!5!6!5!C!0!,! !9!2!)!,! !b!o!r!d!e!r!_!c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!1!5!6!5!C!0!,! !7!0!)!,! !b!o!r!d!e!r!_!w!i!d!t!h!=!1!)!
+! ! ! ! !i!f! !s!t! !=!=! !4! !a!n!d! !s!t![!1!]! !!!=! !4! !a!n!d! !n!o!t! !n!a!(!e!n!t!)! !a!n!d! !n!o!t! !n!a!(!s!l!p!)! !a!n!d! !n!o!t! !n!a!(!t!p!2!)!
+! ! ! ! ! ! ! ! !i!f! !n!o!t! !n!a!(!t!Z!o!n!e!)!
+! ! ! ! ! ! ! ! ! ! ! ! !b!o!x!.!d!e!l!e!t!e!(!t!Z!o!n!e!)!
+! ! ! ! ! ! ! ! !t!Z!o!n!e! !:!=! !b!o!x!.!n!e!w!(!b!a!r!_!i!n!d!e!x!,! !s!l!p!,! !b!a!r!_!i!n!d!e!x! !+! !1!0!,! !t!p!2!,! !b!g!c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!C!6!2!8!2!8!,! !9!2!)!,! !b!o!r!d!e!r!_!c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!C!6!2!8!2!8!,! !7!0!)!,! !b!o!r!d!e!r!_!w!i!d!t!h!=!1!)!
+! ! ! ! !i!f! !s!t! !>!=! !3! !a!n!d! !n!o!t! !n!a!(!t!Z!o!n!e!)!
+! ! ! ! ! ! ! ! !b!o!x!.!s!e!t!_!r!i!g!h!t!(!t!Z!o!n!e!,! !b!a!r!_!i!n!d!e!x! !+! !5!)!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! ! ! ! ! ! !ر!س!م! !س!ط!و!ح!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!i!s!L! !=! !s!t! !=!=! !3!
+!i!s!S!2! !=! !s!t! !=!=! !4!
+!
+!p!l!o!t!(!i!s!L! !?! !e!n!t! !:! !n!a!,! !"!E!↑!"!,! !c!o!l!o!r!.!n!e!w!(!#!2!1!9!6!F!3!,! !2!0!)!,! !s!t!y!l!e!=!p!l!o!t!.!s!t!y!l!e!_!l!i!n!e!b!r!,! !l!i!n!e!w!i!d!t!h!=!2!)!
+!p!l!o!t!(!i!s!S!2! !?! !e!n!t! !:! !n!a!,! !"!E!↓!"!,! !c!o!l!o!r!.!n!e!w!(!#!F!F!9!8!0!0!,! !2!0!)!,! !s!t!y!l!e!=!p!l!o!t!.!s!t!y!l!e!_!l!i!n!e!b!r!,! !l!i!n!e!w!i!d!t!h!=!2!)!
+!p!l!o!t!(!i!s!L! !?! !s!l!p! !:! !n!a!,! !"!S!L!↑!"!,! !c!o!l!o!r!.!n!e!w!(!#!F!4!4!3!3!6!,! !3!0!)!,! !s!t!y!l!e!=!p!l!o!t!.!s!t!y!l!e!_!l!i!n!e!b!r!)!
+!p!l!o!t!(!i!s!S!2! !?! !s!l!p! !:! !n!a!,! !"!S!L!↓!"!,! !c!o!l!o!r!.!n!e!w!(!#!F!4!4!3!3!6!,! !3!0!)!,! !s!t!y!l!e!=!p!l!o!t!.!s!t!y!l!e!_!l!i!n!e!b!r!)!
+!p!l!o!t!(!i!s!L! !a!n!d! !t!1!h! !a!n!d! !n!o!t! !n!a!(!t!S!L!)! !?! !t!S!L! !:! !n!a!,! !"!T!r!↑!"!,! !c!o!l!o!r!.!n!e!w!(!#!F!F!E!B!3!B!,! !1!0!)!,! !s!t!y!l!e!=!p!l!o!t!.!s!t!y!l!e!_!l!i!n!e!b!r!,! !l!i!n!e!w!i!d!t!h!=!2!)!
+!p!l!o!t!(!i!s!S!2! !a!n!d! !t!1!h! !a!n!d! !n!o!t! !n!a!(!t!S!L!)! !?! !t!S!L! !:! !n!a!,! !"!T!r!↓!"!,! !c!o!l!o!r!.!n!e!w!(!#!F!F!E!B!3!B!,! !1!0!)!,! !s!t!y!l!e!=!p!l!o!t!.!s!t!y!l!e!_!l!i!n!e!b!r!,! !l!i!n!e!w!i!d!t!h!=!2!)!
+!p!l!o!t!(!i!s!L! !?! !t!p!1! !:! !n!a!,! !"!T!P!1!↑!"!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!4!C!A!F!5!0!,! !4!0!)!,! !s!t!y!l!e!=!p!l!o!t!.!s!t!y!l!e!_!c!r!o!s!s!)!
+!p!l!o!t!(!i!s!L! !?! !t!p!2! !:! !n!a!,! !"!T!P!2!↑!"!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!8!B!C!3!4!A!,! !4!0!)!,! !s!t!y!l!e!=!p!l!o!t!.!s!t!y!l!e!_!c!r!o!s!s!)!
+!p!l!o!t!(!i!s!S!2! !?! !t!p!1! !:! !n!a!,! !"!T!P!1!↓!"!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!4!C!A!F!5!0!,! !4!0!)!,! !s!t!y!l!e!=!p!l!o!t!.!s!t!y!l!e!_!c!r!o!s!s!)!
+!p!l!o!t!(!i!s!S!2! !?! !t!p!2! !:! !n!a!,! !"!T!P!2!↓!"!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!8!B!C!3!4!A!,! !4!0!)!,! !s!t!y!l!e!=!p!l!o!t!.!s!t!y!l!e!_!c!r!o!s!s!)!
+!
+!b!E! !=! !s!t! !=!=! !3! !a!n!d! !s!t![!1!]! !!!=! !3!
+!s!E! !=! !s!t! !=!=! !4! !a!n!d! !s!t![!1!]! !!!=! !4!
+!
+!p!l!o!t!s!h!a!p!e!(!b!E! !a!n!d! !d!M!o!d!e! !=!=! !"!S!i!g!n!a!l!"!,! !"!B!U!Y!"!,! !s!h!a!p!e!.!t!r!i!a!n!g!l!e!u!p!,! !l!o!c!a!t!i!o!n!.!b!e!l!o!w!b!a!r!,! !c!o!l!o!r!.!n!e!w!(!#!0!0!e!6!7!6!,! !0!)!,! !s!i!z!e!=!s!i!z!e!.!l!a!r!g!e!)!
+!p!l!o!t!s!h!a!p!e!(!s!E! !a!n!d! !d!M!o!d!e! !=!=! !"!S!i!g!n!a!l!"!,! !"!S!E!L!L!"!,! !s!h!a!p!e!.!t!r!i!a!n!g!l!e!d!o!w!n!,! !l!o!c!a!t!i!o!n!.!a!b!o!v!e!b!a!r!,! !c!o!l!o!r!.!n!e!w!(!#!f!f!1!7!4!4!,! !0!)!,! !s!i!z!e!=!s!i!z!e!.!l!a!r!g!e!)!
+!
+!/!/! !ل!ی!ب!ل! !ا!س!پ!ا!ی!ک! !(!ت!ف!ک!ی!ک! !ا!ز! !س!ی!گ!ن!ا!ل!)!
+!i!f! !b!S!p!k!
+! ! ! ! !l!a!b!e!l!.!n!e!w!(!b!a!r!_!i!n!d!e!x!,! !l!o!w!,! !"!*!S!P!K!↑!"!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!0!0!6!9!5!C!,! !3!0!)!,! !t!e!x!t!c!o!l!o!r!=!c!o!l!o!r!.!w!h!i!t!e!,! !s!t!y!l!e!=!l!a!b!e!l!.!s!t!y!l!e!_!l!a!b!e!l!_!u!p!,! !s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+!i!f! !s!S!p!k!
+! ! ! ! !l!a!b!e!l!.!n!e!w!(!b!a!r!_!i!n!d!e!x!,! !h!i!g!h!,! !"!*!S!P!K!↓!"!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!B!7!1!C!1!C!,! !3!0!)!,! !t!e!x!t!c!o!l!o!r!=!c!o!l!o!r!.!w!h!i!t!e!,! !s!t!y!l!e!=!l!a!b!e!l!.!s!t!y!l!e!_!l!a!b!e!l!_!d!o!w!n!,! !s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+!
+!b!g!c!o!l!o!r!(!b!S!p!k! !?! !c!o!l!o!r!.!n!e!w!(!#!0!0!c!8!5!3!,! !9!4!)! !:! !s!S!p!k! !?! !c!o!l!o!r!.!n!e!w!(!#!f!f!1!7!4!4!,! !9!4!)! !:! !n!a!)!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! ! ! ! ! ! !آ!م!ا!ر! !و! !ن!ت!ا!ی!ج!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!v!a!r! !i!n!t! ! ! !t!o!t! !=! !0!
+!v!a!r! !i!n!t! ! ! !w!i!n! !=! !0!
+!v!a!r! !i!n!t! ! ! !l!o!s! !=! !0!
+!v!a!r! !f!l!o!a!t! !p!n!l! !=! !0!.!0!
+!v!a!r! !s!t!r!i!n!g! !l!R! ! !=! !"!! !خ!ا!ر!ج!"!
+!v!a!r! !f!l!o!a!t! !p!k!P! !=! !0!.!0!
+!v!a!r! !f!l!o!a!t! !m!D!D! !=! !0!.!0!
+!v!a!r! !i!n!t! ! ! !c!o!n!L!o!s!s! !=! !0!
+!v!a!r! !i!n!t! ! ! !m!a!x!C!L! !=! !0!
+!v!a!r! !f!l!o!a!t! !u!n!r!e!a!l!P!n!L! !=! !0!.!0!
+!
+!/!/! !P!&!L! !ل!ح!ظ!ه!!ا!ی!
+!i!f! !s!t! !=!=! !3! !a!n!d! !n!o!t! !n!a!(!e!n!t!)!
+! ! ! ! !u!n!r!e!a!l!P!n!L! !:!=! !c!l!o!s!e! !-! !e!n!t!
+!i!f! !s!t! !=!=! !4! !a!n!d! !n!o!t! !n!a!(!e!n!t!)!
+! ! ! ! !u!n!r!e!a!l!P!n!L! !:!=! !e!n!t! !-! !c!l!o!s!e!
+!i!f! !s!t! !<! !3!
+! ! ! ! !u!n!r!e!a!l!P!n!L! !:!=! !0!.!0!
+!
+!i!f! !s!t! !=!=! !0! !a!n!d! !(!s!t![!1!]! !=!=! !3! !o!r! !s!t![!1!]! !=!=! !4!)!
+! ! ! ! !t!o!t! !+!=! !1!
+! ! ! ! !r! !=! !t!D! !=!=! !1! !?! !(!t!1!h! !a!n!d! !n!o!t! !n!a!(!t!S!L!)! !?! !t!S!L! !-! !e!n!t! !:! !t!1!h! !?! !t!p!1! !-! !e!n!t! !:! !s!l!p! !-! !e!n!t!)! !:! !(!t!1!h! !a!n!d! !n!o!t! !n!a!(!t!S!L!)! !?! !e!n!t! !-! !t!S!L! !:! !t!1!h! !?! !e!n!t! !-! !t!p!1! !:! !e!n!t! !-! !s!l!p!)!
+! ! ! ! !p!n!l! !+!=! !r!
+! ! ! ! !p!k!P! !:!=! !m!a!t!h!.!m!a!x!(!p!k!P!,! !p!n!l!)!
+! ! ! ! !d!d! !=! !p!k!P! !-! !p!n!l!
+! ! ! ! !m!D!D! !:!=! !m!a!t!h!.!m!a!x!(!m!D!D!,! !d!d!)!
+! ! ! ! !i!f! !r! !>! !0!
+! ! ! ! ! ! ! ! !w!i!n! !+!=! !1!
+! ! ! ! ! ! ! ! !c!o!n!L!o!s!s! !:!=! !0!
+! ! ! ! ! ! ! ! !l!R! !:!=! !"!! !+!"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!r!,! !4!)!)!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !l!o!s! !+!=! !1!
+! ! ! ! ! ! ! ! !c!o!n!L!o!s!s! !+!=! !1!
+! ! ! ! ! ! ! ! !m!a!x!C!L! !:!=! !m!a!t!h!.!m!a!x!(!m!a!x!C!L!,! !c!o!n!L!o!s!s!)!
+! ! ! ! ! ! ! ! !l!R! !:!=! !"!! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!r!,! !4!)!)!
+!
+!w!R! !=! !t!o!t! !>! !0! !?! !w!i!n! !/! !t!o!t! !*! !1!0!0! !:! !0!.!0!
+!p!f! !=! !l!o!s! !>! !0! !?! !w!i!n! !/! !l!o!s! !:! !w!i!n! !>! !0! !?! !9!9!.!0! !:! !0!.!0!
+!
+!/!/! !پ!ی!ش!ن!ه!ا!د! !ر!ی!س!ک! !ب!ه!ی!ن!ه!
+!o!p!t!R!i!s!k! !=! !w!R! !>! !0! !a!n!d! !r!r!1! !>! !0! !?! !(!w!R! !/! !1!0!0!)! !*! !r!r!1! !:! !r!i!s!k!P!e!r!T!r!a!d!e!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! !د!ا!ش!ب!و!ر!د! !ح!ر!ف!ه!!ا!ی! !(!ن!س!خ!ه! !ن!ه!ا!ی!ی!)!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!i!f! !s!h!o!w!D!a!s!h! !a!n!d! !b!a!r!s!t!a!t!e!.!i!s!l!a!s!t!
+! ! ! ! !v!a!r! !t!a!b!l!e! !d! !=! !t!a!b!l!e!.!n!e!w!(!p!o!s!i!t!i!o!n!.!t!o!p!_!r!i!g!h!t!,! !2!,! !1!8!,! !b!g!c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!0!d!1!1!1!7!,! !5!)!,! !b!o!r!d!e!r!_!w!i!d!t!h!=!1!,! !b!o!r!d!e!r!_!c!o!l!o!r!=!#!3!0!3!6!3!d!)!
+! ! ! ! !
+! ! ! ! !b!g! !=! !#!1!6!1!b!2!2!
+! ! ! ! !r!w! !=! !0!
+! ! ! ! !
+! ! ! ! !/!/! !! !ه!د!ر! !!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!! !S!P!2!L! !V!5! !F!I!N!A!L!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!f!f!d!7!0!0!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!n!o!r!m!a!l!,! !b!g!c!o!l!o!r!=!b!g!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !"!پ!و!ر! !ص!م!د!ی!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!f!f!d!7!0!0!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!n!o!r!m!a!l!,! !b!g!c!o!l!o!r!=!b!g!)!
+! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !/!/! !! !س!ا!خ!ت!ا!ر! !!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!س!ا!خ!ت!ا!ر!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !b!i!a!s! !=!=! !1! !?! !"!🟢! !ص!ع!و!د!ی!"! !:! !b!i!a!s! !=!=! !-!1! !?! !"!! !ن!ز!و!ل!ی!"! !:! !"!! !خ!ن!ث!ی!"!,! !t!e!x!t!_!c!o!l!o!r!=!b!i!a!s! !=!=! !1! !?! !#!0!0!e!6!7!6! !:! !b!i!a!s! !=!=! !-!1! !?! !#!f!f!1!7!4!4! !:! !#!8!8!8!8!8!8!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !/!/! !! !H!T!F! !!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!ر!و!ن!د! !ب!ا!ل!ا!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !h!t!f!U!p! !?! !"!🟢! !ص!ع!و!د!ی!"! !:! !h!t!f!D!n! !?! !"!! !ن!ز!و!ل!ی!"! !:! !"!! !خ!ن!ث!ی!"!,! !t!e!x!t!_!c!o!l!o!r!=!h!t!f!U!p! !?! !#!0!0!e!6!7!6! !:! !h!t!f!D!n! !?! !#!f!f!1!7!4!4! !:! !#!8!8!8!8!8!8!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !/!/! !! !F!V!G! !!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!F!V!G!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!n!B!F!V!G!)! !+! !"!↑! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!n!S!F!V!G!)! !+! !"!↓!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!5!8!a!6!f!f!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !/!/! !! !ح!ج!م! !!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!ح!ج!م!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !v!o!l!u!m!e! !>! !a!v!g!V!o!l! !*! !v!M!u!l! !?! !"! !ب!ا!ل!ا!"! !:! !v!o!l!u!m!e! !>! !a!v!g!V!o!l! !?! !"!*! !م!ت!و!س!ط!"! !:! !"!! !ک!م!"!,! !t!e!x!t!_!c!o!l!o!r!=!v!o!l!u!m!e! !>! !a!v!g!V!o!l! !*! !v!M!u!l! !?! !#!0!0!e!6!7!6! !:! !v!o!l!u!m!e! !>! !a!v!g!V!o!l! !?! !#!f!f!a!7!2!6! !:! !#!8!8!8!8!8!8!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !/!/! !! !R!S!I! !!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!R!S!I!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!r!s!i!V!a!l!,! !1!)!)! !+! !(!r!s!i!B!D!i!v! !?! !"! !↑!و!ا!گ!ر!ا!ی!ی!"! !:! !r!s!i!S!D!i!v! !?! !"! !↓!و!ا!گ!ر!ا!ی!ی!"! !:! !"!"!)!,! !t!e!x!t!_!c!o!l!o!r!=!r!s!i!V!a!l! !>! !r!s!i!H!i! !?! !#!f!f!1!7!4!4! !:! !r!s!i!V!a!l! !<! !r!s!i!L!o! !?! !#!0!0!e!6!7!6! !:! !#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !/!/! !! !K!i!l!l! !Z!o!n!e! !!
+! ! ! ! !i!f! !u!s!e!K!Z!
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!م!ن!ط!ق!ه! !ز!م!ا!ن!ی!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !i!n!K!Z! !?! !"!! !ف!ع!ا!ل!"! !:! !"!!"!,! !t!e!x!t!_!c!o!l!o!r!=!i!n!K!Z! !?! !#!0!0!e!6!7!6! !:! !#!8!8!8!8!8!8!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !/!/! !! !و!ض!ع!ی!ت! !!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!و!ض!ع!ی!ت!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !s!t!T! !=! !s!t! !=!=! !1! !?! !"!🟡! !س!ت!ا!پ! !خ!ر!ی!د!"! !:! !s!t! !=!=! !2! !?! !"!🟡! !س!ت!ا!پ! !ف!ر!و!ش!"! !:! !s!t! !=!=! !3! !?! !"!🟢! !خ!ر!ی!د!"! !:! !s!t! !=!=! !4! !?! !"!! !ف!ر!و!ش!"! !:! !"!! !آ!ز!ا!د!"!
+! ! ! ! !s!t!C! !=! !s!t! !>!=! !3! !?! !#!0!0!e!6!7!6! !:! !s!t! !>!=! !1! !?! !#!f!f!a!7!2!6! !:! !#!8!8!8!8!8!8!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!T!,! !t!e!x!t!_!c!o!l!o!r!=!s!t!C!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !/!/! !! !ا!م!ت!ی!ا!ز! !!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!ا!م!ت!ی!ا!ز! !ا!ط!م!ی!ن!ا!ن!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!c!S!)!)! !+! !"! !ا!ز! !1!0!"!,! !t!e!x!t!_!c!o!l!o!r!=!c!S! !>!=! !7! !?! !#!0!0!e!6!7!6! !:! !c!S! !>!=! !4! !?! !#!f!f!a!7!2!6! !:! !#!f!f!1!7!4!4!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !/!/! !! !پ!و!ز!ی!ش!ن! !!
+! ! ! ! !i!f! !s!t! !>!=! !3!
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!ق!ی!م!ت! !و!ر!و!د!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!e!n!t!,! !"!#!.!#!#!#!#!"!)!,! !t!e!x!t!_!c!o!l!o!r!=!#!2!1!9!6!F!3!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !r!w! !+!=! !1!
+! ! ! ! ! ! ! ! !
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!ح!د! !ض!ر!ر!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !s!A!T!R! !=! !n!o!t! !n!a!(!s!l!p!)! !a!n!d! !n!o!t! !n!a!(!e!n!t!)! !?! !m!a!t!h!.!a!b!s!(!e!n!t! !-! !s!l!p!)! !/! !a!t!r!1!4! !:! !0!
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!s!l!p!,! !"!#!.!#!#!#!#!"!)! !+! !"! !(!"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!s!A!T!R!,! !1!)!)! !+! !"! !A!T!R!)!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!F!4!4!3!3!6!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !r!w! !+!=! !1!
+! ! ! ! ! ! ! ! !
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!ه!د!ف! !ا!و!ل!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!t!p!1!,! !"!#!.!#!#!#!#!"!)! !+! !(!t!1!h! !?! !"! !! !ل!م!س! !ش!د!"! !:! !"! !! !د!ر! !ا!ن!ت!ظ!ا!ر!"!)!,! !t!e!x!t!_!c!o!l!o!r!=!t!1!h! !?! !#!0!0!e!6!7!6! !:! !#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !r!w! !+!=! !1!
+! ! ! ! ! ! ! ! !
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!ه!د!ف! !د!و!م!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!t!p!2!,! !"!#!.!#!#!#!#!"!)!,! !t!e!x!t!_!c!o!l!o!r!=!#!8!B!C!3!4!A!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !r!w! !+!=! !1!
+! ! ! ! ! ! ! ! !
+! ! ! ! ! ! ! ! !i!f! !t!1!h! !a!n!d! !n!o!t! !n!a!(!t!S!L!)!
+! ! ! ! ! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!ت!ر!ی!ل!ی!ن!گ!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!t!S!L!,! !"!#!.!#!#!#!#!"!)!,! !t!e!x!t!_!c!o!l!o!r!=!#!F!F!E!B!3!B!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! ! ! ! ! !r!w! !+!=! !1!
+! ! ! ! ! ! ! ! !
+! ! ! ! ! ! ! ! !/!/! !P!&!L! !ل!ح!ظ!ه!!ا!ی!
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!س!و!د!/!ض!ر!ر! !ل!ح!ظ!ه!!ا!ی!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !u!p!C!l!r! !=! !u!n!r!e!a!l!P!n!L! !>! !0! !?! !#!0!0!e!6!7!6! !:! !u!n!r!e!a!l!P!n!L! !<! !0! !?! !#!f!f!1!7!4!4! !:! !#!c!9!d!1!d!9!
+! ! ! ! ! ! ! ! !u!p!S!i!g!n! !=! !u!n!r!e!a!l!P!n!L! !>! !0! !?! !"!+!"! !:! !"!"!
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !u!p!S!i!g!n! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!u!n!r!e!a!l!P!n!L!,! !4!)!)!,! !t!e!x!t!_!c!o!l!o!r!=!u!p!C!l!r!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !/!/! !! !آ!م!ا!ر! !!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!!!!! !آ!م!ا!ر! !!!!!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!f!f!d!7!0!0!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!,! !b!g!c!o!l!o!r!=!b!g!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !"!"!,! !b!g!c!o!l!o!r!=!b!g!)!
+! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!ت!ع!د!ا!د! !م!ع!ا!م!ل!ا!ت!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!t!o!t!)! !+! !"! !(!"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!w!i!n!)! !+! !"! !ب!ر!د! !/! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!l!o!s!)! !+! !"! !ض!ر!ر!)!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!5!8!a!6!f!f!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!و!ی!ن! !ر!ی!ت!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!w!R!,! !1!)!)! !+! !"!%!"!,! !t!e!x!t!_!c!o!l!o!r!=!w!R! !>!=! !5!0! !?! !#!0!0!e!6!7!6! !:! !#!f!f!a!7!2!6!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!ض!ر!ی!ب! !س!و!د!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!p!f!,! !2!)!)!,! !t!e!x!t!_!c!o!l!o!r!=!p!f! !>!=! !1!.!5! !?! !#!0!0!e!6!7!6! !:! !#!f!f!a!7!2!6!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!ح!د!ا!ک!ث!ر! !ض!ر!ر!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!m!D!D!,! !4!)!)!,! !t!e!x!t!_!c!o!l!o!r!=!#!f!f!1!7!4!4!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !/!/! !! !ه!ش!د!ا!ر! !ض!ر!ر! !م!ت!و!ا!ل!ی! !!
+! ! ! ! !i!f! !m!a!x!C!L! !>!=! !3!
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!!! !ض!ر!ر! !م!ت!و!ا!ل!ی!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!f!f!1!7!4!4!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!x!C!L!)! !+! !"!x!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!f!f!1!7!4!4!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! ! ! ! ! !r!w! !+!=! !1!
+! ! ! ! !
+! ! ! ! !/!/! !! !پ!ی!ش!ن!ه!ا!د! !ر!ی!س!ک! !!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !0!,! !r!w!,! !"!ر!ی!س!ک! !پ!ی!ش!ن!ه!ا!د!ی!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!d!,! !1!,! !r!w!,! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!o!p!t!R!i!s!k! !*! !1!0!0!,! !1!)!)! !+! !"!%!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!f!f!d!7!0!0!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!)!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! !ر!ا!ه!ن!م!ا!ی! !ه!و!ش!م!ن!د! !(!ب!ا! !ک!ل!ی!ک! !ر!و!ی! !i!n!p!u!t! !ب!ا!ز! !م!ی!!ش!ه!)!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!i!f! !s!h!o!w!G!u!i!d!e! !a!n!d! !b!a!r!s!t!a!t!e!.!i!s!l!a!s!t!
+! ! ! ! !v!a!r! !t!a!b!l!e! !g!u!i!d!e! !=! !t!a!b!l!e!.!n!e!w!(!p!o!s!i!t!i!o!n!.!b!o!t!t!o!m!_!r!i!g!h!t!,! !2!,! !1!2!,! !b!g!c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!1!a!1!a!2!e!,! !2!0!)!,! !b!o!r!d!e!r!_!w!i!d!t!h!=!1!,! !b!o!r!d!e!r!_!c!o!l!o!r!=!#!3!0!3!6!3!d!)!
+! ! ! ! !
+! ! ! ! !g!b! !=! !#!1!6!2!1!3!e!
+! ! ! ! !
+! ! ! ! !/!/! !! !ه!د!ر! !!!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !0!,! !0!,! !"!! !ر!ا!ه!ن!م!ا!ی! !ه!و!ش!م!ن!د!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!f!f!d!7!0!0!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!s!m!a!l!l!,! !b!g!c!o!l!o!r!=!g!b!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !1!,! !0!,! !"!"!,! !b!g!c!o!l!o!r!=!g!b!)!
+! ! ! ! !
+! ! ! ! !/!/! !!! !پ!ی!ش!ن!ه!ا!د! !ا!ص!ل!ی! !!!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !0!,! !1!,! !"!پ!ی!ش!ن!ه!ا!د!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !
+! ! ! ! !a!c!t!i!o!n!T!e!x!t! !=! !"!"!
+! ! ! ! !a!c!t!i!o!n!C!o!l!o!r! !=! !#!8!8!8!8!8!8!
+! ! ! ! !
+! ! ! ! !i!f! !s!t! !=!=! !3!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!T!e!x!t! !:!=! !"!🟢! !ا!ل!ا!ن! !ب!خ!ر! !(!L!o!n!g!)!"!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!C!o!l!o!r! !:!=! !#!0!0!e!6!7!6!
+! ! ! ! !e!l!s!e! !i!f! !s!t! !=!=! !4!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!T!e!x!t! !:!=! !"!! !ا!ل!ا!ن! !ب!ف!ر!و!ش! !(!S!h!o!r!t!)!"!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!C!o!l!o!r! !:!=! !#!f!f!1!7!4!4!
+! ! ! ! !e!l!s!e! !i!f! !s!t! !=!=! !1! !a!n!d! !c!S! !>!=! !m!i!n!C!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!T!e!x!t! !:!=! !"!🟡! !آ!م!ا!د!ه! !خ!ر!ی!د! !ب!ا!ش!"!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!C!o!l!o!r! !:!=! !#!f!f!a!7!2!6!
+! ! ! ! !e!l!s!e! !i!f! !s!t! !=!=! !2! !a!n!d! !c!S! !>!=! !m!i!n!C!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!T!e!x!t! !:!=! !"!🟡! !آ!م!ا!د!ه! !ف!ر!و!ش! !ب!ا!ش!"!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!C!o!l!o!r! !:!=! !#!f!f!a!7!2!6!
+! ! ! ! !e!l!s!e! !i!f! !b!i!a!s! !=!=! !1! !a!n!d! !h!t!f!U!p!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!T!e!x!t! !:!=! !"!! !ص!ب!ر! !ب!ر!ا!ی! !س!ی!گ!ن!ا!ل! !خ!ر!ی!د!"!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!C!o!l!o!r! !:!=! !#!5!8!a!6!f!f!
+! ! ! ! !e!l!s!e! !i!f! !b!i!a!s! !=!=! !-!1! !a!n!d! !h!t!f!D!n!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!T!e!x!t! !:!=! !"!! !ص!ب!ر! !ب!ر!ا!ی! !س!ی!گ!ن!ا!ل! !ف!ر!و!ش!"!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!C!o!l!o!r! !:!=! !#!5!8!a!6!f!f!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!T!e!x!t! !:!=! !"! !د!س!ت! !ن!گ!ه! !د!ا!ر!"!
+! ! ! ! ! ! ! ! !a!c!t!i!o!n!C!o!l!o!r! !:!=! !#!8!8!8!8!8!8!
+! ! ! ! !
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !1!,! !1!,! !a!c!t!i!o!n!T!e!x!t!,! !t!e!x!t!_!c!o!l!o!r!=!a!c!t!i!o!n!C!o!l!o!r!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !
+! ! ! ! !/!/! !!! !چ!ر!ا!؟! !!!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !0!,! !2!,! !"!د!ل!ی!ل!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !
+! ! ! ! !r!e!a!s!o!n!T!e!x!t! !=! !"!"!
+! ! ! ! !i!f! !s!t! !=!=! !3! !o!r! !s!t! !=!=! !4!
+! ! ! ! ! ! ! ! !r!e!a!s!o!n!T!e!x!t! !:!=! !"!س!ی!گ!ن!ا!ل! !ف!ع!ا!ل! !+! !ت!ر!ی!ل!ی!ن!گ!"!
+! ! ! ! !e!l!s!e! !i!f! !s!t! !=!=! !1! !o!r! !s!t! !=!=! !2!
+! ! ! ! ! ! ! ! !r!e!a!s!o!n!T!e!x!t! !:!=! !"!س!ت!ا!پ! !آ!م!ا!د!ه!،! !م!ن!ت!ظ!ر! !و!ر!و!د!"!
+! ! ! ! !e!l!s!e! !i!f! !c!S! !<! !m!i!n!C!
+! ! ! ! ! ! ! ! !r!e!a!s!o!n!T!e!x!t! !:!=! !"!ا!م!ت!ی!ا!ز! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!c!S!)!)! !+! !"! !ک!م!ت!ر! !ا!ز! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!i!n!C!)!
+! ! ! ! !e!l!s!e! !i!f! !n!o!t! !i!n!K!Z! !a!n!d! !u!s!e!K!Z!
+! ! ! ! ! ! ! ! !r!e!a!s!o!n!T!e!x!t! !:!=! !"!خ!ا!ر!ج! !ا!ز! !K!i!l!l! !Z!o!n!e!"!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !r!e!a!s!o!n!T!e!x!t! !:!=! !"!م!ن!ت!ظ!ر! !ا!س!پ!ا!ی!ک! !و!ا!ض!ح!"!
+! ! ! ! !
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !1!,! !2!,! !r!e!a!s!o!n!T!e!x!t!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !
+! ! ! ! !/!/! !!! !س!ط!و!ح! !ک!ل!ی!د!ی! !!!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !0!,! !3!,! !"!س!ط!و!ح! !ک!ل!ی!د!ی!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !k!e!y!L!e!v!e!l!s!T!e!x!t! !=! !"!"!
+! ! ! ! !i!f! !s!t! !>!=! !3!
+! ! ! ! ! ! ! ! !k!e!y!L!e!v!e!l!s!T!e!x!t! !:!=! !"!E!n!t!r!y!:! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!e!n!t!,! !"!#!.!#!#!#!#!"!)! !+! !"! !|! !S!L!:! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!s!l!p!,! !"!#!.!#!#!#!#!"!)!
+! ! ! ! !e!l!s!e! !i!f! !b!i!a!s! !=!=! !1!
+! ! ! ! ! ! ! ! !k!e!y!L!e!v!e!l!s!T!e!x!t! !:!=! !"!ح!م!ا!ی!ت!:! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!n!a!(!p!S!L!)! !?! !c!l!o!s!e! !:! !p!S!L!,! !"!#!.!#!#!#!#!"!)!
+! ! ! ! !e!l!s!e! !i!f! !b!i!a!s! !=!=! !-!1!
+! ! ! ! ! ! ! ! !k!e!y!L!e!v!e!l!s!T!e!x!t! !:!=! !"!م!ق!ا!و!م!ت!:! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!n!a!(!p!S!H!)! !?! !c!l!o!s!e! !:! !p!S!H!,! !"!#!.!#!#!#!#!"!)!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !k!e!y!L!e!v!e!l!s!T!e!x!t! !:!=! !"!م!ن!ت!ظ!ر! !ش!ک!س!ت! !س!ا!خ!ت!ا!ر!"!
+! ! ! ! !
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !1!,! !3!,! !k!e!y!L!e!v!e!l!s!T!e!x!t!,! !t!e!x!t!_!c!o!l!o!r!=!#!5!8!a!6!f!f!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !
+! ! ! ! !/!/! !!! !ن!ق!ا!ط! !ق!و!ت! !و! !ض!ع!ف! !!!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !0!,! !4!,! !"!ن!ق!ا!ط! !ق!و!ت!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !s!t!r!e!n!g!t!h!s! !=! !"!"!
+! ! ! ! !i!f! !b!i!a!s! !>!=! !0! !a!n!d! !b!i!a!s! !!!=! !0!
+! ! ! ! ! ! ! ! !s!t!r!e!n!g!t!h!s! !:!=! !"!س!ا!خ!ت!ا!ر! !ص!ع!و!د!ی! !!"!
+! ! ! ! !i!f! !h!t!f!U!p!
+! ! ! ! ! ! ! ! !s!t!r!e!n!g!t!h!s! !:!=! !s!t!r!e!n!g!t!h!s! !+! !"! !|! !H!T!F! !ص!ع!و!د!ی! !!"!
+! ! ! ! !i!f! !n!B!F!V!G! !>! !0!
+! ! ! ! ! ! ! ! !s!t!r!e!n!g!t!h!s! !:!=! !s!t!r!e!n!g!t!h!s! !+! !"! !|! !F!V!G! !!"!
+! ! ! ! !i!f! !v!o!l!u!m!e! !>! !a!v!g!V!o!l! !*! !v!M!u!l!
+! ! ! ! ! ! ! ! !s!t!r!e!n!g!t!h!s! !:!=! !s!t!r!e!n!g!t!h!s! !+! !"! !|! !ح!ج!م! !ب!ا!ل!ا! !!"!
+! ! ! ! !i!f! !s!t!r!e!n!g!t!h!s! !=!=! !"!"!
+! ! ! ! ! ! ! ! !s!t!r!e!n!g!t!h!s! !:!=! !"!ن!د!ا!ر!د! !!"!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !1!,! !4!,! !s!t!r!e!n!g!t!h!s!,! !t!e!x!t!_!c!o!l!o!r!=!#!0!0!e!6!7!6!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !0!,! !5!,! !"!ن!ق!ا!ط! !ض!ع!ف!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !w!e!a!k!n!e!s!s!e!s! !=! !"!"!
+! ! ! ! !i!f! !v!o!l!u!m!e! !<! !a!v!g!V!o!l!
+! ! ! ! ! ! ! ! !w!e!a!k!n!e!s!s!e!s! !:!=! !"!ح!ج!م! !ک!م! !"!
+! ! ! ! !i!f! !r!s!i!V!a!l! !>! !r!s!i!H!i!
+! ! ! ! ! ! ! ! !w!e!a!k!n!e!s!s!e!s! !:!=! !w!e!a!k!n!e!s!s!e!s! !+! !"! !|! !ا!ش!ب!ا!ع! !خ!ر!ی!د! !"!
+! ! ! ! !i!f! !r!s!i!V!a!l! !<! !r!s!i!L!o!
+! ! ! ! ! ! ! ! !w!e!a!k!n!e!s!s!e!s! !:!=! !w!e!a!k!n!e!s!s!e!s! !+! !"! !|! !ا!ش!ب!ا!ع! !ف!ر!و!ش! !!"!
+! ! ! ! !i!f! !b!i!a!s! !=!=! !0!
+! ! ! ! ! ! ! ! !w!e!a!k!n!e!s!s!e!s! !:!=! !w!e!a!k!n!e!s!s!e!s! !+! !"! !|! !ب!د!و!ن! !ر!و!ن!د! !!"!
+! ! ! ! !i!f! !h!t!f!U!p! !!!=! !(!b!i!a!s! !>!=! !0!)! !a!n!d! !b!i!a!s! !!!=! !0!
+! ! ! ! ! ! ! ! !w!e!a!k!n!e!s!s!e!s! !:!=! !w!e!a!k!n!e!s!s!e!s! !+! !"! !|! !ت!ض!ا!د! !H!T!F! !!"!
+! ! ! ! !i!f! !w!e!a!k!n!e!s!s!e!s! !=!=! !"!"!
+! ! ! ! ! ! ! ! !w!e!a!k!n!e!s!s!e!s! !:!=! !"!ن!د!ا!ر!د! !!"!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !1!,! !5!,! !w!e!a!k!n!e!s!s!e!s!,! !t!e!x!t!_!c!o!l!o!r!=!w!e!a!k!n!e!s!s!e!s! !=!=! !"!ن!د!ا!ر!د! !!"! !?! !#!0!0!e!6!7!6! !:! !#!f!f!1!7!4!4!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !
+! ! ! ! !/!/! !!! !ا!م!ت!ی!ا!ز! !و! !م!ع!ی!ا!ر!ه!ا! !!!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !0!,! !6!,! !"!ا!م!ت!ی!ا!ز!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !c!o!n!f!B!a!r! !=! !"!"!
+! ! ! ! !f!i!l!l!e!d! !=! !m!a!t!h!.!r!o!u!n!d!(!c!S!)!
+! ! ! ! !f!o!r! !i! !=! !1! !t!o! !1!0!
+! ! ! ! ! ! ! ! !c!o!n!f!B!a!r! !:!=! !c!o!n!f!B!a!r! !+! !(!i! !<!=! !f!i!l!l!e!d! !?! !"!!"! !:! !"!!"!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !1!,! !6!,! !c!o!n!f!B!a!r! !+! !"! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!c!S!)!)! !+! !"!/!1!0!"!,! !t!e!x!t!_!c!o!l!o!r!=!c!S! !>!=! !m!i!n!C! !?! !#!0!0!e!6!7!6! !:! !#!f!f!1!7!4!4!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !
+! ! ! ! !/!/! !!! !چ!ک!!ل!ی!س!ت! !و!ر!و!د! !!!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !0!,! !7!,! !"!چ!ک!!ل!ی!س!ت!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !c!h!e!c!k!l!i!s!t! !=! !"!"!
+! ! ! ! !c!h!e!c!k!l!i!s!t! !:!=! !c!h!e!c!k!l!i!s!t! !+! !(!b!i!a!s! !!!=! !0! !?! !"!!"! !:! !"!!"!)! !+! !"!س!ا!خ!ت!ا!ر! !"!
+! ! ! ! !c!h!e!c!k!l!i!s!t! !:!=! !c!h!e!c!k!l!i!s!t! !+! !(!(!b!i!a!s! !>!=! !0! !?! !h!t!f!U!p! !:! !h!t!f!D!n!)! !?! !"!!"! !:! !"!!"!)! !+! !"!H!T!F! !"!
+! ! ! ! !c!h!e!c!k!l!i!s!t! !:!=! !c!h!e!c!k!l!i!s!t! !+! !(!n!B!F!V!G! !>! !0! !o!r! !n!S!F!V!G! !>! !0! !?! !"!!"! !:! !"!!"!)! !+! !"!F!V!G! !"!
+! ! ! ! !c!h!e!c!k!l!i!s!t! !:!=! !c!h!e!c!k!l!i!s!t! !+! !(!v!o!l!u!m!e! !>! !a!v!g!V!o!l! !*! !v!M!u!l! !?! !"!!"! !:! !"!!"!)! !+! !"!ح!ج!م! !"!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !1!,! !7!,! !c!h!e!c!k!l!i!s!t!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !
+! ! ! ! !/!/! !!! !R!S!I! !!!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !0!,! !8!,! !"!R!S!I!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !r!s!i!S!t!a!t!u!s! !=! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!r!s!i!V!a!l!,! !1!)!)!
+! ! ! ! !i!f! !r!s!i!V!a!l! !>! !r!s!i!H!i!
+! ! ! ! ! ! ! ! !r!s!i!S!t!a!t!u!s! !:!=! !r!s!i!S!t!a!t!u!s! !+! !"! !ا!ش!ب!ا!ع! !خ!ر!ی!د!!! !"!
+! ! ! ! !e!l!s!e! !i!f! !r!s!i!V!a!l! !<! !r!s!i!L!o!
+! ! ! ! ! ! ! ! !r!s!i!S!t!a!t!u!s! !:!=! !r!s!i!S!t!a!t!u!s! !+! !"! !ا!ش!ب!ا!ع! !ف!ر!و!ش!!! !"!
+! ! ! ! !e!l!s!e! !i!f! !r!s!i!V!a!l! !>! !5!0!
+! ! ! ! ! ! ! ! !r!s!i!S!t!a!t!u!s! !:!=! !r!s!i!S!t!a!t!u!s! !+! !"! !ص!ع!و!د!ی!"!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !r!s!i!S!t!a!t!u!s! !:!=! !r!s!i!S!t!a!t!u!s! !+! !"! !ن!ز!و!ل!ی!"!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !1!,! !8!,! !r!s!i!S!t!a!t!u!s!,! !t!e!x!t!_!c!o!l!o!r!=!r!s!i!V!a!l! !>! !r!s!i!H!i! !o!r! !r!s!i!V!a!l! !<! !r!s!i!L!o! !?! !#!f!f!1!7!4!4! !:! !#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !
+! ! ! ! !/!/! !!! !ه!ش!د!ا!ر!ه!ا! !!!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !0!,! !9!,! !"!ه!ش!د!ا!ر!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !a!l!e!r!t!T!e!x!t! !=! !"!"!
+! ! ! ! !i!f! !m!a!x!C!L! !>!=! !3!
+! ! ! ! ! ! ! ! !a!l!e!r!t!T!e!x!t! !:!=! !"!!! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!x!C!L!)! !+! !"! !ض!ر!ر! !م!ت!و!ا!ل!ی!!!"!
+! ! ! ! !e!l!s!e! !i!f! !u!n!r!e!a!l!P!n!L! !!!=! !0!.!0! !a!n!d! !u!n!r!e!a!l!P!n!L! !<! !0!
+! ! ! ! ! ! ! ! !a!l!e!r!t!T!e!x!t! !:!=! !"!!! !ض!ر!ر! !ل!ح!ظ!ه!!ا!ی!:! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!u!n!r!e!a!l!P!n!L!,! !4!)!)!
+! ! ! ! !e!l!s!e! !i!f! !c!S! !>!=! !7!
+! ! ! ! ! ! ! ! !a!l!e!r!t!T!e!x!t! !:!=! !"!! !س!ی!گ!ن!ا!ل! !ق!و!ی!!!"!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !a!l!e!r!t!T!e!x!t! !:!=! !"!ب!د!و!ن! !ه!ش!د!ا!ر! !!"!
+! ! ! ! !a!l!e!r!t!C!l!r! !=! !a!l!e!r!t!T!e!x!t! !=!=! !"!ب!د!و!ن! !ه!ش!د!ا!ر! !!"! !o!r! !a!l!e!r!t!T!e!x!t! !=!=! !"! !س!ی!گ!ن!ا!ل! !ق!و!ی!!!"! !?! !#!0!0!e!6!7!6! !:! !#!f!f!1!7!4!4!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !1!,! !9!,! !a!l!e!r!t!T!e!x!t!,! !t!e!x!t!_!c!o!l!o!r!=!a!l!e!r!t!C!l!r!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !
+! ! ! ! !/!/! !!! !ن!ک!ت!ه! !ط!ل!ا!ی!ی! !!!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !0!,! !1!0!,! !"!! !ن!ک!ت!ه!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!f!f!d!7!0!0!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !t!i!p! !=! !"!"!
+! ! ! ! !i!f! !s!t! !=!=! !3!
+! ! ! ! ! ! ! ! !t!i!p! !:!=! !"!T!P!1! !ر!و! !ر!ی!س!ک!!ف!ر!ی! !ک!ن!"!
+! ! ! ! !e!l!s!e! !i!f! !s!t! !=!=! !4!
+! ! ! ! ! ! ! ! !t!i!p! !:!=! !"!T!P!1! !ر!و! !ر!ی!س!ک!!ف!ر!ی! !ک!ن!"!
+! ! ! ! !e!l!s!e! !i!f! !b!i!a!s! !=!=! !1! !a!n!d! !h!t!f!U!p! !a!n!d! !n!B!F!V!G! !>! !0!
+! ! ! ! ! ! ! ! !t!i!p! !:!=! !"!ش!ر!ا!ی!ط! !خ!و!ب!ه!،! !م!ن!ت!ظ!ر!B!U!Y! !ب!ا!ش!"!
+! ! ! ! !e!l!s!e! !i!f! !b!i!a!s! !=!=! !-!1! !a!n!d! !h!t!f!D!n! !a!n!d! !n!S!F!V!G! !>! !0!
+! ! ! ! ! ! ! ! !t!i!p! !:!=! !"!ش!ر!ا!ی!ط! !خ!و!ب!ه!،! !م!ن!ت!ظ!ر!S!E!L!L! !ب!ا!ش!"!
+! ! ! ! !e!l!s!e! !i!f! !r!s!i!V!a!l! !>! !r!s!i!H!i!
+! ! ! ! ! ! ! ! !t!i!p! !:!=! !"!R!S!I! !ب!ا!ل!ا!س!،! !ن!خ!ر!!!"!
+! ! ! ! !e!l!s!e! !i!f! !r!s!i!V!a!l! !<! !r!s!i!L!o!
+! ! ! ! ! ! ! ! !t!i!p! !:!=! !"!R!S!I! !پ!ا!ی!ی!ن!ه!،! !ن!ف!ر!و!ش!!!"!
+! ! ! ! !e!l!s!e!
+! ! ! ! ! ! ! ! !t!i!p! !:!=! !"!ص!ب!ر! !ک!ن! !ت!ا! !س!ی!گ!ن!ا!ل! !و!ا!ض!ح! !ب!ی!ا!د!"!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !1!,! !1!0!,! !t!i!p!,! !t!e!x!t!_!c!o!l!o!r!=!#!f!f!d!7!0!0!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !
+! ! ! ! !/!/! !!! !م!د!ی!ر!ی!ت! !س!ر!م!ا!ی!ه! !!!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !0!,! !1!1!,! !"!! !ر!ی!س!ک!:!"!,! !t!e!x!t!_!c!o!l!o!r!=!#!c!9!d!1!d!9!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !r!i!s!k!T!e!x!t! !=! !"!ه!ر! !م!ع!ا!م!ل!ه!:! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!o!p!t!R!i!s!k! !*! !1!0!0!,! !1!)!)! !+! !"!٪! !س!ر!م!ا!ی!ه!"!
+! ! ! ! !i!f! !u!n!r!e!a!l!P!n!L! !!!=! !0!.!0!
+! ! ! ! ! ! ! ! !r!i!s!k!T!e!x!t! !:!=! !r!i!s!k!T!e!x!t! !+! !"! !|! !P!&!L!:! !"! !+! !(!u!n!r!e!a!l!P!n!L! !>! !0! !?! !"!+!"! !:! !"!"!)! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!m!a!t!h!.!r!o!u!n!d!(!u!n!r!e!a!l!P!n!L!,! !4!)!)!
+! ! ! ! !t!a!b!l!e!.!c!e!l!l!(!g!u!i!d!e!,! !1!,! !1!1!,! !r!i!s!k!T!e!x!t!,! !t!e!x!t!_!c!o!l!o!r!=!u!n!r!e!a!l!P!n!L! !>!=! !0! !?! !#!0!0!e!6!7!6! !:! !#!f!f!1!7!4!4!,! !t!e!x!t!_!s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! !خ!ط!و!ط! !ر!و!ن!د! !خ!و!د!ک!ا!ر! !(!ف!ق!ط! !د!ر! !آ!خ!ر!ی!ن! !ک!ن!د!ل!)!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!i!f! !s!h!o!w!T!r!e!n!d! !a!n!d! !b!a!r!s!t!a!t!e!.!i!s!l!a!s!t!
+! ! ! ! !/!/! !پ!ا!ک! !ک!ر!د!ن! !خ!ط!و!ط! !ق!ب!ل!ی!
+! ! ! ! !v!a!r! !l!i!n!e! !u!p!t!r!e!n!d!L!i!n!e! !=! !n!a!
+! ! ! ! !v!a!r! !l!i!n!e! !d!o!w!n!t!r!e!n!d!L!i!n!e! !=! !n!a!
+! ! ! ! !v!a!r! !l!a!b!e!l! !u!p!L!a!b!e!l! !=! !n!a!
+! ! ! ! !v!a!r! !l!a!b!e!l! !d!n!L!a!b!e!l! !=! !n!a!
+! ! ! ! !
+! ! ! ! !i!f! !n!o!t! !n!a!(!u!p!t!r!e!n!d!L!i!n!e!)!
+! ! ! ! ! ! ! ! !l!i!n!e!.!d!e!l!e!t!e!(!u!p!t!r!e!n!d!L!i!n!e!)!
+! ! ! ! !i!f! !n!o!t! !n!a!(!d!o!w!n!t!r!e!n!d!L!i!n!e!)!
+! ! ! ! ! ! ! ! !l!i!n!e!.!d!e!l!e!t!e!(!d!o!w!n!t!r!e!n!d!L!i!n!e!)!
+! ! ! ! !i!f! !n!o!t! !n!a!(!u!p!L!a!b!e!l!)!
+! ! ! ! ! ! ! ! !l!a!b!e!l!.!d!e!l!e!t!e!(!u!p!L!a!b!e!l!)!
+! ! ! ! !i!f! !n!o!t! !n!a!(!d!n!L!a!b!e!l!)!
+! ! ! ! ! ! ! ! !l!a!b!e!l!.!d!e!l!e!t!e!(!d!n!L!a!b!e!l!)!
+! ! ! ! !
+! ! ! ! !/!/! !پ!ی!د!ا! !ک!ر!د!ن! !2! !p!i!v!o!t! !l!o!w! !آ!خ!ر! !ب!ر!ا!ی! !ر!و!ن!د! !ص!ع!و!د!ی!
+! ! ! ! !v!a!r! !f!l!o!a!t! !u!p!V!1! !=! !n!a!
+! ! ! ! !v!a!r! !i!n!t! !u!p!B!1! !=! !n!a!
+! ! ! ! !v!a!r! !f!l!o!a!t! !u!p!V!2! !=! !n!a!
+! ! ! ! !v!a!r! !i!n!t! !u!p!B!2! !=! !n!a!
+! ! ! ! !
+! ! ! ! !/!/! !پ!ی!د!ا! !ک!ر!د!ن! !2! !p!i!v!o!t! !h!i!g!h! !آ!خ!ر! !ب!ر!ا!ی! !ر!و!ن!د! !ن!ز!و!ل!ی!
+! ! ! ! !v!a!r! !f!l!o!a!t! !d!n!V!1! !=! !n!a!
+! ! ! ! !v!a!r! !i!n!t! !d!n!B!1! !=! !n!a!
+! ! ! ! !v!a!r! !f!l!o!a!t! !d!n!V!2! !=! !n!a!
+! ! ! ! !v!a!r! !i!n!t! !d!n!B!2! !=! !n!a!
+! ! ! ! !
+! ! ! ! !/!/! !ج!س!ت!ج!و! !د!ر! !1!0!0! !ک!ن!د!ل! !آ!خ!ر!
+! ! ! ! !f!o!r! !i! !=! !0! !t!o! !1!0!0!
+! ! ! ! ! ! ! ! !i!f! !n!o!t! !n!a!(!s!w!L![!i!]!)!
+! ! ! ! ! ! ! ! ! ! ! ! !i!f! !n!a!(!u!p!B!1!)! !o!r! !b!a!r!_!i!n!d!e!x! !-! !i! !>! !u!p!B!1!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !u!p!V!2! !:!=! !u!p!V!1!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !u!p!B!2! !:!=! !u!p!B!1!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !u!p!V!1! !:!=! !s!w!L![!i!]!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !u!p!B!1! !:!=! !b!a!r!_!i!n!d!e!x! !-! !i!
+! ! ! ! ! ! ! ! !i!f! !n!o!t! !n!a!(!s!w!H![!i!]!)!
+! ! ! ! ! ! ! ! ! ! ! ! !i!f! !n!a!(!d!n!B!1!)! !o!r! !b!a!r!_!i!n!d!e!x! !-! !i! !>! !d!n!B!1!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !d!n!V!2! !:!=! !d!n!V!1!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !d!n!B!2! !:!=! !d!n!B!1!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !d!n!V!1! !:!=! !s!w!H![!i!]!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !d!n!B!1! !:!=! !b!a!r!_!i!n!d!e!x! !-! !i!
+! ! ! ! !
+! ! ! ! !/!/! !ر!س!م! !خ!ط! !ر!و!ن!د! !ص!ع!و!د!ی! !(!ا!گ!ر! !H!i!g!h!e!r! !L!o!w! !د!ا!ش!ت!ی!م!)!
+! ! ! ! !i!f! !n!o!t! !n!a!(!u!p!B!1!)! !a!n!d! !n!o!t! !n!a!(!u!p!B!2!)! !a!n!d! !u!p!B!1! !>! !u!p!B!2! !a!n!d! !u!p!V!1! !>! !u!p!V!2!
+! ! ! ! ! ! ! ! !s!l!o!p!e! !=! !(!u!p!V!1! !-! !u!p!V!2!)! !/! !(!u!p!B!1! !-! !u!p!B!2!)!
+! ! ! ! ! ! ! ! !f!u!t!u!r!e!B!a!r!s! !=! !3!0!
+! ! ! ! ! ! ! ! !u!p!t!r!e!n!d!L!i!n!e! !:!=! !l!i!n!e!.!n!e!w!(!u!p!B!2!,! !u!p!V!2!,! !b!a!r!_!i!n!d!e!x! !+! !f!u!t!u!r!e!B!a!r!s!,! !u!p!V!1! !+! !s!l!o!p!e! !*! !f!u!t!u!r!e!B!a!r!s!,! !
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!0!0!e!6!7!6!,! !4!0!)!,! !w!i!d!t!h!=!2!)!
+! ! ! ! ! ! ! ! !u!p!L!a!b!e!l! !:!=! !l!a!b!e!l!.!n!e!w!(!u!p!B!1!,! !u!p!V!1!,! !"!T!L!-!U!p!"!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!0!0!e!6!7!6!,! !3!0!)!,! !
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !t!e!x!t!c!o!l!o!r!=!c!o!l!o!r!.!w!h!i!t!e!,! !s!t!y!l!e!=!l!a!b!e!l!.!s!t!y!l!e!_!l!a!b!e!l!_!u!p!,! !s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! !
+! ! ! ! !/!/! !ر!س!م! !خ!ط! !ر!و!ن!د! !ن!ز!و!ل!ی! !(!ا!گ!ر! !L!o!w!e!r! !H!i!g!h! !د!ا!ش!ت!ی!م!)!
+! ! ! ! !i!f! !n!o!t! !n!a!(!d!n!B!1!)! !a!n!d! !n!o!t! !n!a!(!d!n!B!2!)! !a!n!d! !d!n!B!1! !>! !d!n!B!2! !a!n!d! !d!n!V!1! !<! !d!n!V!2!
+! ! ! ! ! ! ! ! !s!l!o!p!e! !=! !(!d!n!V!1! !-! !d!n!V!2!)! !/! !(!d!n!B!1! !-! !d!n!B!2!)!
+! ! ! ! ! ! ! ! !f!u!t!u!r!e!B!a!r!s! !=! !3!0!
+! ! ! ! ! ! ! ! !d!o!w!n!t!r!e!n!d!L!i!n!e! !:!=! !l!i!n!e!.!n!e!w!(!d!n!B!2!,! !d!n!V!2!,! !b!a!r!_!i!n!d!e!x! !+! !f!u!t!u!r!e!B!a!r!s!,! !d!n!V!1! !+! !s!l!o!p!e! !*! !f!u!t!u!r!e!B!a!r!s!,! !
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!f!f!1!7!4!4!,! !4!0!)!,! !w!i!d!t!h!=!2!)!
+! ! ! ! ! ! ! ! !d!n!L!a!b!e!l! !:!=! !l!a!b!e!l!.!n!e!w!(!d!n!B!1!,! !d!n!V!1!,! !"!T!L!-!D!n!"!,! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!#!f!f!1!7!4!4!,! !3!0!)!,! !
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !t!e!x!t!c!o!l!o!r!=!c!o!l!o!r!.!w!h!i!t!e!,! !s!t!y!l!e!=!l!a!b!e!l!.!s!t!y!l!e!_!l!a!b!e!l!_!d!o!w!n!,! !s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! !ح!م!ا!ی!ت!/!م!ق!ا!و!م!ت! !خ!و!د!ک!ا!ر! !(!ف!ق!ط! !د!ر! !آ!خ!ر!ی!ن! !ک!ن!د!ل!)!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!i!f! !s!h!o!w!S!R! !a!n!d! !b!a!r!s!t!a!t!e!.!i!s!l!a!s!t!
+! ! ! ! !/!/! !ج!م!ع!!آ!و!ر!ی! !p!i!v!o!t! !ه!ا! !د!ر! !1!0!0! !ک!ن!د!ل! !آ!خ!ر!
+! ! ! ! !v!a!r! !f!l!o!a!t![!]! !s!r!L!v!l! !=! !a!r!r!a!y!.!n!e!w!_!f!l!o!a!t!(!0!)!
+! ! ! ! !v!a!r! !i!n!t![!]! ! ! !s!r!T!c!h! !=! !a!r!r!a!y!.!n!e!w!_!i!n!t!(!0!)!
+! ! ! ! !v!a!r! !b!o!o!l![!]! ! !s!r!S!u!p! !=! !a!r!r!a!y!.!n!e!w!_!b!o!o!l!(!0!)!
+! ! ! ! !
+! ! ! ! !/!/! !پ!ا!ک! !ک!ر!د!ن! !آ!ر!ا!ی!ه!
+! ! ! ! !a!r!r!a!y!.!c!l!e!a!r!(!s!r!L!v!l!)!
+! ! ! ! !a!r!r!a!y!.!c!l!e!a!r!(!s!r!T!c!h!)!
+! ! ! ! !a!r!r!a!y!.!c!l!e!a!r!(!s!r!S!u!p!)!
+! ! ! ! !
+! ! ! ! !/!/! !ج!م!ع!!آ!و!ر!ی!
+! ! ! ! !f!o!r! !i! !=! !0! !t!o! !1!0!0!
+! ! ! ! ! ! ! ! !i!f! !n!o!t! !n!a!(!s!w!H![!i!]!)!
+! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!p!u!s!h!(!s!r!L!v!l!,! !s!w!H![!i!]!)!
+! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!p!u!s!h!(!s!r!T!c!h!,! !1!)!
+! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!p!u!s!h!(!s!r!S!u!p!,! !f!a!l!s!e!)!
+! ! ! ! ! ! ! ! !i!f! !n!o!t! !n!a!(!s!w!L![!i!]!)!
+! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!p!u!s!h!(!s!r!L!v!l!,! !s!w!L![!i!]!)!
+! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!p!u!s!h!(!s!r!T!c!h!,! !1!)!
+! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!p!u!s!h!(!s!r!S!u!p!,! !t!r!u!e!)!
+! ! ! ! !
+! ! ! ! !/!/! !ش!م!ا!ر!ش! !ب!ر!خ!و!ر!د! !و! !ا!د!غ!ا!م! !س!ط!و!ح! !ن!ز!د!ی!ک!
+! ! ! ! !f!o!r! !i! !=! !0! !t!o! !a!r!r!a!y!.!s!i!z!e!(!s!r!L!v!l!)! !-! !1!
+! ! ! ! ! ! ! ! !f!o!r! !j! !=! !i! !+! !1! !t!o! !a!r!r!a!y!.!s!i!z!e!(!s!r!L!v!l!)! !-! !1!
+! ! ! ! ! ! ! ! ! ! ! ! !i!f! !j! !<! !a!r!r!a!y!.!s!i!z!e!(!s!r!L!v!l!)!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !d!i!s!t! !=! !m!a!t!h!.!a!b!s!(!a!r!r!a!y!.!g!e!t!(!s!r!L!v!l!,! !i!)! !-! !a!r!r!a!y!.!g!e!t!(!s!r!L!v!l!,! !j!)!)!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !i!f! !d!i!s!t! !<! !a!t!r!1!4! !*! !0!.!3! ! !/!/! !س!ط!و!ح! !ن!ز!د!ی!ک! !ه!م!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!s!e!t!(!s!r!T!c!h!,! !i!,! !a!r!r!a!y!.!g!e!t!(!s!r!T!c!h!,! !i!)! !+! !a!r!r!a!y!.!g!e!t!(!s!r!T!c!h!,! !j!)!)!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!r!e!m!o!v!e!(!s!r!L!v!l!,! !j!)!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!r!e!m!o!v!e!(!s!r!T!c!h!,! !j!)!
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !a!r!r!a!y!.!r!e!m!o!v!e!(!s!r!S!u!p!,! !j!)!
+! ! ! ! !
+! ! ! ! !/!/! !ر!س!م! !ف!ق!ط! !س!ط!و!ح! !ق!و!ی! !(!ح!د!ا!ق!ل! !s!r!T!o!u!c!h! !ب!ر!خ!و!ر!د!)!
+! ! ! ! !d!r!a!w!n! !=! !0!
+! ! ! ! !f!o!r! !i! !=! !0! !t!o! !a!r!r!a!y!.!s!i!z!e!(!s!r!L!v!l!)! !-! !1!
+! ! ! ! ! ! ! ! !i!f! !d!r!a!w!n! !>!=! !6! ! !/!/! !ح!د!ا!ک!ث!ر! !6! !س!ط!ح!
+! ! ! ! ! ! ! ! ! ! ! ! !b!r!e!a!k!
+! ! ! ! ! ! ! ! !i!f! !a!r!r!a!y!.!g!e!t!(!s!r!T!c!h!,! !i!)! !>!=! !s!r!T!o!u!c!h!
+! ! ! ! ! ! ! ! ! ! ! ! !l!v!l! !=! !a!r!r!a!y!.!g!e!t!(!s!r!L!v!l!,! !i!)!
+! ! ! ! ! ! ! ! ! ! ! ! !t!o!u!c!h!e!s! !=! !a!r!r!a!y!.!g!e!t!(!s!r!T!c!h!,! !i!)!
+! ! ! ! ! ! ! ! ! ! ! ! !i!s!S!u!p! !=! !a!r!r!a!y!.!g!e!t!(!s!r!S!u!p!,! !i!)!
+! ! ! ! ! ! ! ! ! ! ! ! !c!l!r! !=! !i!s!S!u!p! !?! !#!0!0!e!6!7!6! !:! !#!f!f!1!7!4!4!
+! ! ! ! ! ! ! ! ! ! ! ! !
+! ! ! ! ! ! ! ! ! ! ! ! !/!/! !ر!س!م! !خ!ط! !ا!ف!ق!ی!
+! ! ! ! ! ! ! ! ! ! ! ! !l!i!n!e!.!n!e!w!(!b!a!r!_!i!n!d!e!x! !-! !1!0!0!,! !l!v!l!,! !b!a!r!_!i!n!d!e!x! !+! !2!0!,! !l!v!l!,! !
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!c!l!r!,! !6!0!)!,! !w!i!d!t!h!=!1!,! !s!t!y!l!e!=!l!i!n!e!.!s!t!y!l!e!_!d!a!s!h!e!d!)!
+! ! ! ! ! ! ! ! ! ! ! ! !
+! ! ! ! ! ! ! ! ! ! ! ! !/!/! !ل!ی!ب!ل!
+! ! ! ! ! ! ! ! ! ! ! ! !l!a!b!e!l!T!e!x!t! !=! !(!i!s!S!u!p! !?! !"!ح!م!ا!ی!ت!"! !:! !"!م!ق!ا!و!م!ت!"!)! !+! !"! !"! !+! !s!t!r!.!t!o!s!t!r!i!n!g!(!t!o!u!c!h!e!s!)!
+! ! ! ! ! ! ! ! ! ! ! ! !l!a!b!e!l!.!n!e!w!(!b!a!r!_!i!n!d!e!x! !+! !5!,! !l!v!l!,! !l!a!b!e!l!T!e!x!t!,! !
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !c!o!l!o!r!=!c!o!l!o!r!.!n!e!w!(!c!l!r!,! !2!0!)!,! !t!e!x!t!c!o!l!o!r!=!c!o!l!o!r!.!w!h!i!t!e!,! !
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !s!t!y!l!e!=!i!s!S!u!p! !?! !l!a!b!e!l!.!s!t!y!l!e!_!l!a!b!e!l!_!l!e!f!t! !:! !l!a!b!e!l!.!s!t!y!l!e!_!l!a!b!e!l!_!r!i!g!h!t!,! !
+! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !s!i!z!e!=!s!i!z!e!.!t!i!n!y!)!
+! ! ! ! ! ! ! ! ! ! ! ! !
+! ! ! ! ! ! ! ! ! ! ! ! !d!r!a!w!n! !+!=! !1!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !آ!ل!ا!ر!م!!ه!ا!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!a!l!e!r!t!c!o!n!d!i!t!i!o!n!(!b!E!,! !"!S!P!2!L! !B!u!y! !S!i!g!n!a!l!"!,! !"!! !S!P!2!L!:! !س!ی!گ!ن!ا!ل! !خ!ر!ی!د! !ف!ع!ا!ل!!!"!)!
+!a!l!e!r!t!c!o!n!d!i!t!i!o!n!(!s!E!,! !"!S!P!2!L! !S!e!l!l! !S!i!g!n!a!l!"!,! !"!! !S!P!2!L!:! !س!ی!گ!ن!ا!ل! !ف!ر!و!ش! !ف!ع!ا!ل!!!"!)!
+!a!l!e!r!t!c!o!n!d!i!t!i!o!n!(!b!S!p!k!,! !"!S!P!2!L! !B!u!l!l! !S!p!i!k!e!"!,! !"!*! !S!P!2!L!:! !ا!س!پ!ا!ی!ک! !ص!ع!و!د!ی! !ش!ن!ا!س!ا!ی!ی! !ش!د!"!)!
+!a!l!e!r!t!c!o!n!d!i!t!i!o!n!(!s!S!p!k!,! !"!S!P!2!L! !B!e!a!r! !S!p!i!k!e!"!,! !"!*! !S!P!2!L!:! !ا!س!پ!ا!ی!ک! !ن!ز!و!ل!ی! !ش!ن!ا!س!ا!ی!ی! !ش!د!"!)!
+!a!l!e!r!t!c!o!n!d!i!t!i!o!n!(!b!B!O!S! !o!r! !b!C!H!o!C!H!,! !"!S!t!r!u!c!t!u!r!e! !B!u!l!l!"!,! !"!!! !س!ا!خ!ت!ا!ر! !ص!ع!و!د!ی! !(!B!O!S!/!C!H!o!C!H!↑!)!"!)!
+!a!l!e!r!t!c!o!n!d!i!t!i!o!n!(!s!B!O!S! !o!r! !s!C!H!o!C!H!,! !"!S!t!r!u!c!t!u!r!e! !B!e!a!r!"!,! !"!!! !س!ا!خ!ت!ا!ر! !ن!ز!و!ل!ی! !(!B!O!S!/!C!H!o!C!H!↓!)!"!)!
+!a!l!e!r!t!c!o!n!d!i!t!i!o!n!(!t!1!h! !a!n!d! !n!o!t! !t!1!h![!1!]!,! !"!T!P!1! !H!i!t!"!,! !"!!! !S!P!2!L!:! !ه!د!ف! !ا!و!ل! !ل!م!س! !ش!د!!!"!)!
+!a!l!e!r!t!c!o!n!d!i!t!i!o!n!(!s!E!n!t! !a!n!d! !n!o!t! !s!E!n!t![!1!]!,! !"!S!e!c!o!n!d!a!r!y! !E!n!t!r!y!"!,! !"!!! !S!P!2!L!:! !و!ر!و!د! !د!و!م! !ف!ع!ا!ل!!!"!)!
+!a!l!e!r!t!c!o!n!d!i!t!i!o!n!(!e!x!p!i!r!e!d!,! !"!S!i!g!n!a!l! !E!x!p!i!r!e!d!"!,! !"!!! !S!P!2!L!:! !س!ی!گ!ن!ا!ل! !م!ن!ق!ض!ی! !ش!د!"!)!
+!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!/!/! ! !پ!ا!ی!ا!ن! !-! !S!P!2!L! !P!o!u!r! !S!a!m!a!d!i! !S!t!r!a!t!e!g!y! !V!5! !F!I!N!A!L!
+!/!/! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
