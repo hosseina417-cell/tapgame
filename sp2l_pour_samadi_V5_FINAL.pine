@@ -1032,67 +1032,63 @@ if showTrend and barstate.islast
 
 // ===== AUTO SUPPORT/RESISTANCE =====
 if showSR and barstate.islast
-    var float[] srLvl = array.new_float(0)
-    var int[] srTch = array.new_int(0)
-    var bool[] srSup = array.new_bool(0)
-    array.clear(srLvl)
-    array.clear(srTch)
-    array.clear(srSup)
-    for i = 0 to 100
-        if not na(swH[i])
-            array.push(srLvl, swH[i])
-            array.push(srTch, 1)
-            array.push(srSup, false)
-        if not na(swL[i])
-            array.push(srLvl, swL[i])
-            array.push(srTch, 1)
-            array.push(srSup, true)
-    var bool[] srKeep = array.new_bool(0)
-    array.clear(srKeep)
-    for k = 0 to array.size(srLvl) - 1
-        array.push(srKeep, true)
-    sz = array.size(srLvl)
-    for i = 0 to sz - 1
-        if not array.get(srKeep, i)
-            continue
-        for j = i + 1 to sz - 1
-            if not array.get(srKeep, j)
-                continue
-            dist = math.abs(array.get(srLvl, i) - array.get(srLvl, j))
-            if dist < atr14 * 0.3
-                array.set(srKeep, j, false)
-                array.set(srTch, i, array.get(srTch, i) + array.get(srTch, j))
-    var float[] srLvl2 = array.new_float(0)
-    var int[] srTch2 = array.new_int(0)
-    var bool[] srSup2 = array.new_bool(0)
-    array.clear(srLvl2)
-    array.clear(srTch2)
-    array.clear(srSup2)
-    for i = 0 to array.size(srLvl) - 1
-        if array.get(srKeep, i)
-            array.push(srLvl2, array.get(srLvl, i))
-            array.push(srTch2, array.get(srTch, i))
-            array.push(srSup2, array.get(srSup, i))
+    var line[] srLines = array.new_line(0)
+    var label[] srLabels = array.new_label(0)
+    for x = 0 to array.size(srLines) - 1
+        if x < array.size(srLines)
+            line.delete(array.get(srLines, x))
+    for x = 0 to array.size(srLabels) - 1
+        if x < array.size(srLabels)
+            label.delete(array.get(srLabels, x))
+    array.clear(srLines)
+    array.clear(srLabels)
+    maxLevels = 6
     drawn = 0
-    for i = 0 to array.size(srLvl2) - 1
-        if drawn >= 6
+    for i = 0 to 100
+        if drawn >= maxLevels
             break
-        if array.get(srTch2, i) >= srTouch
-            lvl = array.get(srLvl2, i)
-            touches = array.get(srTch2, i)
-            isSup = array.get(srSup2, i)
-            clr = isSup ? #00e676 : #ff1744
-            line.new(bar_index - 100, lvl, bar_index + 20, lvl,
-                 color=color.new(clr, 60),
-                 width=1,
-                 style=line.style_dashed)
-            labelText = (isSup ? "حمایت" : "مقاومت") + " " + str.tostring(touches)
-            label.new(bar_index + 5, lvl, labelText,
-                 color=color.new(clr, 20),
-                 textcolor=color.white,
-                 style=isSup ? label.style_label_left : label.style_label_right,
-                 size=size.tiny)
-            drawn += 1
+        if not na(swH[i])
+            level = swH[i]
+            touches = 1
+            for j = 0 to 100
+                if j != i and not na(swH[j])
+                    if math.abs(swH[j] - level) < atr14 * 0.3
+                        touches += 1
+            if touches >= srTouch
+                line.new(bar_index - 100, level, bar_index + 20, level,
+                     color=color.new(#ff1744, 60),
+                     width=1,
+                     style=line.style_dashed)
+                label.new(bar_index + 5, level,
+                     "مقاومت " + str.tostring(touches),
+                     color=color.new(#ff1744, 20),
+                     textcolor=color.white,
+                     style=label.style_label_right,
+                     size=size.tiny)
+                drawn += 1
+    drawn = 0
+    for i = 0 to 100
+        if drawn >= maxLevels
+            break
+        if not na(swL[i])
+            level = swL[i]
+            touches = 1
+            for j = 0 to 100
+                if j != i and not na(swL[j])
+                    if math.abs(swL[j] - level) < atr14 * 0.3
+                        touches += 1
+            if touches >= srTouch
+                line.new(bar_index - 100, level, bar_index + 20, level,
+                     color=color.new(#00e676, 60),
+                     width=1,
+                     style=line.style_dashed)
+                label.new(bar_index + 5, level,
+                     "حمایت " + str.tostring(touches),
+                     color=color.new(#00e676, 20),
+                     textcolor=color.white,
+                     style=label.style_label_left,
+                     size=size.tiny)
+                drawn += 1
 
 // ===== ALERTS =====
 alertcondition(bE, "SP2L Buy", "SP2L: Buy Signal Active!")
