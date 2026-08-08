@@ -1,22 +1,20 @@
-// SP2L Pour Samadi Strategy V5 FINAL
+// SP2L Pour Samadi Strategy V5 FINAL - Persian Dashboard
 // Mohammad Ali Pour Samadi Spike 2 Leg Method
-// Optimized for Crypto Markets
 
 //@version=5
 indicator("SP2L Pour Samadi V5 FINAL", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
 // ===== SETTINGS =====
-
 g1 = "=== Spike ==="
 minSpk = input.int(3, "Min Spike Bars", 2, 10, group=g1)
 useMom = input.bool(true, "Momentum Filter", group=g1)
-momLvl = input.int(2, "Power Level (1-5)", 1, 5, group=g1)
+momLvl = input.int(2, "Power Level", 1, 5, group=g1)
 
 g2 = "=== FVG ==="
 useFVG = input.bool(true, "FVG Filter", group=g2)
 fvgType = input.string("Significant", "Type", ["All", "Significant", "Structural", "Major"], group=g2)
-fvgLife = input.int(20, "FVG Life (bars)", 5, 50, group=g2)
-mergeFVG = input.bool(true, "Merge Overlapping FVGs", group=g2)
+fvgLife = input.int(20, "FVG Life", 5, 50, group=g2)
+mergeFVG = input.bool(true, "Merge FVGs", group=g2)
 
 g3 = "=== Doji ==="
 useDj = input.bool(true, "Doji Filter", group=g3)
@@ -30,7 +28,7 @@ useOB = input.bool(true, "Order Block", group=g4)
 
 g5 = "=== Entry ==="
 eMode = input.string("Aggressive", "Mode", ["Aggressive", "Moderate", "Defensive"], group=g5)
-sigBars = input.int(10, "Signal Validity Bars", 3, 25, group=g5)
+sigBars = input.int(10, "Signal Validity", 3, 25, group=g5)
 secEntry = input.bool(true, "Secondary Entry", group=g5)
 secDepth = input.float(50.0, "2nd Entry Depth %", 10, 80, 5, group=g5) / 100
 coolBars = input.int(3, "Cooldown", 1, 10, group=g5)
@@ -42,18 +40,18 @@ rr1 = input.float(1.0, "R:R Target 1", 0.5, 5.0, 0.5, group=g6)
 rr2 = input.float(2.0, "R:R Target 2", 1.0, 5.0, 0.5, group=g6)
 useTrail = input.bool(true, "Trailing Stop", group=g6)
 trR = input.float(0.5, "Trail Distance (R)", 0.2, 2.0, 0.1, group=g6)
-riskPerTrade = input.float(1.0, "Risk Per Trade %", 0.5, 5.0, 0.5, group=g6) / 100
+riskPerTrade = input.float(1.0, "Risk %", 0.5, 5.0, 0.5, group=g6) / 100
 
 g7 = "=== Volume & RSI ==="
 useVol = input.bool(true, "Volume Filter", group=g7)
 vMul = input.float(1.2, "Volume Multiplier", 1.0, 3.0, 0.1, group=g7)
-vLen = input.int(20, "Volume Avg Length", 5, 50, group=g7)
+vLen = input.int(20, "Volume Avg", 5, 50, group=g7)
 useRSI = input.bool(true, "RSI Confirm", group=g7)
 rsiL = input.int(14, "RSI Period", 5, 30, group=g7)
 rsiHi = input.float(70.0, "Overbought", 60, 90, group=g7)
 rsiLo = input.float(30.0, "Oversold", 10, 40, group=g7)
 
-g8 = "=== Multi-Timeframe ==="
+g8 = "=== Multi-TF ==="
 useMTF = input.bool(true, "HTF Confirm", group=g8)
 htfTF = input.timeframe("60", "Higher TF", group=g8)
 
@@ -333,12 +331,7 @@ hasFVGInSpike(dir) =>
         found
 
 chkFVG(dir) => hasFVGInSpike(dir)
-
-chkRSI(dir) =>
-    if not useRSI
-        true
-    else
-        dir == 1 ? rsiVal < rsiHi : rsiVal > rsiLo
+chkRSI(dir) => not useRSI ? true : dir == 1 ? rsiVal < rsiHi : rsiVal > rsiLo
 
 findOrg(dir) =>
     cnt = dir == 1 ? cntB() : cntS()
@@ -367,18 +360,14 @@ var int trk = 0
 var float cHL = na
 var float cLH = na
 var int trkB = na
-var float orgB = na
-var float orgS = na
 if bSpk
     trk := 1
     cHL := low
     trkB := bar_index
-    orgB := bOrg
 if sSpk
     trk := 2
     cLH := high
     trkB := bar_index
-    orgS := sOrg
 if trk == 1
     if low > cHL
         cHL := low
@@ -678,7 +667,7 @@ wR = tot > 0 ? win / tot * 100 : 0.0
 pf = los > 0 ? win / los : win > 0 ? 99.0 : 0.0
 optRisk = wR > 0 and rr1 > 0 ? (wR / 100) * rr1 : riskPerTrade
 
-// ===== DASHBOARD =====
+// ===== DASHBOARD (PERSIAN) =====
 if showDash and barstate.islast
     var table d = table.new(position.top_right, 2, 18,
          bgcolor=color.new(#0d1117, 5),
@@ -695,19 +684,19 @@ if showDash and barstate.islast
          text_size=size.normal,
          bgcolor=bg)
     rw += 1
-    table.cell(d, 0, rw, "Structure:",
+    table.cell(d, 0, rw, "ساختار:",
          text_color=#c9d1d9,
          text_size=size.small)
-    stLabel = bias == 1 ? "Bullish" : bias == -1 ? "Bearish" : "Neutral"
+    stLabel = bias == 1 ? "صعودی" : bias == -1 ? "نزولی" : "خنثی"
     stColor = bias == 1 ? #00e676 : bias == -1 ? #ff1744 : #888888
     table.cell(d, 1, rw, stLabel,
          text_color=stColor,
          text_size=size.small)
     rw += 1
-    table.cell(d, 0, rw, "Higher TF:",
+    table.cell(d, 0, rw, "روند بالا:",
          text_color=#c9d1d9,
          text_size=size.small)
-    htfLabel = htfUp ? "Bullish" : htfDn ? "Bearish" : "Neutral"
+    htfLabel = htfUp ? "صعودی" : htfDn ? "نزولی" : "خنثی"
     htfColor = htfUp ? #00e676 : htfDn ? #ff1744 : #888888
     table.cell(d, 1, rw, htfLabel,
          text_color=htfColor,
@@ -716,15 +705,15 @@ if showDash and barstate.islast
     table.cell(d, 0, rw, "FVG:",
          text_color=#c9d1d9,
          text_size=size.small)
-    fvgLabel = str.tostring(nBFVG) + " up / " + str.tostring(nSFVG) + " down"
+    fvgLabel = str.tostring(nBFVG) + " ↑ / " + str.tostring(nSFVG) + " ↓"
     table.cell(d, 1, rw, fvgLabel,
          text_color=#58a6ff,
          text_size=size.small)
     rw += 1
-    table.cell(d, 0, rw, "Volume:",
+    table.cell(d, 0, rw, "حجم:",
          text_color=#c9d1d9,
          text_size=size.small)
-    volLabel = volume > avgVol * vMul ? "High" : volume > avgVol ? "Medium" : "Low"
+    volLabel = volume > avgVol * vMul ? "بالا" : volume > avgVol ? "متوسط" : "کم"
     volColor = volume > avgVol * vMul ? #00e676 : volume > avgVol ? #ffa726 : #888888
     table.cell(d, 1, rw, volLabel,
          text_color=volColor,
@@ -747,22 +736,22 @@ if showDash and barstate.islast
         table.cell(d, 0, rw, "Kill Zone:",
              text_color=#c9d1d9,
              text_size=size.small)
-        kzLabel = inKZ ? "Active" : "Outside"
+        kzLabel = inKZ ? "فعال" : "خارج"
         kzColor = inKZ ? #00e676 : #888888
         table.cell(d, 1, rw, kzLabel,
              text_color=kzColor,
              text_size=size.small)
         rw += 1
-    table.cell(d, 0, rw, "Status:",
+    table.cell(d, 0, rw, "وضعیت:",
          text_color=#c9d1d9,
          text_size=size.small)
-    statusLabel = st == 1 ? "Setup Long" : st == 2 ? "Setup Short" : st == 3 ? "LONG" : st == 4 ? "SHORT" : "Idle"
+    statusLabel = st == 1 ? "ستاپ خرید" : st == 2 ? "ستاپ فروش" : st == 3 ? "خرید" : st == 4 ? "فروش" : "آزاد"
     statusColor = st >= 3 ? #00e676 : st >= 1 ? #ffa726 : #888888
     table.cell(d, 1, rw, statusLabel,
          text_color=statusColor,
          text_size=size.small)
     rw += 1
-    table.cell(d, 0, rw, "Score:",
+    table.cell(d, 0, rw, "امتیاز:",
          text_color=#c9d1d9,
          text_size=size.small)
     scoreLabel = str.tostring(math.round(cS)) + "/10"
@@ -772,14 +761,14 @@ if showDash and barstate.islast
          text_size=size.small)
     rw += 1
     if st >= 3
-        table.cell(d, 0, rw, "Entry:",
+        table.cell(d, 0, rw, "ورود:",
              text_color=#c9d1d9,
              text_size=size.small)
         table.cell(d, 1, rw, str.tostring(ent, "#.####"),
              text_color=#2196F3,
              text_size=size.small)
         rw += 1
-        table.cell(d, 0, rw, "Stop Loss:",
+        table.cell(d, 0, rw, "حد ضرر:",
              text_color=#c9d1d9,
              text_size=size.small)
         sATR = not na(slp) and not na(ent) ? math.abs(ent - slp) / atr14 : 0
@@ -788,7 +777,7 @@ if showDash and barstate.islast
              text_color=#F44336,
              text_size=size.small)
         rw += 1
-        table.cell(d, 0, rw, "Target 1:",
+        table.cell(d, 0, rw, "هدف ۱:",
              text_color=#c9d1d9,
              text_size=size.small)
         tp1Label = str.tostring(tp1, "#.####")
@@ -801,7 +790,7 @@ if showDash and barstate.islast
              text_color=tp1Color,
              text_size=size.small)
         rw += 1
-        table.cell(d, 0, rw, "Target 2:",
+        table.cell(d, 0, rw, "هدف :",
              text_color=#c9d1d9,
              text_size=size.small)
         table.cell(d, 1, rw, str.tostring(tp2, "#.####"),
@@ -809,14 +798,14 @@ if showDash and barstate.islast
              text_size=size.small)
         rw += 1
         if t1h and not na(tSL)
-            table.cell(d, 0, rw, "Trailing:",
+            table.cell(d, 0, rw, "تریلینگ:",
                  text_color=#c9d1d9,
                  text_size=size.small)
             table.cell(d, 1, rw, str.tostring(tSL, "#.####"),
                  text_color=#FFEB3B,
                  text_size=size.small)
             rw += 1
-        table.cell(d, 0, rw, "P&L:",
+        table.cell(d, 0, rw, "سود/ضرر:",
              text_color=#c9d1d9,
              text_size=size.small)
         upSign = unrealPnL > 0 ? "+" : ""
@@ -826,14 +815,14 @@ if showDash and barstate.islast
              text_color=pnlColor,
              text_size=size.small)
         rw += 1
-    table.cell(d, 0, rw, "=== STATS ===",
+    table.cell(d, 0, rw, "=== آمار ===",
          text_color=#ffd700,
          text_size=size.small,
          bgcolor=bg)
     table.cell(d, 1, rw, "",
          bgcolor=bg)
     rw += 1
-    table.cell(d, 0, rw, "Trades:",
+    table.cell(d, 0, rw, "معاملات:",
          text_color=#c9d1d9,
          text_size=size.small)
     tradesLabel = str.tostring(tot) + " (" + str.tostring(win) + "W/" + str.tostring(los) + "L)"
@@ -841,7 +830,7 @@ if showDash and barstate.islast
          text_color=#58a6ff,
          text_size=size.small)
     rw += 1
-    table.cell(d, 0, rw, "Win Rate:",
+    table.cell(d, 0, rw, "وین ریت:",
          text_color=#c9d1d9,
          text_size=size.small)
     wrLabel = str.tostring(math.round(wR, 1)) + "%"
@@ -850,7 +839,7 @@ if showDash and barstate.islast
          text_color=wrColor,
          text_size=size.small)
     rw += 1
-    table.cell(d, 0, rw, "Profit Factor:",
+    table.cell(d, 0, rw, "ضریب سود:",
          text_color=#c9d1d9,
          text_size=size.small)
     pfLabel = str.tostring(math.round(pf, 2))
@@ -859,7 +848,7 @@ if showDash and barstate.islast
          text_color=pfColor,
          text_size=size.small)
     rw += 1
-    table.cell(d, 0, rw, "Max Drawdown:",
+    table.cell(d, 0, rw, "حداکثر ضرر:",
          text_color=#c9d1d9,
          text_size=size.small)
     table.cell(d, 1, rw, str.tostring(math.round(mDD, 4)),
@@ -867,15 +856,15 @@ if showDash and barstate.islast
          text_size=size.small)
     rw += 1
     if maxCL >= 3
-        table.cell(d, 0, rw, "WARNING:",
+        table.cell(d, 0, rw, "هشدار:",
              text_color=#ff1744,
              text_size=size.small)
-        warnLabel = str.tostring(maxCL) + " losses in row!"
+        warnLabel = str.tostring(maxCL) + " ضرر متوالی!"
         table.cell(d, 1, rw, warnLabel,
              text_color=#ff1744,
              text_size=size.small)
         rw += 1
-    table.cell(d, 0, rw, "Risk Suggest:",
+    table.cell(d, 0, rw, "ریسک پیشنهادی:",
          text_color=#c9d1d9,
          text_size=size.small)
     riskLabel = str.tostring(math.round(optRisk * 100, 1)) + "%"
@@ -883,46 +872,46 @@ if showDash and barstate.islast
          text_color=#ffd700,
          text_size=size.small)
 
-// ===== SMART GUIDE =====
+// ===== SMART GUIDE (PERSIAN) =====
 if showGuide and barstate.islast
     var table g = table.new(position.bottom_right, 2, 8,
          bgcolor=color.new(#1a1a2e, 20),
          border_width=1,
          border_color=#30363d)
     gb = #16213e
-    table.cell(g, 0, 0, "SMART GUIDE",
+    table.cell(g, 0, 0, "راهنمای هوشمند",
          text_color=#ffd700,
          text_size=size.small,
          bgcolor=gb)
     table.cell(g, 1, 0, "",
          bgcolor=gb)
-    table.cell(g, 0, 1, "Action:",
+    table.cell(g, 0, 1, "پیشنهاد:",
          text_color=#c9d1d9,
          text_size=size.tiny)
-    act = "WAIT"
+    act = "صبر"
     actC = #888888
     if st == 3
-        act := "BUY NOW"
+        act := "الان بخر"
         actC := #00e676
     else if st == 4
-        act := "SELL NOW"
+        act := "الان بفروش"
         actC := #ff1744
     else if st == 1
-        act := "Ready Buy"
+        act := "آماده خرید"
         actC := #ffa726
     else if st == 2
-        act := "Ready Sell"
+        act := "آماده فروش"
         actC := #ffa726
     else if bias == 1 and htfUp
-        act := "Wait for Buy"
+        act := "منتظر خرید"
         actC := #58a6ff
     else if bias == -1 and htfDn
-        act := "Wait for Sell"
+        act := "منتظر فروش"
         actC := #58a6ff
     table.cell(g, 1, 1, act,
          text_color=actC,
          text_size=size.tiny)
-    table.cell(g, 0, 2, "Score:",
+    table.cell(g, 0, 2, "امتیاز:",
          text_color=#c9d1d9,
          text_size=size.tiny)
     scoreG = str.tostring(math.round(cS)) + "/10"
@@ -930,36 +919,36 @@ if showGuide and barstate.islast
     table.cell(g, 1, 2, scoreG,
          text_color=scoreGC,
          text_size=size.tiny)
-    table.cell(g, 0, 3, "Why:",
+    table.cell(g, 0, 3, "دلیل:",
          text_color=#c9d1d9,
          text_size=size.tiny)
-    why = "No signal yet"
+    why = "هنوز سیگنال نیست"
     if st >= 3
-        why := "Signal active"
+        why := "سیگنال فعال"
     else if cS < minC
-        why := "Score too low"
+        why := "امتیاز کمه"
     table.cell(g, 1, 3, why,
          text_color=#c9d1d9,
          text_size=size.tiny)
-    table.cell(g, 0, 4, "Levels:",
+    table.cell(g, 0, 4, "سطوح:",
          text_color=#c9d1d9,
          text_size=size.tiny)
-    lvls = "No position"
+    lvls = "بدون پوزیشن"
     if st >= 3 and not na(ent)
         lvls := "E:" + str.tostring(ent, "#.##") + " SL:" + str.tostring(slp, "#.##")
     table.cell(g, 1, 4, lvls,
          text_color=#58a6ff,
          text_size=size.tiny)
-    table.cell(g, 0, 5, "Strengths:",
+    table.cell(g, 0, 5, "نقاط قوت:",
          text_color=#c9d1d9,
          text_size=size.tiny)
-    str1 = "None"
+    str1 = "ندارد"
     if bias > 0
-        str1 := "UpTrend"
+        str1 := "روند صعودی"
     if htfUp
-        str1 := str1 + ",HTF-Up"
+        str1 := str1 + "،روندبالاصعودی"
     if nBFVG > 0
-        str1 := str1 + ",FVG"
+        str1 := str1 + "،FVG"
     table.cell(g, 1, 5, str1,
          text_color=#00e676,
          text_size=size.tiny)
@@ -975,7 +964,7 @@ if showGuide and barstate.islast
     table.cell(g, 1, 6, rsiT,
          text_color=rsiTC,
          text_size=size.tiny)
-    table.cell(g, 0, 7, "Risk:",
+    table.cell(g, 0, 7, "ریسک:",
          text_color=#c9d1d9,
          text_size=size.tiny)
     rsk = str.tostring(math.round(optRisk * 100, 1)) + "%"
@@ -1024,7 +1013,7 @@ if showTrend and barstate.islast
         uptrendLine := line.new(upB2, upV2, bar_index + futureBars, upV1 + slope * futureBars,
              color=color.new(#00e676, 40),
              width=2)
-        upLabel := label.new(upB1, upV1, "TL-Up",
+        upLabel := label.new(upB1, upV1, "روندبالا",
              color=color.new(#00e676, 30),
              textcolor=color.white,
              style=label.style_label_up,
@@ -1035,7 +1024,7 @@ if showTrend and barstate.islast
         downtrendLine := line.new(dnB2, dnV2, bar_index + futureBars, dnV1 + slope * futureBars,
              color=color.new(#ff1744, 40),
              width=2)
-        dnLabel := label.new(dnB1, dnV1, "TL-Dn",
+        dnLabel := label.new(dnB1, dnV1, "روندپایین",
              color=color.new(#ff1744, 30),
              textcolor=color.white,
              style=label.style_label_down,
@@ -1097,7 +1086,7 @@ if showSR and barstate.islast
                  color=color.new(clr, 60),
                  width=1,
                  style=line.style_dashed)
-            labelText = (isSup ? "Support" : "Resistance") + " " + str.tostring(touches)
+            labelText = (isSup ? "حمایت" : "مقاومت") + " " + str.tostring(touches)
             label.new(bar_index + 5, lvl, labelText,
                  color=color.new(clr, 20),
                  textcolor=color.white,
