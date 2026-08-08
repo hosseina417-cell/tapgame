@@ -981,7 +981,8 @@ if showGuide and barstate.islast
         alertText := "🔥 سیگنال قوی!"
     else
         alertText := "بدون هشدار ✓"
-    table.cell(guide, 1, 9, alertText, text_color=alertText == "بدون هشدار ✓" or alertText == "🔥 سیگنال قوی!" ? #00e676 : #ff1744, text_size=size.tiny)
+    alertClr = alertText == "بدون هشدار ✓" or alertText == " سیگنال قوی!" ? #00e676 : #ff1744
+    table.cell(guide, 1, 9, alertText, text_color=alertClr, text_size=size.tiny)
     
     // ── نکته طلایی ──
     table.cell(guide, 0, 10, "💎 نکته:", text_color=#ffd700, text_size=size.tiny)
