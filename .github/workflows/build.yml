@@ -41,7 +41,7 @@ jobs:
       - name: Debug log to issue (on failure)
         if: failure()
         run: |
-          tail -c 4000 /tmp/build.log > /tmp/debug_body.txt 2>/dev/null || echo "no build.log" > /tmp/debug_body.txt
+          tail -c 30000 /tmp/build.log > /tmp/debug_body.txt 2>/dev/null || echo "no build.log" > /tmp/debug_body.txt
           gh issue create --title "APK build debug" --body-file /tmp/debug_body.txt || true
         env:
           GH_TOKEN: ${{ github.token }}
