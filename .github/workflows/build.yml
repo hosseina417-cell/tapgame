@@ -1,37 +1,39 @@
 name: Build Android APK
 
-# این فایل به‌صورت خودکار APK می‌سازه
 on:
-  # وقتی فایل‌ها رو آپلود/تغییر بدید، خودش اجرا می‌شه
   push:
-    branches: [ main, master ]
-  # می‌تونید دستی هم اجرا کنید
+    branches: [ main, master, arena/01a00015-tapgame ]
   workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
 
 jobs:
   build:
-    name: ساخت APK
     runs-on: ubuntu-latest
-
     steps:
-      # مرحله ۱: گرفتن کد
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # مرحله ۲: نصب پیش‌نیازها
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev build-essential ccache
-          pip install buildozer cython==0.29.36
-
-      # مرحله ۳: ساخت APK (حدود ۱۵-۳۰ دقیقه)
       - name: Build with Buildozer
-        run: buildozer android debug
+        uses: ArtemSBulgakov/buildozer-action@v1
+        with:
+          android-api-level: "33"
+          command: android debug
 
-      # مرحله ۴: آماده کردن فایل برای دانلود
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tapgame-apk
+          name: arbitrage-apk
           path: bin/*.apk
+          if-no-files-found: error
+
+      - name: Debug log on failure
+        if: failure()
+        run: |
+          LOG=$(cat .buildozer/buildozer.log 2>/dev/null || echo "no buildozer.log")
+          echo "$LOG" | head -c 3000 > /tmp/d.txt
+          gh issue create --title "APK build failed" --body-file /tmp/d.txt || true
+        env:
+          GH_TOKEN: ${{ github.token }}
