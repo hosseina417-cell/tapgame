@@ -7,8 +7,8 @@ on:
 
 permissions:
   contents: read
-  actions: read
-  issues: write
+  actions: write
+  gists: write
 
 jobs:
   build:
@@ -16,24 +16,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev build-essential ccache
+          pip install --break-system-packages buildozer "cython==0.29.36"
+
+      - name: Set JAVA_HOME
+        run: echo "JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))" >> "$GITHUB_ENV"
+
       - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        with:
-          android-api-level: "33"
-          command: android debug
+        run: |
+          set -o pipefail
+          buildozer android debug 2>&1 | tee /tmp/build.log
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: arbitrage-apk
           path: bin/*.apk
           if-no-files-found: error
 
-      - name: Debug log on failure
+      - name: Debug log to gist (on failure)
         if: failure()
         run: |
-          LOG=$(cat .buildozer/buildozer.log 2>/dev/null || echo "no buildozer.log")
-          echo "$LOG" | head -c 3000 > /tmp/d.txt
-          gh issue create --title "APK build failed" --body-file /tmp/d.txt || true
-        env:
-          GH_TOKEN: ${{ github.token }}
+          python3 - <<'PY'
+import json
+try:
+    log = open('/tmp/build.log', encoding='utf-8', errors='replace').read()[-6000:]
+except Exception as e:
+    log = "no build.log: %s" % e
+json.dump({"public": True, "files": {"build_log": {"content": log}}}, open('/tmp/gist.json','w'))
+PY
+          curl -s -X POST -H "Authorization: Bearer ${{ github.token }}" -H "Accept: application/vnd.github+json" -d @/tmp/gist.json https://api.github.com/gists | tee /tmp/gistresp.json
+          echo "GIST_ID=$(python3 -c "import json;print(json.load(open('/tmp/gistresp.json')).get('id','?'))")"
