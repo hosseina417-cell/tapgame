@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>یابنده کانفیگ V2RayNG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="bg"></div>
+  <header>
+    <div class="brand">
+      <span class="logo">⚡</span>
+      <div>
+        <h1>یابنده کانفیگ V2RayNG</h1>
+        <p>جمع‌آوری لینک‌های عمومی اشتراک از چند منبع متن‌باز</p>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="refreshBtn" class="btn primary">بروزرسانی</button>
+      <button id="copyAllBtn" class="btn">کپی همه فیلترشده</button>
+    </div>
+  </header>
+
+  <section class="stats" id="stats"></section>
+
+  <section class="filters">
+    <input id="search" type="search" placeholder="جستجو در نام، میزبان یا کشور…" />
+    <select id="proto">
+      <option value="">همه پروتکل‌ها</option>
+      <option value="vless">VLESS</option>
+      <option value="vmess">VMess</option>
+      <option value="trojan">Trojan</option>
+      <option value="ss">Shadowsocks</option>
+      <option value="hysteria2">Hysteria2</option>
+    </select>
+    <select id="source">
+      <option value="">همه منابع</option>
+    </select>
+  </section>
+
+  <p class="hint">
+    این برنامه فقط لینک‌های عمومی منتشرشده در مخازن متن‌باز را نمایش می‌دهد.
+    کیفیت و امنیت سرورها تضمین نمی‌شود. قبل از استفاده در V2RayNG لینک را بررسی کنید.
+  </p>
+
+  <main id="list" class="list"></main>
+  <footer>نسخه ۵ — فقط منابع عمومی · مناسب کپی در V2RayNG</footer>
+  <script src="./app.js"></script>
+</body>
+</html>
