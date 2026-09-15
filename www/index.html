@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5">
+<meta name="theme-color" content="#0b0f14">
+<meta name="color-scheme" content="dark">
+<title>دفترچهٔ ایرادات خودرو</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<header>
+  <div class="topbar">
+    <div>
+      <h1>دفترچهٔ ایرادات خودرو</h1>
+      <div class="sub" id="today-label">—</div>
+    </div>
+    <div class="sub" id="storage-warning" role="status"></div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ===== داشبورد ===== -->
+  <section class="screen active" id="screen-dashboard" aria-labelledby="h-dashboard">
+    <h2 id="h-dashboard" class="sr-only">داشبورد</h2>
+    <div class="tiles" id="stat-tiles"></div>
+    <div id="attention-list"></div>
+    <div id="service-reminders"></div>
+  </section>
+
+  <!-- ===== ایرادات ===== -->
+  <section class="screen" id="screen-defects" aria-labelledby="h-defects">
+    <h2 id="h-defects" class="sr-only">ایرادات</h2>
+    <label class="field">
+      <span class="sr-only">جستجو</span>
+      <input type="search" id="search-input" placeholder="جستجو در عنوان، توضیحات، دسته…" autocomplete="off" inputmode="search">
+    </label>
+    <div class="chips" id="filter-chips"></div>
+    <div class="row wrap" style="gap:6px;margin-bottom:10px">
+      <select id="filter-vehicle" aria-label="فیلتر خودرو" style="flex:2;min-width:130px"></select>
+      <select id="filter-sort" aria-label="مرتب‌سازی" style="flex:1;min-width:110px"></select>
+    </div>
+    <div id="defect-list"></div>
+  </section>
+
+  <!-- ===== خودروها ===== -->
+  <section class="screen" id="screen-vehicles" aria-labelledby="h-vehicles">
+    <h2 id="h-vehicles" class="sr-only">خودروها</h2>
+    <div id="vehicle-list"></div>
+  </section>
+
+  <!-- ===== سرویس ===== -->
+  <section class="screen" id="screen-service" aria-labelledby="h-service">
+    <h2 id="h-service" class="sr-only">یادآوری سرویس</h2>
+    <div id="service-list"></div>
+  </section>
+
+  <!-- ===== داده‌ها ===== -->
+  <section class="screen" id="screen-data" aria-labelledby="h-data">
+    <h2 id="h-data" class="sr-only">داده‌ها و تنظیمات</h2>
+
+    <div class="section-title">پشتیبان‌گیری</div>
+    <div class="card stack">
+      <div class="sub">نسخهٔ پشتیبان شامل همهٔ خودروها و ایرادهاست. آن را جایی امن نگه دارید.</div>
+      <div class="btn-row">
+        <button class="btn ghost small" data-action="backup-show">نمایش پشتیبان</button>
+        <button class="btn ghost small" data-action="backup-copy">رونوشت</button>
+        <button class="btn ghost small" data-action="backup-download">دانلود فایل</button>
+      </div>
+      <textarea id="backup-text" placeholder="متن پشتیبان اینجا نمایش داده می‌شود" spellcheck="false"></textarea>
+    </div>
+
+    <div class="section-title">بازیابی</div>
+    <div class="card stack">
+      <div class="sub">متن پشتیبان را اینجا بچسبانید و یکی از دو حالت را انتخاب کنید.</div>
+      <textarea id="import-text" placeholder="متن پشتیبان را اینجا بچسبانید" spellcheck="false"></textarea>
+      <label class="field" style="margin:0">
+        <span>یا انتخاب فایل پشتیبان</span>
+        <input type="file" id="import-file" accept=".json,application/json,text/plain" style="padding:8px">
+      </label>
+      <div class="btn-row">
+        <button class="btn ghost small" data-action="import-merge">ادغام</button>
+        <button class="btn danger small" data-action="import-replace">جایگزینی کامل</button>
+      </div>
+    </div>
+
+    <div class="section-title">خروجی جدولی</div>
+    <div class="card stack">
+      <div class="sub">فهرست ایرادها به صورت CSV (برای اکسل) ساخته می‌شود و در کادر زیر قرار می‌گیرد.</div>
+      <div class="btn-row">
+        <button class="btn ghost small" data-action="csv-show">ساخت CSV</button>
+        <button class="btn ghost small" data-action="csv-copy">رونوشت CSV</button>
+      </div>
+      <textarea id="csv-text" placeholder="خروجی CSV اینجا قرار می‌گیرد" spellcheck="false"></textarea>
+    </div>
+
+    <div class="section-title">درباره</div>
+    <div class="card">
+      <div class="sub">
+        نسخهٔ ۱/۰ — برنامه کاملاً آفلاین است و هیچ داده‌ای را به اینترنت نمی‌فرستد.
+        تمام اطلاعات فقط روی دستگاه شما ذخیره می‌شود.
+      </div>
+      <div class="divider"></div>
+      <div class="tiny" id="about-stats"></div>
+    </div>
+  </section>
+
+</main>
+
+<button class="fab" id="fab" aria-label="افزودن">+</button>
+
+<nav role="navigation" aria-label="ناوبری اصلی">
+  <button data-screen="dashboard" class="active"><span class="icon">📊</span>داشبورد</button>
+  <button data-screen="defects"><span class="icon">🔧</span>ایرادات</button>
+  <button data-screen="vehicles"><span class="icon">🚗</span>خودروها</button>
+  <button data-screen="service"><span class="icon">🗓</span>سرویس</button>
+  <button data-screen="data"><span class="icon">💾</span>داده‌ها</button>
+</nav>
+
+<!-- گفتگوها -->
+<div class="backdrop" id="backdrop" role="dialog" aria-modal="true">
+  <div class="modal" id="modal">
+    <header><h2 id="modal-title">—</h2></header>
+    <div class="body" id="modal-body"></div>
+    <footer id="modal-footer"></footer>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite">
+  <span id="toast-text"></span>
+  <button id="toast-action" type="button" hidden></button>
+</div>
+
+<script src="js/jalali.js"></script>
+<script src="js/store.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,5 +1,11 @@
-.buildozer/
 __pycache__/
 *.pyc
 .kivy/
-arb_store.json
+.buildozer/
+.venv/
+node_modules/
+package-lock.json
+dist/*.apk
+!dist/cardefect.apk
+!dist/test-min.apk
+*.pem

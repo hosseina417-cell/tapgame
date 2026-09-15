@@ -1,0 +1,14 @@
+{
+  "name": "cardefect",
+  "version": "1.0.0",
+  "private": true,
+  "description": "دفترچهٔ ایرادات خودرو — تست‌های رابط با jsdom",
+  "scripts": {
+    "test": "node tests/node/logic.test.js && node tests/node/ui.test.js",
+    "test:logic": "node tests/node/logic.test.js",
+    "test:ui": "node tests/node/ui.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^22.0.0"
+  }
+}
