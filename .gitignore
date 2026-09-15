@@ -5,6 +5,6 @@ __pycache__/
 .venv/
 node_modules/
 package-lock.json
-dist/unsigned.apk
-dist/signed.apk
+dist/*.apk
+!dist/cardefect.apk
 *.pem

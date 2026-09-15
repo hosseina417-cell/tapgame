@@ -5,8 +5,9 @@
   1. ساخت classes.dex (WebView Activity)
   2. ساخت AndroidManifest.xml باینری
   3. بسته‌بندیِ assets/www داخل ZIP
-  4. امضای v1 (JAR signing) با کلید تولیدشده در لحظه
+  4. امضای v1 (JAR signing)
   5. هم‌ترازسازی (zipalign)
+  6. امضای v2 (APK Signature Scheme v2) — الزامی برای اندروید ۱۱ به بالا
 
 وابستگی‌ها: cryptography (pip)، که فقط برای امضا لازم است.
 """
@@ -25,17 +26,64 @@ sys.path.insert(0, HERE)
 
 from axmlgen import build_manifest   # noqa: E402
 from make_dex import build_dex       # noqa: E402
+from v2sign import sign_v2           # noqa: E402
 
 PACKAGE = "ir.cardefect"
 APP_LABEL = "دفترچه ایرادات خودرو"
-VERSION_NAME = "1.0"
-VERSION_CODE = 1
+VERSION_NAME = "1.1"
+VERSION_CODE = 2
 MIN_SDK = 24
 TARGET_SDK = 33
 
 
 def zip_entry_digest(data, algo="sha1"):
     return base64.b64encode(hashlib.new(algo, data).digest()).decode("ascii")
+
+
+def load_or_create_key(pem_path):
+    """اگر کلید قبلاً ساخته شده همان را برمی‌گرداند تا امضاها ثابت بمانند.
+
+    تعویضِ کلید بین دو نسخه باعث می‌شود اندروید نصبِ به‌روزرسانی را با خطای
+    «signatures do not match» رد کند؛ پس کلید را در کنار APK ذخیره می‌کنیم.
+    """
+    from cryptography import x509
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    if os.path.exists(pem_path):
+        with open(pem_path, "rb") as fh:
+            blob = fh.read()
+        key = serialization.load_pem_private_key(
+            blob.split(b"-----END PRIVATE KEY-----")[0] + b"-----END PRIVATE KEY-----\n",
+            password=None)
+        cert = x509.load_pem_x509_certificate(
+            b"-----BEGIN CERTIFICATE-----" + blob.split(b"-----BEGIN CERTIFICATE-----")[1])
+        return key, cert
+
+    from cryptography import x509 as _x509
+    from cryptography.x509.oid import NameOID
+    import datetime as _dt
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = x509.Name([
+        x509.NameAttribute(NameOID.COUNTRY_NAME, "IR"),
+        x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, "CarDefect"),
+        x509.NameAttribute(NameOID.COMMON_NAME, "Car Defect Log"),
+    ])
+    now = _dt.datetime.utcnow()
+    cert = (x509.CertificateBuilder()
+            .subject_name(subject).issuer_name(subject)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - _dt.timedelta(days=1))
+            .not_valid_after(now + _dt.timedelta(days=365 * 25))
+            .sign(key, _SHA256()))
+    return key, cert
+
+
+def _SHA256():
+    from cryptography.hazmat.primitives import hashes
+    return hashes.SHA256()
 
 
 def build_unsigned_apk(www_dir, out_path):
@@ -71,59 +119,61 @@ def build_unsigned_apk(www_dir, out_path):
     return out_path
 
 
-def sign_v1(apk_path, out_path):
-    """امضای JAR (طرحِ v1) با کلید تازه‌ساخته‌شده"""
-    from cryptography import x509
+def sign_v1(apk_path, out_path, pem_path):
+    """امضای JAR (طرحِ v1)
+
+    چکیده‌های SHA-1 و SHA-256 هر دو درج می‌شوند تا روی همهٔ نسخه‌های اندروید
+    پذیرفته شود. خروجی: مسیرِ APK و (کلید، گواهیٔ DER) برای امضای v2.
+    """
     from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
     from cryptography.hazmat.primitives.serialization.pkcs7 import (
         PKCS7Options, PKCS7SignatureBuilder,
     )
-    from cryptography.x509.oid import NameOID
 
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    subject = x509.Name([
-        x509.NameAttribute(NameOID.COUNTRY_NAME, "IR"),
-        x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, "CarDefect"),
-        x509.NameAttribute(NameOID.COMMON_NAME, "Car Defect Log"),
-    ])
-    now = datetime.datetime.utcnow()
-    cert = (x509.CertificateBuilder()
-            .subject_name(subject).issuer_name(subject)
-            .public_key(key.public_key())
-            .serial_number(x509.random_serial_number())
-            .not_valid_before(now - datetime.timedelta(days=1))
-            .not_valid_after(now + datetime.timedelta(days=365 * 25))
-            .sign(key, hashes.SHA256()))
+    key, cert = load_or_create_key(pem_path)
+    cert_der = cert.public_bytes(serialization.Encoding.DER)
 
     with open(apk_path, "rb") as fh:
         raw = fh.read()
     zin = zipfile.ZipFile(io.BytesIO(raw))
     entries = [n for n in zin.namelist()
                if not n.startswith("META-INF/") and not n.endswith("/")]
+    payloads = {n: zin.read(n) for n in entries}
     zin.close()
+
+    def section(entry, digests):
+        return ("Name: %s\r\n" % entry) + digests + "\r\n"
+
+    def both_digests(data, sf_mode=False):
+        """چکیده‌های SHA-1 و SHA-256 (در حالتِ SF روی متنِ بخش)"""
+        s1 = zip_entry_digest(data, "sha1")
+        s256 = zip_entry_digest(data, "sha256")
+        if sf_mode:
+            return ("SHA1-Digest: %s\r\nSHA-256-Digest: %s\r\n" % (s1, s256))
+        return ("SHA1-Digest: %s\r\nSHA-256-Digest: %s\r\n" % (s1, s256))
 
     manifest_lines = ["Manifest-Version: 1.0",
                       "Created-By: cardefect-build (python)",
                       ""]
+    manifest_sections = {}
     for name in sorted(entries):
-        data = zipfile.ZipFile(io.BytesIO(raw)).read(name)
+        manifest_sections[name] = section(name, both_digests(payloads[name]))
         manifest_lines.append("Name: %s" % name)
-        manifest_lines.append("SHA1-Digest: %s" % zip_entry_digest(data, "sha1"))
+        manifest_lines.append("SHA1-Digest: %s" % zip_entry_digest(payloads[name], "sha1"))
+        manifest_lines.append("SHA-256-Digest: %s" % zip_entry_digest(payloads[name], "sha256"))
         manifest_lines.append("")
     manifest_bytes = ("\r\n".join(manifest_lines)).encode("utf-8")
 
     sf_lines = ["Signature-Version: 1.0",
                 "Created-By: cardefect-build (python)",
                 "SHA1-Digest-Manifest: %s" % zip_entry_digest(manifest_bytes, "sha1"),
+                "SHA-256-Digest-Manifest: %s" % zip_entry_digest(manifest_bytes, "sha256"),
                 ""]
-    # بازسازیِ بخش‌های مانیفست برای محاسبهٔ درستِ چکیده
     for name in sorted(entries):
-        section = ("Name: %s\r\nSHA1-Digest: %s\r\n\r\n"
-                   % (name, zip_entry_digest(
-                       zipfile.ZipFile(io.BytesIO(raw)).read(name), "sha1")))
+        sec = manifest_sections[name].encode("utf-8")
         sf_lines.append("Name: %s" % name)
-        sf_lines.append("SHA1-Digest: %s" % zip_entry_digest(section.encode("utf-8"), "sha1"))
+        sf_lines.append("SHA1-Digest: %s" % zip_entry_digest(sec, "sha1"))
+        sf_lines.append("SHA-256-Digest: %s" % zip_entry_digest(sec, "sha256"))
         sf_lines.append("")
     sf_bytes = ("\r\n".join(sf_lines)).encode("utf-8")
 
@@ -135,8 +185,6 @@ def sign_v1(apk_path, out_path):
     out = io.BytesIO()
     with zipfile.ZipFile(io.BytesIO(raw), "r") as zin:
         with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
-            for name in ("META-INF/MANIFEST.MF", "META-INF/CERT.SF", "META-INF/CERT.RSA"):
-                pass
             zout.writestr(_zipinfo("META-INF/MANIFEST.MF"), manifest_bytes)
             zout.writestr(_zipinfo("META-INF/CERT.SF"), sf_bytes)
             zout.writestr(_zipinfo("META-INF/CERT.RSA"), signature)
@@ -147,14 +195,13 @@ def sign_v1(apk_path, out_path):
     with open(out_path, "wb") as fh:
         fh.write(out.getvalue())
 
-    # کلید را هم کنار APK ذخیره می‌کنیم تا امضاها در آینده یکسان بمانند
-    keystore = out_path + ".pem"
-    with open(keystore, "wb") as fh:
+    # ذخیرهٔ کلید برای ساخت‌های بعدی (امضای یکسان در نسخه‌های بعد)
+    with open(pem_path, "wb") as fh:
         fh.write(key.private_bytes(serialization.Encoding.PEM,
                                    serialization.PrivateFormat.PKCS8,
                                    serialization.NoEncryption()))
         fh.write(cert.public_bytes(serialization.Encoding.PEM))
-    return out_path
+    return out_path, key, cert_der
 
 
 def _zipinfo(name):
@@ -181,13 +228,24 @@ def zipalign(src, dst, alignment=4):
 
 
 def build(www_dir, out_path):
-    unsigned = os.path.join(os.path.dirname(out_path), "unsigned.apk")
-    signed = os.path.join(os.path.dirname(out_path), "signed.apk")
+    """ترتیبِ درست: ساخت ← امضای v1 ← zipalign ← امضای v2
+
+    طرحِ v2 روی بایت‌های ZIP امضا می‌گذارد، بنابراین هم‌ترازسازی باید «قبل» از
+    آن انجام شود وگرنه امضا باطل می‌شود. امضای v1 بر پایهٔ محتوای فایل‌هاست
+    و با zipalign تغییر نمی‌کند.
+    """
+    outdir = os.path.dirname(out_path)
+    unsigned = os.path.join(outdir, "unsigned.apk")
+    signed = os.path.join(outdir, "signed.apk")
+    aligned = os.path.join(outdir, "aligned.apk")
+    pem = os.path.join(outdir, "cardefect.pem")
+
     build_unsigned_apk(www_dir, unsigned)
-    sign_v1(unsigned, signed)
-    zipalign(signed, out_path)
+    _signed, key, cert_der = sign_v1(unsigned, signed, pem)
+    zipalign(signed, aligned)
+    sign_v2(aligned, key, cert_der, out_path)
     size = os.path.getsize(out_path)
-    print("APK ساخته شد: %s (%.1f KB)" % (out_path, size / 1024.0))
+    print("APK ساخته شد: %s (%.1f KB) — امضاها: v1 + v2" % (out_path, size / 1024.0))
     return out_path
 
 
