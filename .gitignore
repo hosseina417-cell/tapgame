@@ -1,5 +1,10 @@
-.buildozer/
 __pycache__/
 *.pyc
 .kivy/
-arb_store.json
+.buildozer/
+.venv/
+node_modules/
+package-lock.json
+dist/unsigned.apk
+dist/signed.apk
+*.pem
