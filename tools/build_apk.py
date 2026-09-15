@@ -30,8 +30,8 @@ from v2sign import sign_v2           # noqa: E402
 
 PACKAGE = "ir.cardefect"
 APP_LABEL = "دفترچه ایرادات خودرو"
-VERSION_NAME = "1.1"
-VERSION_CODE = 2
+VERSION_NAME = "1.2"
+VERSION_CODE = 3
 MIN_SDK = 24
 TARGET_SDK = 33
 
@@ -122,8 +122,11 @@ def build_unsigned_apk(www_dir, out_path):
 def sign_v1(apk_path, out_path, pem_path):
     """امضای JAR (طرحِ v1)
 
-    چکیده‌های SHA-1 و SHA-256 هر دو درج می‌شوند تا روی همهٔ نسخه‌های اندروید
-    پذیرفته شود. خروجی: مسیرِ APK و (کلید، گواهیٔ DER) برای امضای v2.
+    قالبِ فایل‌های MANIFEST.MF و CERT.SF باید دقیقاً مطابقِ jarsigner باشد؛
+    به‌ویژه هر بخش (از جمله بخشِ آخر) باید با یک خط خالی پایان یابد، وگرنه
+    اندروید چکیدهٔ متفاوتی برای آخرین ورودی حساب می‌کند و امضای v1 را رد
+    می‌کند (خطای «مشکل در تجزیهٔ بسته»). از SHA-256 استفاده می‌شود که
+    استانداردِ apksigner برای minSdk بالای ۱۸ است.
     """
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.serialization.pkcs7 import (
@@ -136,46 +139,32 @@ def sign_v1(apk_path, out_path, pem_path):
     with open(apk_path, "rb") as fh:
         raw = fh.read()
     zin = zipfile.ZipFile(io.BytesIO(raw))
-    entries = [n for n in zin.namelist()
-               if not n.startswith("META-INF/") and not n.endswith("/")]
+    entries = sorted(n for n in zin.namelist()
+                     if not n.startswith("META-INF/") and not n.endswith("/"))
     payloads = {n: zin.read(n) for n in entries}
     zin.close()
 
-    def section(entry, digests):
-        return ("Name: %s\r\n" % entry) + digests + "\r\n"
+    def b64(data):
+        return base64.b64encode(hashlib.sha256(data).digest()).decode("ascii")
 
-    def both_digests(data, sf_mode=False):
-        """چکیده‌های SHA-1 و SHA-256 (در حالتِ SF روی متنِ بخش)"""
-        s1 = zip_entry_digest(data, "sha1")
-        s256 = zip_entry_digest(data, "sha256")
-        if sf_mode:
-            return ("SHA1-Digest: %s\r\nSHA-256-Digest: %s\r\n" % (s1, s256))
-        return ("SHA1-Digest: %s\r\nSHA-256-Digest: %s\r\n" % (s1, s256))
+    # ---- MANIFEST.MF: بلوکِ اصلی + یک بخش برای هر ورودی (هر بخش با خط خالی) ----
+    manifest = ["Manifest-Version: 1.0\r\n",
+                "Created-By: cardefect-build (python)\r\n\r\n"]
+    sections = []          # (نام، بایت‌های دقیقِ بخش) — برای محاسبهٔ CERT.SF
+    for name in entries:
+        sec = "Name: %s\r\nSHA-256-Digest: %s\r\n\r\n" % (name, b64(payloads[name]))
+        sections.append((name, sec.encode("utf-8")))
+        manifest.append(sec)
+    manifest_bytes = "".join(manifest).encode("utf-8")
 
-    manifest_lines = ["Manifest-Version: 1.0",
-                      "Created-By: cardefect-build (python)",
-                      ""]
-    manifest_sections = {}
-    for name in sorted(entries):
-        manifest_sections[name] = section(name, both_digests(payloads[name]))
-        manifest_lines.append("Name: %s" % name)
-        manifest_lines.append("SHA1-Digest: %s" % zip_entry_digest(payloads[name], "sha1"))
-        manifest_lines.append("SHA-256-Digest: %s" % zip_entry_digest(payloads[name], "sha256"))
-        manifest_lines.append("")
-    manifest_bytes = ("\r\n".join(manifest_lines)).encode("utf-8")
-
-    sf_lines = ["Signature-Version: 1.0",
-                "Created-By: cardefect-build (python)",
-                "SHA1-Digest-Manifest: %s" % zip_entry_digest(manifest_bytes, "sha1"),
-                "SHA-256-Digest-Manifest: %s" % zip_entry_digest(manifest_bytes, "sha256"),
-                ""]
-    for name in sorted(entries):
-        sec = manifest_sections[name].encode("utf-8")
-        sf_lines.append("Name: %s" % name)
-        sf_lines.append("SHA1-Digest: %s" % zip_entry_digest(sec, "sha1"))
-        sf_lines.append("SHA-256-Digest: %s" % zip_entry_digest(sec, "sha256"))
-        sf_lines.append("")
-    sf_bytes = ("\r\n".join(sf_lines)).encode("utf-8")
+    # ---- CERT.SF: چکیدهٔ کلِ مانیفست + چکیدهٔ تک‌تکِ بخش‌ها ----
+    sf = ["Signature-Version: 1.0\r\n",
+          "Created-By: cardefect-build (python)\r\n",
+          "SHA-256-Digest-Manifest: %s\r\n\r\n" % b64(manifest_bytes)]
+    for name, sec in sections:
+        sf.append("Name: %s\r\nSHA-256-Digest: %s\r\n\r\n"
+                  % (name, b64(sec)))
+    sf_bytes = "".join(sf).encode("utf-8")
 
     signature = (PKCS7SignatureBuilder()
                  .set_data(sf_bytes)
