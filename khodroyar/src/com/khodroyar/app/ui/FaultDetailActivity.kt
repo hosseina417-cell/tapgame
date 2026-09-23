@@ -77,6 +77,12 @@ class FaultDetailActivity : Activity() {
         val obd = findViewById<TextView>(R.id.txtDetailObd)
         obd.visibility = if (f.obdCode.isBlank()) View.GONE else View.VISIBLE
         obd.text = "OBD: " + f.obdCode
+        obd.setOnLongClickListener {
+            val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("OBD", f.obdCode))
+            Toast.makeText(this, R.string.copied, Toast.LENGTH_SHORT).show()
+            true
+        }
 
         findViewById<TextView>(R.id.txtDetailMeta).text = buildString {
             if (f.carName.isNotBlank()) append("🚗 " + f.carName + "\n")

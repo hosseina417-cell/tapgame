@@ -71,4 +71,7 @@
     <string name="import_go">انتخاب فایل</string>
     <string name="import_done">%s رکورد بازیابی شد ✓</string>
     <string name="import_failed">فایل پشتیبان معتبر نیست</string>
+    <string name="export_cd">ذخیره فایل پشتیبان</string>
+    <string name="import_cd">بازیابی از فایل پشتیبان</string>
+    <string name="copied">کپی شد ✓</string>
 </resources>

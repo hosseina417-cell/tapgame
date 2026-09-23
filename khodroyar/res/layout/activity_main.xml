@@ -44,7 +44,7 @@
                     android:textSize="16sp"
                     android:padding="12dp"
                     android:background="@drawable/bg_header_btn"
-                    android:contentDescription="@string/backup_done"/>
+                    android:contentDescription="@string/export_cd"/>
 
                 <TextView
                     android:id="@+id/btnImport"
@@ -55,7 +55,7 @@
                     android:textSize="16sp"
                     android:padding="12dp"
                     android:background="@drawable/bg_header_btn"
-                    android:contentDescription="@string/import_title"/>
+                    android:contentDescription="@string/import_cd"/>
             </LinearLayout>
 
             <TextView

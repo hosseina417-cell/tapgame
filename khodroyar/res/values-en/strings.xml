@@ -61,4 +61,7 @@
     <string name="import_go">Choose file</string>
     <string name="import_done">%s records restored ✓</string>
     <string name="import_failed">Invalid backup file</string>
+    <string name="export_cd">Save backup file</string>
+    <string name="import_cd">Restore from backup file</string>
+    <string name="copied">Copied ✓</string>
 </resources>
