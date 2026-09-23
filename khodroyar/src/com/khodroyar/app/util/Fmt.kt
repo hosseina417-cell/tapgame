@@ -58,7 +58,9 @@ object Fmt {
 
     /** Parses a cost string that may contain Persian/Arabic digits, commas, spaces. Returns null if invalid. */
     fun parseCost(s: String): Double? {
-        val clean = toLatinDigits(s).replace(",", "").replace(" ", "").trim()
+        val clean = toLatinDigits(s)
+            .replace(",", "").replace("٬", "").replace("،", "").replace("٫", ".")
+            .replace(" ", "").trim()
         if (clean.isEmpty()) return 0.0
         return clean.toDoubleOrNull()
     }

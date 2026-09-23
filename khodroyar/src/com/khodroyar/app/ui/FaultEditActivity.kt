@@ -9,6 +9,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.khodroyar.app.R
 import com.khodroyar.app.data.Db
+import com.khodroyar.app.data.DbExec
 import com.khodroyar.app.data.Fault
 import com.khodroyar.app.data.Severity
 import com.khodroyar.app.data.Status
@@ -165,46 +166,57 @@ class FaultEditActivity : Activity() {
             return
         }
         val now = System.currentTimeMillis()
-        if (editId > 0) {
-            val f = db.getFault(editId) ?: run {
-                Toast.makeText(this, R.string.err_not_found, Toast.LENGTH_SHORT).show()
-                finish(); return
+        val car = edtCar.text.toString().trim()
+        val obd = edtObd.text.toString().trim().uppercase()
+        val symptoms = edtSymptoms.text.toString().trim()
+        val desc = edtDesc.text.toString().trim()
+        val repair = edtRepair.text.toString().trim()
+        val tools = edtTools.text.toString().trim()
+        val parts = edtParts.text.toString().trim()
+        val sev = severity
+        val st = status
+        val isEdit = editId > 0
+        val editIdLocal = editId
+
+        DbExec.async(this, {
+            if (isEdit) {
+                val f = db.getFault(editIdLocal) ?: return@async false
+                f.title = title
+                f.carName = car
+                f.obdCode = obd
+                f.severity = sev
+                f.status = st
+                f.symptoms = symptoms
+                f.description = desc
+                f.repairMethod = repair
+                f.tools = tools
+                f.parts = parts
+                f.cost = costVal
+                f.updatedAt = now
+                if (st == Status.FIXED && f.fixedAt == null) f.fixedAt = now
+                if (st != Status.FIXED) f.fixedAt = null
+                db.updateFault(f)
+                true
+            } else {
+                val f = Fault(
+                    title = title, carName = car, obdCode = obd,
+                    severity = sev, status = st,
+                    symptoms = symptoms, description = desc,
+                    repairMethod = repair, tools = tools, parts = parts,
+                    cost = costVal, createdAt = now, updatedAt = now,
+                    fixedAt = if (st == Status.FIXED) now else null
+                )
+                db.insertFault(f)
+                true
             }
-            f.title = title
-            f.carName = edtCar.text.toString().trim()
-            f.obdCode = edtObd.text.toString().trim().uppercase()
-            f.severity = severity
-            f.status = status
-            f.symptoms = edtSymptoms.text.toString().trim()
-            f.description = edtDesc.text.toString().trim()
-            f.repairMethod = edtRepair.text.toString().trim()
-            f.tools = edtTools.text.toString().trim()
-            f.parts = edtParts.text.toString().trim()
-            f.cost = costVal
-            f.updatedAt = now
-            if (status == Status.FIXED && f.fixedAt == null) f.fixedAt = now
-            if (status != Status.FIXED) f.fixedAt = null
-            db.updateFault(f)
-        } else {
-            val f = Fault(
-                title = title,
-                carName = edtCar.text.toString().trim(),
-                obdCode = edtObd.text.toString().trim().uppercase(),
-                severity = severity,
-                status = status,
-                symptoms = edtSymptoms.text.toString().trim(),
-                description = edtDesc.text.toString().trim(),
-                repairMethod = edtRepair.text.toString().trim(),
-                tools = edtTools.text.toString().trim(),
-                parts = edtParts.text.toString().trim(),
-                cost = costVal,
-                createdAt = now,
-                updatedAt = now,
-                fixedAt = if (status == Status.FIXED) now else null
-            )
-            db.insertFault(f)
-        }
-        Toast.makeText(this, R.string.saved, Toast.LENGTH_SHORT).show()
-        finish()
+        }, { ok ->
+            if (ok) {
+                Toast.makeText(this, R.string.saved, Toast.LENGTH_SHORT).show()
+                finish()
+            } else {
+                Toast.makeText(this, R.string.err_not_found, Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        })
     }
 }

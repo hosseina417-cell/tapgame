@@ -61,4 +61,14 @@
     <string name="stats_open">باز</string>
     <string name="stats_fixed">تعمیرشده</string>
     <string name="stats_total">مجموع هزینه</string>
+    <string name="stats_open_fmt">در بازتعمیر: %s</string>
+    <string name="stats_fixed_fmt">تعمیرشده: %s</string>
+    <string name="stats_total_fmt">هزینهٔ کل: %s</string>
+    <string name="backup_done">فایل پشتیبان ذخیره شد ✓</string>
+    <string name="backup_empty">چیزی برای پشتیبان‌گیری نیست</string>
+    <string name="import_title">بازیابی پشتیبان؟</string>
+    <string name="import_msg">رکوردهای موجود با همان شناسه به‌روزرسانی و بقیه اضافه می‌شوند.</string>
+    <string name="import_go">انتخاب فایل</string>
+    <string name="import_done">%s رکورد بازیابی شد ✓</string>
+    <string name="import_failed">فایل پشتیبان معتبر نیست</string>
 </resources>

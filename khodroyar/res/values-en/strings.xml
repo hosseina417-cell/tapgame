@@ -51,4 +51,14 @@
     <string name="stats_open">Open</string>
     <string name="stats_fixed">Fixed</string>
     <string name="stats_total">Total cost</string>
+    <string name="stats_open_fmt">Open: %s</string>
+    <string name="stats_fixed_fmt">Fixed: %s</string>
+    <string name="stats_total_fmt">Total cost: %s</string>
+    <string name="backup_done">Backup file saved ✓</string>
+    <string name="backup_empty">Nothing to back up</string>
+    <string name="import_title">Restore backup?</string>
+    <string name="import_msg">Existing records with the same id are updated; others are added.</string>
+    <string name="import_go">Choose file</string>
+    <string name="import_done">%s records restored ✓</string>
+    <string name="import_failed">Invalid backup file</string>
 </resources>

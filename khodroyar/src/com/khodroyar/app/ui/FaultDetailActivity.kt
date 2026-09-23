@@ -10,6 +10,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.khodroyar.app.R
 import com.khodroyar.app.data.Db
+import com.khodroyar.app.data.DbExec
 import com.khodroyar.app.data.Fault
 import com.khodroyar.app.data.Severity
 import com.khodroyar.app.data.Status
@@ -115,9 +116,11 @@ class FaultDetailActivity : Activity() {
         f.updatedAt = System.currentTimeMillis()
         if (newStatus == Status.FIXED && f.fixedAt == null) f.fixedAt = f.updatedAt
         if (newStatus != Status.FIXED) f.fixedAt = null
-        db.updateFault(f)
-        Toast.makeText(this, getString(R.string.changed_to, getString(stLabels[newStatus])), Toast.LENGTH_SHORT).show()
-        render()
+        val snapshot = f.copy()
+        DbExec.async(this, { db.updateFault(snapshot) }, {
+            Toast.makeText(this, getString(R.string.changed_to, getString(stLabels[newStatus])), Toast.LENGTH_SHORT).show()
+            render()
+        })
     }
 
     private fun confirmDelete() {
@@ -125,8 +128,7 @@ class FaultDetailActivity : Activity() {
             .setTitle(R.string.confirm_delete_title)
             .setMessage(R.string.confirm_delete_msg)
             .setPositiveButton(R.string.delete) { _, _ ->
-                db.deleteFault(id)
-                finish()
+                DbExec.async(this, { db.deleteFault(id) }, { finish() })
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
