@@ -42,7 +42,8 @@
                     android:text="⬇"
                     android:textColor="#FFFFFF"
                     android:textSize="16sp"
-                    android:padding="8dp"
+                    android:padding="12dp"
+                    android:background="@drawable/bg_header_btn"
                     android:contentDescription="@string/backup_done"/>
 
                 <TextView
@@ -52,7 +53,8 @@
                     android:text="⬆"
                     android:textColor="#FFFFFF"
                     android:textSize="16sp"
-                    android:padding="8dp"
+                    android:padding="12dp"
+                    android:background="@drawable/bg_header_btn"
                     android:contentDescription="@string/import_title"/>
             </LinearLayout>
 

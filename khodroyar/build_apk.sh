@@ -86,10 +86,18 @@ FINAL_APK="$OUT_DIR/KhodroYar-v$VERSION_NAME.apk"
     --ks "$KS" --ks-key-alias khodroyar \
     --ks-pass pass:khodroyar123 --key-pass pass:khodroyar123 \
     --min-sdk-version 21 \
+    --v1-signing-enabled true \
+    --v2-signing-enabled true \
+    --v3-signing-enabled true \
     --out "$FINAL_APK" "$WORK/aligned.apk"
 
+# ---------------------------------------------------------------- 6) verify
+echo "==> verifying"
+"$BT/zipalign" -c 4 "$FINAL_APK"
 "$JAVA_BIN" -cp "$BT/lib/apksigner.jar" com.android.apksigner.ApkSignerTool verify \
     --print-certs "$FINAL_APK" | head -4
+"$JAVA_BIN" -cp "$BT/lib/apksigner.jar" com.android.apksigner.ApkSignerTool verify \
+    --verbose "$FINAL_APK" | grep -E "^Verifies|v1 scheme|v2 scheme" || true
 
 ls -la "$FINAL_APK"
 echo "==> DONE: $FINAL_APK"

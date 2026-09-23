@@ -24,7 +24,8 @@
             android:paddingStart="6dp"
             android:paddingEnd="14dp"
             android:paddingTop="2dp"
-            android:paddingBottom="2dp"/>
+            android:paddingBottom="2dp"
+            android:background="@drawable/bg_header_btn"/>
 
         <TextView
             android:id="@+id/txtEditTitle"
