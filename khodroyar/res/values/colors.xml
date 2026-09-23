@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand -->
+    <color name="primary">#145DA0</color>
+    <color name="primaryDark">#0C3F6E</color>
+    <color name="accent">#F59E0B</color>
+    <color name="windowBg">#F2F5F9</color>
+    <color name="cardBg">#FFFFFF</color>
+    <color name="textMain">#1B2430</color>
+    <color name="textSec">#6B7686</color>
+    <color name="divider">#E4E9F0</color>
+    <color name="inputBg">#FFFFFF</color>
+    <color name="chipOff">#EEF2F7</color>
+    <color name="chipOn">#D9E8F7</color>
+    <color name="danger">#C62828</color>
+    <color name="success">#2E7D32</color>
+
+    <!-- Severity -->
+    <color name="sevLow">#2E7D32</color>
+    <color name="sevMedium">#F9A825</color>
+    <color name="sevHigh">#EF6C00</color>
+    <color name="sevCritical">#C62828</color>
+
+    <!-- Status -->
+    <color name="stNew">#546E7A</color>
+    <color name="stChecking">#1565C0</color>
+    <color name="stRepairing">#6A1B9A</color>
+    <color name="stFixed">#2E7D32</color>
+</resources>

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">خودرویار</string>
+    <string name="app_tagline">دستیار ثبت و رفع ایرادات خودرو</string>
+
+    <!-- Main -->
+    <string name="faults_title">خطاهای خودرو</string>
+    <string name="search_hint">جست‌وجو در خطاها، خودروها، کدها…</string>
+    <string name="empty_title">هنوز خطایی ثبت نشده</string>
+    <string name="empty_hint">با دکمهٔ + اولین ایراد خودرو را ثبت کنید</string>
+    <string name="no_results">نتیجه‌ای یافت نشد</string>
+
+    <!-- Fault fields -->
+    <string name="fault_title_label">عنوان خطا *</string>
+    <string name="car_name_label">خودرو (نام و مدل)</string>
+    <string name="obd_code_label">کد خطا (OBD-II) — اختیاری</string>
+    <string name="severity_label">سطح اهمیت</string>
+    <string name="status_label">وضعیت</string>
+    <string name="symptoms_label">علائم (چه چیزی حس می‌کنید؟)</string>
+    <string name="symptoms_hint">مثلاً: لرزش در دور آرام، صدای تق‌تق از جلوی موتور، روشن شدن چراغ چک…</string>
+    <string name="description_label">توضیحات</string>
+    <string name="repair_label">روش تعمیر</string>
+    <string name="repair_hint">مراحل تعمیر را قدم‌به‌قدم بنویسید…</string>
+    <string name="tools_label">ابزار مورد نیاز</string>
+    <string name="parts_label">قطعات لازم</string>
+    <string name="cost_label">هزینه (تومان)</string>
+    <string name="save">ذخیره</string>
+    <string name="cancel">انصراف</string>
+    <string name="delete">حذف</string>
+    <string name="edit">ویرایش</string>
+    <string name="share">اشتراک‌گذاری</string>
+
+    <!-- Severity -->
+    <string name="sev_low">کم</string>
+    <string name="sev_medium">متوسط</string>
+    <string name="sev_high">زیاد</string>
+    <string name="sev_critical">بحرانی</string>
+
+    <!-- Status -->
+    <string name="st_new">جدید</string>
+    <string name="st_checking">در حال بررسی</string>
+    <string name="st_repairing">در حال تعمیر</string>
+    <string name="st_fixed">تعمیر شد</string>
+
+    <!-- Detail -->
+    <string name="err_not_found">خطا یافت نشد</string>
+    <string name="changed_to">وضعیت به «%s» تغییر کرد</string>
+    <string name="confirm_delete_title">حذف خطا؟</string>
+    <string name="confirm_delete_msg">این خطا برای همیشه حذف می‌شود.</string>
+    <string name="saved">ذخیره شد ✓</string>
+    <string name="title_required">عنوان خطا الزامی است</string>
+    <string name="cost_invalid">هزینه معتبر نیست</string>
+    <string name="cost_value">%s تومان</string>
+    <string name="not_set">ثبت نشده</string>
+    <string name="tool_quick_title">افزودن سریع ابزار:</string>
+</resources>

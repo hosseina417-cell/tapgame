@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .kivy/
 arb_store.json
+khodroyar/build/
+khodroyar/dist/*.idsig

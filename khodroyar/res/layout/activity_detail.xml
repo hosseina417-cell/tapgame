@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/windowBg">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/primary"
+        android:padding="14dp">
+
+        <TextView
+            android:id="@+id/btnBack"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="‹"
+            android:textColor="#FFFFFF"
+            android:textSize="26sp"
+            android:paddingStart="6dp"
+            android:paddingEnd="14dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"/>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/faults_title"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:textStyle="bold"/>
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="12dp"
+            android:paddingBottom="20dp">
+
+            <LinearLayout style="@style/CardBox" android:orientation="vertical">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+                    <View
+                        android:id="@+id/dotSeverity"
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:background="@drawable/bg_fab"/>
+                    <TextView
+                        android:id="@+id/txtDetailTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:textColor="@color/textMain"
+                        android:textSize="18sp"
+                        android:textStyle="bold"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="10dp">
+                    <TextView
+                        android:id="@+id/txtDetailStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge"
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:textColor="#FFFFFF"/>
+                    <TextView
+                        android:id="@+id/txtDetailObd"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_badge"
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp"
+                        android:textSize="12sp"
+                        android:textColor="@color/primary"
+                        android:textStyle="bold"/>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/txtDetailMeta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:textColor="@color/textSec"
+                    android:textSize="12sp"/>
+            </LinearLayout>
+
+            <LinearLayout style="@style/CardBox" android:orientation="vertical">
+                <TextView style="@style/SectionTitle" android:text="⚡ تغییر سریع وضعیت"/>
+                <LinearLayout
+                    android:id="@+id/rowQuickStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"/>
+            </LinearLayout>
+
+            <LinearLayout style="@style/CardBox" android:orientation="vertical">
+                <TextView style="@style/SectionTitle" android:text="📝 شرح مشکل"/>
+                <TextView style="@style/DetailLabel" android:text="@string/symptoms_label"/>
+                <TextView
+                    android:id="@+id/txtDetailSymptoms"
+                    style="@style/DetailValue"/>
+                <TextView style="@style/DetailLabel" android:layout_marginTop="12dp" android:text="@string/description_label"/>
+                <TextView
+                    android:id="@+id/txtDetailDesc"
+                    style="@style/DetailValue"/>
+            </LinearLayout>
+
+            <LinearLayout style="@style/CardBox" android:orientation="vertical">
+                <TextView style="@style/SectionTitle" android:text="🛠️ تعمیر"/>
+                <TextView style="@style/DetailLabel" android:text="@string/repair_label"/>
+                <TextView
+                    android:id="@+id/txtDetailRepair"
+                    style="@style/DetailValue"/>
+                <TextView style="@style/DetailLabel" android:layout_marginTop="12dp" android:text="@string/tools_label"/>
+                <TextView
+                    android:id="@+id/txtDetailTools"
+                    style="@style/DetailValue"/>
+                <TextView style="@style/DetailLabel" android:layout_marginTop="12dp" android:text="@string/parts_label"/>
+                <TextView
+                    android:id="@+id/txtDetailParts"
+                    style="@style/DetailValue"/>
+            </LinearLayout>
+
+            <LinearLayout style="@style/CardBox" android:orientation="vertical">
+                <TextView style="@style/SectionTitle" android:text="💰 هزینه"/>
+                <TextView
+                    android:id="@+id/txtDetailCost"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/accent"
+                    android:textSize="17sp"
+                    android:textStyle="bold"/>
+            </LinearLayout>
+
+            <!-- Actions -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginStart="14dp"
+                android:layout_marginEnd="14dp">
+
+                <TextView
+                    android:id="@+id/btnShare"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    style="@style/Chip"
+                    android:gravity="center"
+                    android:paddingTop="11dp"
+                    android:paddingBottom="11dp"
+                    android:text="@string/share"/>
+
+                <TextView
+                    android:id="@+id/btnEdit"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    style="@style/Chip"
+                    android:gravity="center"
+                    android:paddingTop="11dp"
+                    android:paddingBottom="11dp"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/edit"/>
+
+                <TextView
+                    android:id="@+id/btnDelete"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_chip"
+                    android:gravity="center"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:paddingTop="11dp"
+                    android:paddingBottom="11dp"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/delete"
+                    android:textSize="13sp"
+                    android:textColor="@color/danger"/>
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
