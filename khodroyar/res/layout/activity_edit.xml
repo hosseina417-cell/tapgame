@@ -58,8 +58,6 @@
                 <EditText
                     android:id="@+id/edtTitle"
                     style="@style/TextInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
                     android:maxLines="2"
                     android:inputType="textCapSentences"/>
 
@@ -67,8 +65,6 @@
                 <EditText
                     android:id="@+id/edtCar"
                     style="@style/TextInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
                     android:maxLines="1"
                     android:inputType="textCapSentences"
                     android:hint="مثلاً: پژو ۲۰۶ مدل ۹۸"/>
@@ -77,8 +73,6 @@
                 <EditText
                     android:id="@+id/edtObd"
                     style="@style/TextInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
                     android:maxLines="1"
                     android:inputType="textCapCharacters"
                     android:hint="مثلاً: P0300"/>
@@ -88,18 +82,28 @@
             <LinearLayout style="@style/CardBox" android:orientation="vertical">
                 <TextView style="@style/SectionTitle" android:text="⚠️ ارزیابی"/>
                 <TextView style="@style/FieldLabel" android:text="@string/severity_label"/>
-                <LinearLayout
-                    android:id="@+id/rowSeverity"
+                <HorizontalScrollView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"/>
+                    android:scrollbars="none">
+                    <LinearLayout
+                        android:id="@+id/rowSeverity"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"/>
+                </HorizontalScrollView>
 
                 <TextView style="@style/FieldLabel" android:text="@string/status_label"/>
-                <LinearLayout
-                    android:id="@+id/rowStatus"
+                <HorizontalScrollView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"/>
+                    android:scrollbars="none">
+                    <LinearLayout
+                        android:id="@+id/rowStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"/>
+                </HorizontalScrollView>
             </LinearLayout>
 
             <!-- Description card -->
@@ -110,8 +114,6 @@
                 <EditText
                     android:id="@+id/edtSymptoms"
                     style="@style/TextInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
                     android:minLines="2"
                     android:inputType="textMultiLine"
                     android:hint="@string/symptoms_hint"/>
@@ -120,8 +122,6 @@
                 <EditText
                     android:id="@+id/edtDesc"
                     style="@style/TextInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
                     android:minLines="2"
                     android:inputType="textMultiLine"/>
             </LinearLayout>
@@ -134,8 +134,6 @@
                 <EditText
                     android:id="@+id/edtRepair"
                     style="@style/TextInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
                     android:minLines="3"
                     android:inputType="textMultiLine"
                     android:hint="@string/repair_hint"/>
@@ -144,44 +142,30 @@
                 <EditText
                     android:id="@+id/edtTools"
                     style="@style/TextInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
                     android:minLines="2"
                     android:inputType="textMultiLine"/>
 
                 <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
                     style="@style/FieldLabel"
                     android:text="@string/tool_quick_title"/>
-                <LinearLayout
-                    android:id="@+id/rowToolChips"
+                <HorizontalScrollView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"/>
+                    android:scrollbars="none">
+                    <LinearLayout
+                        android:id="@+id/rowToolChips"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:paddingBottom="4dp"/>
+                </HorizontalScrollView>
 
                 <TextView style="@style/FieldLabel" android:text="@string/parts_label"/>
                 <EditText
                     android:id="@+id/edtParts"
                     style="@style/TextInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
                     android:minLines="2"
                     android:inputType="textMultiLine"/>
-            </LinearLayout>
-
-            <!-- Cost card -->
-            <LinearLayout style="@style/CardBox" android:orientation="vertical">
-                <TextView style="@style/SectionTitle" android:text="💰 هزینه"/>
-                <TextView style="@style/FieldLabel" android:text="@string/cost_label"/>
-                <EditText
-                    android:id="@+id/edtCost"
-                    style="@style/TextInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:maxLines="1"
-                    android:inputType="number"
-                    android:hint="0"/>
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

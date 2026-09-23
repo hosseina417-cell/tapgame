@@ -52,31 +52,14 @@
                 android:textColor="@color/textSec"/>
         </LinearLayout>
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/txtItemCar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
             android:layout_marginTop="8dp"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:id="@+id/txtItemCar"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textColor="@color/textSec"
-                android:textSize="12sp"
-                android:maxLines="1"
-                android:ellipsize="end"/>
-
-            <TextView
-                android:id="@+id/txtItemCost"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:textColor="@color/accent"
-                android:textSize="12sp"
-                android:textStyle="bold"/>
-        </LinearLayout>
+            android:textColor="@color/textSec"
+            android:textSize="12sp"
+            android:maxLines="1"
+            android:ellipsize="end"/>
     </LinearLayout>
 </FrameLayout>

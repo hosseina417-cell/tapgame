@@ -14,7 +14,6 @@ import com.khodroyar.app.data.DbExec
 import com.khodroyar.app.data.Fault
 import com.khodroyar.app.data.Severity
 import com.khodroyar.app.data.Status
-import com.khodroyar.app.util.Fmt
 import com.khodroyar.app.util.Jalali
 
 class FaultDetailActivity : Activity() {
@@ -96,10 +95,6 @@ class FaultDetailActivity : Activity() {
         setOrHide(R.id.txtDetailTools, f.tools)
         setOrHide(R.id.txtDetailParts, f.parts)
 
-        findViewById<TextView>(R.id.txtDetailCost).text =
-            if (f.cost > 0) getString(R.string.cost_value, Fmt.money(f.cost))
-            else getString(R.string.not_set)
-
         // refresh quick chips selection
         val row = findViewById<LinearLayout>(R.id.rowQuickStatus)
         if (row.childCount > 0) ChipGroup.setSelected(this, row, f.status)
@@ -156,7 +151,6 @@ class FaultDetailActivity : Activity() {
         if (f.repairMethod.isNotBlank()) sb.appendLine("\n🛠 روش تعمیر:\n" + f.repairMethod)
         if (f.tools.isNotBlank()) sb.appendLine("\n🧰 ابزار لازم:\n" + f.tools)
         if (f.parts.isNotBlank()) sb.appendLine("\n⚙️ قطعات:\n" + f.parts)
-        if (f.cost > 0) sb.appendLine("\n💰 هزینه: " + Fmt.money(f.cost) + " تومان")
         val intent = Intent(Intent.ACTION_SEND)
         intent.type = "text/plain"
         intent.putExtra(Intent.EXTRA_TEXT, sb.toString())

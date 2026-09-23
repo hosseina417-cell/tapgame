@@ -13,7 +13,6 @@ import com.khodroyar.app.data.DbExec
 import com.khodroyar.app.data.Fault
 import com.khodroyar.app.data.Severity
 import com.khodroyar.app.data.Status
-import com.khodroyar.app.util.Fmt
 
 class FaultEditActivity : Activity() {
 
@@ -30,7 +29,6 @@ class FaultEditActivity : Activity() {
     private lateinit var edtRepair: EditText
     private lateinit var edtTools: EditText
     private lateinit var edtParts: EditText
-    private lateinit var edtCost: EditText
 
     /** snapshot of the form right after load — used to detect real changes */
     private var pristine: String = ""
@@ -53,7 +51,6 @@ class FaultEditActivity : Activity() {
         edtRepair = findViewById(R.id.edtRepair)
         edtTools = findViewById(R.id.edtTools)
         edtParts = findViewById(R.id.edtParts)
-        edtCost = findViewById(R.id.edtCost)
 
         editId = intent.getLongExtra("id", -1)
 
@@ -116,7 +113,6 @@ class FaultEditActivity : Activity() {
             edtRepair.setText(existing.repairMethod)
             edtTools.setText(existing.tools)
             edtParts.setText(existing.parts)
-            if (existing.cost > 0) edtCost.setText(existing.cost.toLong().toString())
             severity = existing.severity
             status = existing.status
             ChipGroup.build(this, rowSev, sevLabels, severity) { severity = it }
@@ -130,7 +126,7 @@ class FaultEditActivity : Activity() {
         listOf(
             edtTitle.text.toString(), edtCar.text.toString(), edtObd.text.toString(),
             edtSymptoms.text.toString(), edtDesc.text.toString(), edtRepair.text.toString(),
-            edtTools.text.toString(), edtParts.text.toString(), edtCost.text.toString(),
+            edtTools.text.toString(), edtParts.text.toString(),
             severity.toString(), status.toString()
         ).joinToString("\u0001")
 
@@ -161,10 +157,6 @@ class FaultEditActivity : Activity() {
             Toast.makeText(this, R.string.title_required, Toast.LENGTH_SHORT).show()
             return
         }
-        val costVal = Fmt.parseCost(edtCost.text.toString()) ?: run {
-            Toast.makeText(this, R.string.cost_invalid, Toast.LENGTH_SHORT).show()
-            return
-        }
         val now = System.currentTimeMillis()
         val car = edtCar.text.toString().trim()
         val obd = edtObd.text.toString().trim().uppercase()
@@ -191,7 +183,6 @@ class FaultEditActivity : Activity() {
                 f.repairMethod = repair
                 f.tools = tools
                 f.parts = parts
-                f.cost = costVal
                 f.updatedAt = now
                 if (st == Status.FIXED && f.fixedAt == null) f.fixedAt = now
                 if (st != Status.FIXED) f.fixedAt = null
@@ -203,7 +194,7 @@ class FaultEditActivity : Activity() {
                     severity = sev, status = st,
                     symptoms = symptoms, description = desc,
                     repairMethod = repair, tools = tools, parts = parts,
-                    cost = costVal, createdAt = now, updatedAt = now,
+                    createdAt = now, updatedAt = now,
                     fixedAt = if (st == Status.FIXED) now else null
                 )
                 db.insertFault(f)

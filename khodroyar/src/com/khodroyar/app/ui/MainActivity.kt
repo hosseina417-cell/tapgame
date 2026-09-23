@@ -2,6 +2,7 @@ package com.khodroyar.app.ui
 
 import android.app.Activity
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
@@ -13,11 +14,13 @@ import android.widget.BaseAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
+import com.khodroyar.app.CrashGuard
 import com.khodroyar.app.R
-import com.khodroyar.app.data.Db
 import com.khodroyar.app.data.Backup
+import com.khodroyar.app.data.Db
 import com.khodroyar.app.data.DbExec
 import com.khodroyar.app.data.Fault
 import com.khodroyar.app.data.Status
@@ -31,6 +34,7 @@ import java.io.InputStreamReader
 class MainActivity : Activity() {
 
     private lateinit var db: Db
+    private lateinit var prefs: SharedPreferences
     private lateinit var adapter: FaultAdapter
     private val items = ArrayList<Fault>()
     private lateinit var listView: ListView
@@ -39,9 +43,15 @@ class MainActivity : Activity() {
     private lateinit var txtEmptyHint: TextView
     private lateinit var statOpen: TextView
     private lateinit var statFixed: TextView
-    private lateinit var statCost: TextView
+    private lateinit var statTotal: TextView
     private lateinit var boxStats: View
+    private lateinit var scrollCars: View
+    private lateinit var rowCars: LinearLayout
     private var query: String = ""
+
+    /** "" = all cars; otherwise exact car name (the "folder" currently open) */
+    private var carFilter: String = ""
+    private var carNames: List<String> = emptyList()
 
     private val REQ_NEW_FAULT = 10
     private val REQ_EXPORT = 21
@@ -53,6 +63,8 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         db = Db.get(this)
+        prefs = getSharedPreferences("khodroyar", MODE_PRIVATE)
+        carFilter = prefs.getString("car_filter", "") ?: ""
 
         listView = findViewById(R.id.listFaults)
         boxEmpty = findViewById(R.id.boxEmpty)
@@ -60,8 +72,10 @@ class MainActivity : Activity() {
         txtEmptyHint = findViewById(R.id.txtEmptyHint)
         statOpen = findViewById(R.id.statOpen)
         statFixed = findViewById(R.id.statFixed)
-        statCost = findViewById(R.id.statCost)
+        statTotal = findViewById(R.id.statTotal)
         boxStats = findViewById(R.id.boxStats)
+        scrollCars = findViewById(R.id.scrollCars)
+        rowCars = findViewById(R.id.rowCars)
 
         adapter = FaultAdapter(this, items)
         listView.adapter = adapter
@@ -78,17 +92,15 @@ class MainActivity : Activity() {
                 startActivityForResult(Intent(this@MainActivity, FaultEditActivity::class.java), REQ_NEW_FAULT)
             }
         }
-        findViewById<TextView>(R.id.btnExport).setOnClickListener { exportBackup() }
-        findViewById<TextView>(R.id.btnImport).setOnClickListener { importBackup() }
+        findViewById<TextView>(R.id.btnMenu).setOnClickListener { anchor -> showMenu(anchor) }
 
         val search = findViewById<EditText>(R.id.edtSearch)
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                // debounce: don't hit the DB for every keystroke
                 searchPending?.let { findViewById<View>(R.id.listFaults).handler?.removeCallbacks(it) }
-                val r = Runnable { query = s?.toString()?.trim() ?: ""; reload() }
+                val r = Runnable { query = s?.toString()?.trim() ?: ""; applyFilterAndRender() }
                 searchPending = r
                 findViewById<View>(R.id.listFaults).handler?.postDelayed(r, 220)
             }
@@ -105,23 +117,52 @@ class MainActivity : Activity() {
         reload()
     }
 
-    /** All faults from DB (cached) filtered by current query, off the UI thread. */
+    // ------------------------------------------------------------- data load
     private var cacheAll: List<Fault> = emptyList()
 
     private fun reload() {
-        DbExec.async(this, { db.allFaults() }) { all ->
+        DbExec.async(this, { db.allFaults() }, onDone = { all ->
             cacheAll = all
+            buildCarChips(all)
+            applyFilterAndRender()
+        })
+    }
+
+    /** Car "folders": one chip per distinct car + «همهٔ خودروها». */
+    private fun buildCarChips(all: List<Fault>) {
+        carNames = all.map { it.carName.trim() }.filter { it.isNotEmpty() }.distinct().sorted()
+        if (carNames.isEmpty()) {
+            scrollCars.visibility = View.GONE
+            if (carFilter.isNotEmpty()) carFilter = ""
+            return
+        }
+        scrollCars.visibility = View.VISIBLE
+        if (carFilter.isNotEmpty() && !carNames.contains(carFilter)) carFilter = ""
+
+        val labels = ArrayList<String>(carNames.size + 1)
+        labels.add(getString(R.string.car_all))
+        labels.addAll(carNames.map { "🚗 " + it })
+        val selected = if (carFilter.isEmpty()) 0 else carNames.indexOf(carFilter) + 1
+
+        ChipGroup.build(this, rowCars, labels, selected) { idx ->
+            carFilter = if (idx == 0) "" else carNames[idx - 1]
+            prefs.edit().putString("car_filter", carFilter).apply()
             applyFilterAndRender()
         }
     }
 
+    private fun baseForFilter(): List<Fault> =
+        if (carFilter.isEmpty()) cacheAll
+        else cacheAll.filter { it.carName.trim() == carFilter }
+
     private fun applyFilterAndRender() {
+        val base = baseForFilter()
         items.clear()
         if (query.isEmpty()) {
-            items.addAll(cacheAll)
+            items.addAll(base)
         } else {
             val q = Fmt.normalize(query)
-            for (f in cacheAll) {
+            for (f in base) {
                 val hay = Fmt.normalize(
                     f.title + " " + f.carName + " " + f.obdCode + " " +
                             f.symptoms + " " + f.repairMethod + " " + f.tools + " " + f.parts
@@ -134,42 +175,62 @@ class MainActivity : Activity() {
         emptyTitle.text = getString(if (query.isEmpty()) R.string.empty_title else R.string.no_results)
         txtEmptyHint.text = getString(if (query.isEmpty()) R.string.empty_hint else R.string.no_results_hint)
 
-        // stats (always over the whole dataset, not the filtered list)
-        val open = cacheAll.count { it.status != Status.FIXED }
-        val fixed = cacheAll.count { it.status == Status.FIXED }
-        val total = cacheAll.sumOf { it.cost }
+        // stats over the open "folder" (car), not the text query
+        val total = base.size
+        val open = base.count { it.status != Status.FIXED }
+        val fixed = base.count { it.status == Status.FIXED }
+        statTotal.text = getString(R.string.stats_total_fmt, Fmt.faDigits(total.toString()))
         statOpen.text = getString(R.string.stats_open_fmt, Fmt.faDigits(open.toString()))
         statFixed.text = getString(R.string.stats_fixed_fmt, Fmt.faDigits(fixed.toString()))
-        statCost.text = getString(R.string.stats_total_fmt, Fmt.money(total))
         boxStats.visibility = if (cacheAll.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    // ------------------------------------------------------------- menu
+    private fun showMenu(anchor: View) {
+        val pm = PopupMenu(this, anchor)
+        pm.menu.add(0, 1, 0, getString(R.string.menu_backup_save))
+        pm.menu.add(0, 2, 1, getString(R.string.menu_backup_restore))
+        if (CrashGuard.lastCrashReport() != null) {
+            pm.menu.add(0, 3, 2, getString(R.string.menu_crash_log))
+        }
+        pm.setOnMenuItemClickListener { mi ->
+            when (mi.itemId) {
+                1 -> exportBackup()
+                2 -> importBackup()
+                3 -> shareCrashLog()
+            }
+            true
+        }
+        pm.show()
+    }
+
+    private fun shareCrashLog() {
+        val report = CrashGuard.lastCrashReport() ?: return
+        val i = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "KhodroYar crash report")
+            putExtra(Intent.EXTRA_TEXT, report)
+        }
+        startActivity(Intent.createChooser(i, getString(R.string.share)))
     }
 
     // ------------------------------------------------------------ backup I/O
     private fun exportBackup() {
-        if (cacheAll.isEmpty() && query.isEmpty()) {
-            // make sure cache is fresh before claiming "nothing to back up"
-            DbExec.async(this, { db.allFaults() }) { all ->
-                if (all.isEmpty()) {
-                    Toast.makeText(this, R.string.backup_empty, Toast.LENGTH_SHORT).show()
-                } else {
-                    cacheAll = all
-                    launchExportPicker()
+        DbExec.async(this, { db.allFaults() }, onDone = { all ->
+            if (all.isEmpty()) {
+                Toast.makeText(this, R.string.backup_empty, Toast.LENGTH_SHORT).show()
+            } else {
+                cacheAll = all
+                val name = "khodroyar-backup-" + Jalali.formatShort(System.currentTimeMillis())
+                    .replace("/", "-") + ".json"
+                val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "application/json"
+                    putExtra(Intent.EXTRA_TITLE, name)
                 }
+                startActivityForResult(i, REQ_EXPORT)
             }
-            return
-        }
-        launchExportPicker()
-    }
-
-    private fun launchExportPicker() {
-        val name = "khodroyar-backup-" + Jalali.formatShort(System.currentTimeMillis())
-            .replace("/", "-") + ".json"
-        val i = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "application/json"
-            putExtra(Intent.EXTRA_TITLE, name)
-        }
-        startActivityForResult(i, REQ_EXPORT)
+        })
     }
 
     private fun importBackup() {
@@ -197,7 +258,7 @@ class MainActivity : Activity() {
                 contentResolver.openOutputStream(uri)?.use { os ->
                     os.write(json.toByteArray(Charsets.UTF_8))
                 }
-            }, {
+            }, onDone = {
                 Toast.makeText(this, R.string.backup_done, Toast.LENGTH_SHORT).show()
             })
             REQ_IMPORT -> DbExec.async(this, {
@@ -253,8 +314,7 @@ class FaultAdapter(private val act: Activity, private val items: List<Fault>) : 
                 dot = v.findViewById(R.id.dotSeverity),
                 title = v.findViewById(R.id.txtItemTitle),
                 car = v.findViewById(R.id.txtItemCar),
-                status = v.findViewById(R.id.txtItemStatus),
-                cost = v.findViewById(R.id.txtItemCost)
+                status = v.findViewById(R.id.txtItemStatus)
             )
             v.tag = h
         } else {
@@ -266,10 +326,10 @@ class FaultAdapter(private val act: Activity, private val items: List<Fault>) : 
         h.dot.background.setTint(act.resources.getColor(sevColors[f.severity.coerceIn(0, 3)]))
         h.title.text = f.title
         val meta = arrayListOf<String>()
-        if (f.carName.isNotBlank()) meta.add(f.carName)
+        if (f.carName.isNotBlank()) meta.add("🚗 " + f.carName)
         if (f.obdCode.isNotBlank()) meta.add("OBD " + f.obdCode)
         meta.add(Jalali.formatShort(f.createdAt))
-        h.car.text = meta.joinToString("  •  ")
+        h.car.text = meta.joinToString("   ")
 
         if (f.status == Status.FIXED) {
             val d = f.fixedAt?.let { " " + Jalali.formatShort(it) } ?: ""
@@ -280,8 +340,6 @@ class FaultAdapter(private val act: Activity, private val items: List<Fault>) : 
             h.status.setTextColor(act.resources.getColor(stColors[f.status.coerceIn(0, 3)]))
         }
 
-        h.cost.text = if (f.cost > 0) act.getString(R.string.cost_value, Fmt.money(f.cost)) else ""
-
         v.contentDescription = f.title + " - " + act.getString(sevLabels[f.severity.coerceIn(0, 3)])
         return v
     }
@@ -290,8 +348,7 @@ class FaultAdapter(private val act: Activity, private val items: List<Fault>) : 
         val dot: View,
         val title: TextView,
         val car: TextView,
-        val status: TextView,
-        val cost: TextView
+        val status: TextView
     )
 }
 

@@ -15,7 +15,7 @@
             android:orientation="vertical"
             android:background="@color/primary"
             android:paddingStart="18dp"
-            android:paddingEnd="10dp"
+            android:paddingEnd="6dp"
             android:paddingTop="14dp"
             android:paddingBottom="13dp">
 
@@ -36,26 +36,18 @@
                     android:textStyle="bold"/>
 
                 <TextView
-                    android:id="@+id/btnExport"
+                    android:id="@+id/btnMenu"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="⬇"
+                    android:text="⋮"
                     android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:padding="12dp"
+                    android:textSize="22sp"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
                     android:background="@drawable/bg_header_btn"
-                    android:contentDescription="@string/export_cd"/>
-
-                <TextView
-                    android:id="@+id/btnImport"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="⬆"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:padding="12dp"
-                    android:background="@drawable/bg_header_btn"
-                    android:contentDescription="@string/import_cd"/>
+                    android:contentDescription="@string/menu_more"/>
             </LinearLayout>
 
             <TextView
@@ -82,10 +74,25 @@
             android:gravity="center">
 
             <TextView
-                android:id="@+id/statOpen"
+                android:id="@+id/statTotal"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:gravity="center"
+                android:textColor="@color/textSec"
+                android:textSize="12sp"
+                android:textStyle="bold"/>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="18dp"
+                android:background="@color/divider"/>
+
+            <TextView
+                android:id="@+id/statOpen"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1.2"
                 android:gravity="center"
                 android:textColor="@color/stChecking"
                 android:textSize="12sp"
@@ -105,21 +112,6 @@
                 android:textColor="@color/stFixed"
                 android:textSize="12sp"
                 android:textStyle="bold"/>
-
-            <View
-                android:layout_width="1dp"
-                android:layout_height="18dp"
-                android:background="@color/divider"/>
-
-            <TextView
-                android:id="@+id/statCost"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1.7"
-                android:gravity="center"
-                android:textColor="@color/accent"
-                android:textSize="12sp"
-                android:textStyle="bold"/>
         </LinearLayout>
 
         <!-- Search -->
@@ -130,13 +122,32 @@
             android:layout_marginStart="14dp"
             android:layout_marginEnd="14dp"
             android:layout_marginTop="10dp"
-            android:layout_marginBottom="10dp"
             android:hint="@string/search_hint"
             style="@style/TextInput"
             android:maxLines="1"
             android:inputType="text"
             android:imeOptions="actionSearch"
             android:drawablePadding="8dp"/>
+
+        <!-- Car folders (filter chips) -->
+        <HorizontalScrollView
+            android:id="@+id/scrollCars"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:layout_marginTop="4dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/rowCars"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="6dp"/>
+        </HorizontalScrollView>
 
         <FrameLayout
             android:layout_width="match_parent"
