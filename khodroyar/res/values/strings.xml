@@ -53,4 +53,12 @@
     <string name="cost_value">%s تومان</string>
     <string name="not_set">ثبت نشده</string>
     <string name="tool_quick_title">افزودن سریع ابزار:</string>
+    <string name="new_fault">ثبت خطای جدید</string>
+    <string name="discard_title">از صفحه خارج شوی؟</string>
+    <string name="discard_msg">تغییرات ذخیره نشده است. خارج شوی؟</string>
+    <string name="discard_yes">خروج بدون ذخیره</string>
+    <string name="no_results_hint">عبارت دیگری را امتحان کن یا فیلتر را پاک کن</string>
+    <string name="stats_open">باز</string>
+    <string name="stats_fixed">تعمیرشده</string>
+    <string name="stats_total">مجموع هزینه</string>
 </resources>

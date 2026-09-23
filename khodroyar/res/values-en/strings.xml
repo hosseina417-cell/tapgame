@@ -43,4 +43,12 @@
     <string name="cost_value">%s Toman</string>
     <string name="not_set">Not set</string>
     <string name="tool_quick_title">Quick add tools:</string>
+    <string name="new_fault">New fault</string>
+    <string name="discard_title">Leave this screen?</string>
+    <string name="discard_msg">You have unsaved changes. Leave anyway?</string>
+    <string name="discard_yes">Discard changes</string>
+    <string name="no_results_hint">Try another phrase or clear the filter</string>
+    <string name="stats_open">Open</string>
+    <string name="stats_fixed">Fixed</string>
+    <string name="stats_total">Total cost</string>
 </resources>

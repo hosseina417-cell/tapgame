@@ -9,8 +9,15 @@ cd "$(dirname "$0")"
 
 source ./tools/env.sh
 
-VERSION_NAME="${1:-1.0.0}"
-VERSION_CODE="${2:-1}"
+# --- version: CLI args override version.properties -------------------------
+VERSION_NAME_ARG="${1:-}"
+VERSION_CODE_ARG="${2:-}"
+if [ -f version.properties ] && [ -z "$VERSION_NAME_ARG" ]; then
+    VERSION_NAME=$(grep '^versionName=' version.properties | cut -d= -f2)
+    VERSION_CODE=$(grep '^versionCode=' version.properties | cut -d= -f2)
+fi
+VERSION_NAME="${VERSION_NAME_ARG:-${VERSION_NAME:-1.0.0}}"
+VERSION_CODE="${VERSION_CODE_ARG:-${VERSION_CODE:-1}}"
 OUT_DIR="dist"
 WORK="build/work"
 PKG="com.khodroyar.app"

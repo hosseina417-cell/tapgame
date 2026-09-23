@@ -73,10 +73,12 @@ class MainActivity : Activity() {
         if (query.isEmpty()) {
             items.addAll(all)
         } else {
-            val q = query.lowercase()
+            val q = Fmt.normalize(query)
             for (f in all) {
-                val hay = (f.title + " " + f.carName + " " + f.obdCode + " " +
-                        f.symptoms + " " + f.repairMethod + " " + f.tools + " " + f.parts).lowercase()
+                val hay = Fmt.normalize(
+                    f.title + " " + f.carName + " " + f.obdCode + " " +
+                            f.symptoms + " " + f.repairMethod + " " + f.tools + " " + f.parts
+                )
                 if (hay.contains(q)) items.add(f)
             }
         }
@@ -84,6 +86,9 @@ class MainActivity : Activity() {
         boxEmpty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
         emptyTitle.text = getString(
             if (query.isEmpty()) R.string.empty_title else R.string.no_results
+        )
+        findViewById<TextView>(R.id.txtEmptyHint).text = getString(
+            if (query.isEmpty()) R.string.empty_hint else R.string.no_results_hint
         )
     }
 }
@@ -108,30 +113,48 @@ class FaultAdapter(private val act: Activity, private val items: List<Fault>) : 
     )
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-        val v: View = convertView ?: act.layoutInflater.inflate(R.layout.item_fault, parent, false)
+        val v: View
+        val h: Holder
+        if (convertView == null) {
+            v = act.layoutInflater.inflate(R.layout.item_fault, parent, false)
+            h = Holder(
+                dot = v.findViewById(R.id.dotSeverity),
+                title = v.findViewById(R.id.txtItemTitle),
+                car = v.findViewById(R.id.txtItemCar),
+                status = v.findViewById(R.id.txtItemStatus),
+                cost = v.findViewById(R.id.txtItemCost)
+            )
+            v.tag = h
+        } else {
+            v = convertView
+            h = v.tag as Holder
+        }
         val f = items[position]
 
-        val dot = v.findViewById<View>(R.id.dotSeverity)
-        dot.background.setTint(act.resources.getColor(sevColors[f.severity.coerceIn(0, 3)]))
-
-        v.findViewById<TextView>(R.id.txtItemTitle).text = f.title
-        v.findViewById<TextView>(R.id.txtItemCar).text =
+        h.dot.background.setTint(act.resources.getColor(sevColors[f.severity.coerceIn(0, 3)]))
+        h.title.text = f.title
+        h.car.text =
             listOf(f.carName, Jalali.formatShort(f.createdAt)).filter { it.isNotBlank() }.joinToString("  •  ")
 
-        val st = v.findViewById<TextView>(R.id.txtItemStatus)
         if (f.status == Status.FIXED) {
-            st.text = "✓ " + act.getString(stLabels[f.status.coerceIn(0, 3)])
-            st.setTextColor(act.resources.getColor(R.color.stFixed))
+            h.status.text = "✓ " + act.getString(stLabels[3])
+            h.status.setTextColor(act.resources.getColor(R.color.stFixed))
         } else {
-            st.text = act.getString(stLabels[f.status.coerceIn(0, 3)])
-            st.setTextColor(act.resources.getColor(stColors[f.status.coerceIn(0, 3)]))
+            h.status.text = act.getString(stLabels[f.status.coerceIn(0, 3)])
+            h.status.setTextColor(act.resources.getColor(stColors[f.status.coerceIn(0, 3)]))
         }
 
-        val cost = v.findViewById<TextView>(R.id.txtItemCost)
-        cost.text = if (f.cost > 0) act.getString(R.string.cost_value, Fmt.money(f.cost)) else ""
+        h.cost.text = if (f.cost > 0) act.getString(R.string.cost_value, Fmt.money(f.cost)) else ""
 
-        // severity label next to title via contentDescription for now
         v.contentDescription = f.title + " - " + act.getString(sevLabels[f.severity.coerceIn(0, 3)])
         return v
     }
+
+    private class Holder(
+        val dot: View,
+        val title: TextView,
+        val car: TextView,
+        val status: TextView,
+        val cost: TextView
+    )
 }

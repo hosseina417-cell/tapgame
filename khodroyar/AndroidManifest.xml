@@ -7,9 +7,14 @@
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/AppTheme"
         android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:supportsRtl="true">
 
-        <activity android:name=".ui.MainActivity" android:exported="true">
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -18,11 +23,13 @@
 
         <activity android:name=".ui.FaultEditActivity"
             android:exported="false"
+            android:label="@string/new_fault"
             android:windowSoftInputMode="adjustResize"
             android:parentActivityName=".ui.MainActivity"/>
 
         <activity android:name=".ui.FaultDetailActivity"
             android:exported="false"
+            android:label="@string/faults_title"
             android:parentActivityName=".ui.MainActivity"/>
     </application>
 </manifest>

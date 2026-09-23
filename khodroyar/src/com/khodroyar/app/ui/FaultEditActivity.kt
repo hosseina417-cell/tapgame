@@ -1,8 +1,8 @@
 package com.khodroyar.app.ui
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.os.Bundle
-import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -12,6 +12,7 @@ import com.khodroyar.app.data.Db
 import com.khodroyar.app.data.Fault
 import com.khodroyar.app.data.Severity
 import com.khodroyar.app.data.Status
+import com.khodroyar.app.util.Fmt
 
 class FaultEditActivity : Activity() {
 
@@ -29,6 +30,9 @@ class FaultEditActivity : Activity() {
     private lateinit var edtTools: EditText
     private lateinit var edtParts: EditText
     private lateinit var edtCost: EditText
+
+    /** snapshot of the form right after load — used to detect real changes */
+    private var pristine: String = ""
 
     private val quickTools = listOf(
         "آچار فرانسه", "آچار بکس", "جک + پایه", "مولتی‌متر", "دیاگ (اسکنر OBD)",
@@ -52,8 +56,8 @@ class FaultEditActivity : Activity() {
 
         editId = intent.getLongExtra("id", -1)
 
-        findViewById<TextView>(R.id.btnBack).setOnClickListener { finish() }
-        findViewById<TextView>(R.id.btnCancel).setOnClickListener { finish() }
+        findViewById<TextView>(R.id.btnBack).setOnClickListener { goBack() }
+        findViewById<TextView>(R.id.btnCancel).setOnClickListener { goBack() }
         findViewById<TextView>(R.id.btnSave).setOnClickListener { save() }
 
         val sevLabels = listOf(
@@ -93,28 +97,60 @@ class FaultEditActivity : Activity() {
             rowChips.addView(tv)
         }
 
-        // edit mode?
         findViewById<TextView>(R.id.txtEditTitle).text =
-            if (editId > 0) getString(R.string.edit) else getString(R.string.save) + " " + getString(R.string.faults_title)
+            if (editId > 0) getString(R.string.edit) else getString(R.string.app_name) + " — " + getString(R.string.new_fault)
 
         if (editId > 0) {
-            val f = db.getFault(editId)
-            if (f != null) {
-                edtTitle.setText(f.title)
-                edtCar.setText(f.carName)
-                edtObd.setText(f.obdCode)
-                edtSymptoms.setText(f.symptoms)
-                edtDesc.setText(f.description)
-                edtRepair.setText(f.repairMethod)
-                edtTools.setText(f.tools)
-                edtParts.setText(f.parts)
-                if (f.cost > 0) edtCost.setText(f.cost.toLong().toString())
-                severity = f.severity
-                status = f.status
-                ChipGroup.build(this, rowSev, sevLabels, severity) { severity = it }
-                ChipGroup.build(this, rowSt, stLabels, status) { status = it }
+            val existing = db.getFault(editId)
+            if (existing == null) {
+                Toast.makeText(this, R.string.err_not_found, Toast.LENGTH_SHORT).show()
+                finish()
+                return
             }
+            edtTitle.setText(existing.title)
+            edtCar.setText(existing.carName)
+            edtObd.setText(existing.obdCode)
+            edtSymptoms.setText(existing.symptoms)
+            edtDesc.setText(existing.description)
+            edtRepair.setText(existing.repairMethod)
+            edtTools.setText(existing.tools)
+            edtParts.setText(existing.parts)
+            if (existing.cost > 0) edtCost.setText(existing.cost.toLong().toString())
+            severity = existing.severity
+            status = existing.status
+            ChipGroup.build(this, rowSev, sevLabels, severity) { severity = it }
+            ChipGroup.build(this, rowSt, stLabels, status) { status = it }
         }
+
+        pristine = formSnapshot()
+    }
+
+    private fun formSnapshot(): String =
+        listOf(
+            edtTitle.text.toString(), edtCar.text.toString(), edtObd.text.toString(),
+            edtSymptoms.text.toString(), edtDesc.text.toString(), edtRepair.text.toString(),
+            edtTools.text.toString(), edtParts.text.toString(), edtCost.text.toString(),
+            severity.toString(), status.toString()
+        ).joinToString("\u0001")
+
+    private fun isDirty(): Boolean = formSnapshot() != pristine
+
+    private fun goBack() {
+        if (isDirty()) {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.discard_title)
+                .setMessage(R.string.discard_msg)
+                .setPositiveButton(R.string.discard_yes) { _, _ -> finish() }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+        } else {
+            finish()
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (isDirty()) goBack() else super.onBackPressed()
     }
 
     private fun save() {
@@ -124,15 +160,16 @@ class FaultEditActivity : Activity() {
             Toast.makeText(this, R.string.title_required, Toast.LENGTH_SHORT).show()
             return
         }
-        val cost = edtCost.text.toString().replace(",", "").trim()
-        val costVal = if (cost.isEmpty()) 0.0 else cost.toDoubleOrNull() ?: run {
+        val costVal = Fmt.parseCost(edtCost.text.toString()) ?: run {
             Toast.makeText(this, R.string.cost_invalid, Toast.LENGTH_SHORT).show()
             return
         }
         val now = System.currentTimeMillis()
-        val f: Fault
         if (editId > 0) {
-            f = db.getFault(editId)!!
+            val f = db.getFault(editId) ?: run {
+                Toast.makeText(this, R.string.err_not_found, Toast.LENGTH_SHORT).show()
+                finish(); return
+            }
             f.title = title
             f.carName = edtCar.text.toString().trim()
             f.obdCode = edtObd.text.toString().trim().uppercase()
@@ -146,9 +183,10 @@ class FaultEditActivity : Activity() {
             f.cost = costVal
             f.updatedAt = now
             if (status == Status.FIXED && f.fixedAt == null) f.fixedAt = now
+            if (status != Status.FIXED) f.fixedAt = null
             db.updateFault(f)
         } else {
-            f = Fault(
+            val f = Fault(
                 title = title,
                 carName = edtCar.text.toString().trim(),
                 obdCode = edtObd.text.toString().trim().uppercase(),
