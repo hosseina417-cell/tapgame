@@ -212,7 +212,7 @@ class MainActivity : Activity() {
                     if (existing != null) { db.updateFault(f); n++ } else { db.insertFault(f); n++ }
                 }
                 n
-            }, { n ->
+            }, onDone = { n ->
                 Toast.makeText(
                     this,
                     if (n >= 0) getString(R.string.import_done, Fmt.faDigits(n.toString()))

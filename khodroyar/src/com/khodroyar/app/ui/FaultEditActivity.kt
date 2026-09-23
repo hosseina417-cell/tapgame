@@ -209,7 +209,7 @@ class FaultEditActivity : Activity() {
                 db.insertFault(f)
                 true
             }
-        }, { ok ->
+        }, onDone = { ok ->
             if (ok) {
                 Toast.makeText(this, R.string.saved, Toast.LENGTH_SHORT).show()
                 finish()

@@ -74,4 +74,5 @@
     <string name="export_cd">ذخیره فایل پشتیبان</string>
     <string name="import_cd">بازیابی از فایل پشتیبان</string>
     <string name="copied">کپی شد ✓</string>
+    <string name="crash_toast">یک خطای غیرمنتظره رخ داد (%s). گزارش ذخیره شد.</string>
 </resources>
