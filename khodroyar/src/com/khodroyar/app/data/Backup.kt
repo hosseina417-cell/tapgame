@@ -17,6 +17,7 @@ object Backup {
                 put("id", f.id)
                 put("title", f.title)
                 put("car_name", f.carName)
+                put("vin", f.vin)
                 put("obd_code", f.obdCode)
                 put("severity", f.severity)
                 put("status", f.status)
@@ -50,6 +51,7 @@ object Backup {
                     id = o.optLong("id", 0),
                     title = o.optString("title"),
                     carName = o.optString("car_name"),
+                    vin = o.optString("vin"),
                     obdCode = o.optString("obd_code"),
                     severity = o.optInt("severity", Severity.MEDIUM),
                     status = o.optInt("status", Status.NEW),

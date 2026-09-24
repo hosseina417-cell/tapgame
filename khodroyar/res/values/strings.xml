@@ -83,4 +83,7 @@
     <string name="cat_open">🔧 در بازتعمیر</string>
     <string name="cat_fixed">✓ تعمیرشده</string>
     <string name="fixed_on">تعمیر در</string>
+    <string name="vin_label">شماره VIN خودرو (اختیاری)</string>
+    <string name="vin_hint">۱۷ کاراکتر — مثل: IRFC5EJG0HJ123456</string>
+    <string name="vin_badge_copied">VIN کپی شد</string>
 </resources>

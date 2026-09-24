@@ -76,6 +76,15 @@
                     android:maxLines="1"
                     android:inputType="textCapCharacters"
                     android:hint="مثلاً: P0300"/>
+
+                <TextView style="@style/FieldLabel" android:text="@string/vin_label"/>
+                <EditText
+                    android:id="@+id/edtVin"
+                    style="@style/TextInput"
+                    android:maxLines="1"
+                    android:inputType="textCapCharacters"
+                    android:maxLength="17"
+                    android:hint="@string/vin_hint"/>
             </LinearLayout>
 
             <!-- Severity & status card -->

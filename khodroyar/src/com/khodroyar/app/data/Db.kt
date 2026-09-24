@@ -9,7 +9,7 @@ class Db private constructor(context: Context) :
     SQLiteOpenHelper(context, "khodroyar.db", null, DB_VERSION) {
 
     companion object {
-        const val DB_VERSION = 1
+        const val DB_VERSION = 2
 
         @Volatile private var instance: Db? = null
         fun get(context: Context): Db =
@@ -22,6 +22,7 @@ class Db private constructor(context: Context) :
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 car_name TEXT DEFAULT '',
+                vin TEXT DEFAULT '',
                 obd_code TEXT DEFAULT '',
                 severity INTEGER DEFAULT 1,
                 status INTEGER DEFAULT 0,
@@ -41,7 +42,9 @@ class Db private constructor(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // future migrations
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE faults ADD COLUMN vin TEXT DEFAULT ''")
+        }
     }
 
     // ---------------------------------------------------------------- CRUD
@@ -75,6 +78,7 @@ class Db private constructor(context: Context) :
     private fun toValues(f: Fault) = ContentValues().apply {
         put("title", f.title)
         put("car_name", f.carName)
+        put("vin", f.vin)
         put("obd_code", f.obdCode)
         put("severity", f.severity)
         put("status", f.status)
@@ -93,6 +97,7 @@ class Db private constructor(context: Context) :
         id = c.getLong(c.getColumnIndexOrThrow("id")),
         title = c.getString(c.getColumnIndexOrThrow("title")) ?: "",
         carName = c.getString(c.getColumnIndexOrThrow("car_name")) ?: "",
+        vin = c.getString(c.getColumnIndexOrThrow("vin")) ?: "",
         obdCode = c.getString(c.getColumnIndexOrThrow("obd_code")) ?: "",
         severity = c.getInt(c.getColumnIndexOrThrow("severity")),
         status = c.getInt(c.getColumnIndexOrThrow("status")),

@@ -12,6 +12,7 @@ data class Fault(
     var id: Long = 0,
     var title: String = "",
     var carName: String = "",
+    var vin: String = "",
     var obdCode: String = "",
     var severity: Int = Severity.MEDIUM,
     var status: Int = Status.NEW,

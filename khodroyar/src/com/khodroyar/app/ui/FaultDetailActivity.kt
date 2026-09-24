@@ -77,9 +77,16 @@ class FaultDetailActivity : Activity() {
         obd.visibility = if (f.obdCode.isBlank()) View.GONE else View.VISIBLE
         obd.text = "OBD: " + f.obdCode
         obd.setOnLongClickListener {
-            val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("OBD", f.obdCode))
-            Toast.makeText(this, R.string.copied, Toast.LENGTH_SHORT).show()
+            copyToClipboard(f.obdCode, "OBD")
+            true
+        }
+
+        val vin = findViewById<TextView>(R.id.txtDetailVin)
+        vin.visibility = if (f.vin.isBlank()) View.GONE else View.VISIBLE
+        vin.text = "VIN: " + f.vin
+        vin.setOnClickListener { copyToClipboard(f.vin, "VIN") }
+        vin.setOnLongClickListener {
+            copyToClipboard(f.vin, "VIN")
             true
         }
 
@@ -98,6 +105,12 @@ class FaultDetailActivity : Activity() {
         // refresh quick chips selection
         val row = findViewById<LinearLayout>(R.id.rowQuickStatus)
         if (row.childCount > 0) ChipGroup.setSelected(this, row, f.status)
+    }
+
+    private fun copyToClipboard(text: String, label: String) {
+        val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText(label, text))
+        Toast.makeText(this, R.string.copied, Toast.LENGTH_SHORT).show()
     }
 
     private fun setOrHide(viewId: Int, text: String) {
@@ -142,6 +155,7 @@ class FaultDetailActivity : Activity() {
         sb.appendLine("━━━━━━━━━━━━━━━━━━")
         sb.appendLine("📌 " + f.title)
         if (f.carName.isNotBlank()) sb.appendLine("🚘 خودرو: " + f.carName)
+        if (f.vin.isNotBlank()) sb.appendLine("🔢 شماره VIN: " + f.vin)
         if (f.obdCode.isNotBlank()) sb.appendLine("🔧 کد OBD: " + f.obdCode)
         sb.appendLine("⚠️ سطح اهمیت: " + sevName(f.severity))
         sb.appendLine("📌 وضعیت: " + getString(stLabels[f.status.coerceIn(0, 3)]))

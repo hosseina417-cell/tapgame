@@ -23,6 +23,7 @@ class FaultEditActivity : Activity() {
 
     private lateinit var edtTitle: EditText
     private lateinit var edtCar: EditText
+    private lateinit var edtVin: EditText
     private lateinit var edtObd: EditText
     private lateinit var edtSymptoms: EditText
     private lateinit var edtDesc: EditText
@@ -46,6 +47,7 @@ class FaultEditActivity : Activity() {
         edtTitle = findViewById(R.id.edtTitle)
         edtCar = findViewById(R.id.edtCar)
         edtObd = findViewById(R.id.edtObd)
+        edtVin = findViewById(R.id.edtVin)
         edtSymptoms = findViewById(R.id.edtSymptoms)
         edtDesc = findViewById(R.id.edtDesc)
         edtRepair = findViewById(R.id.edtRepair)
@@ -108,6 +110,7 @@ class FaultEditActivity : Activity() {
             edtTitle.setText(existing.title)
             edtCar.setText(existing.carName)
             edtObd.setText(existing.obdCode)
+            edtVin.setText(existing.vin)
             edtSymptoms.setText(existing.symptoms)
             edtDesc.setText(existing.description)
             edtRepair.setText(existing.repairMethod)
@@ -124,7 +127,7 @@ class FaultEditActivity : Activity() {
 
     private fun formSnapshot(): String =
         listOf(
-            edtTitle.text.toString(), edtCar.text.toString(), edtObd.text.toString(),
+            edtTitle.text.toString(), edtCar.text.toString(), edtVin.text.toString(), edtObd.text.toString(),
             edtSymptoms.text.toString(), edtDesc.text.toString(), edtRepair.text.toString(),
             edtTools.text.toString(), edtParts.text.toString(),
             severity.toString(), status.toString()
@@ -160,6 +163,7 @@ class FaultEditActivity : Activity() {
         val now = System.currentTimeMillis()
         val car = edtCar.text.toString().trim()
         val obd = edtObd.text.toString().trim().uppercase()
+        val vin = edtVin.text.toString().trim().uppercase()
         val symptoms = edtSymptoms.text.toString().trim()
         val desc = edtDesc.text.toString().trim()
         val repair = edtRepair.text.toString().trim()
@@ -176,6 +180,7 @@ class FaultEditActivity : Activity() {
                 f.title = title
                 f.carName = car
                 f.obdCode = obd
+                f.vin = vin
                 f.severity = sev
                 f.status = st
                 f.symptoms = symptoms
@@ -190,7 +195,7 @@ class FaultEditActivity : Activity() {
                 true
             } else {
                 val f = Fault(
-                    title = title, carName = car, obdCode = obd,
+                    title = title, carName = car, vin = vin, obdCode = obd,
                     severity = sev, status = st,
                     symptoms = symptoms, description = desc,
                     repairMethod = repair, tools = tools, parts = parts,
