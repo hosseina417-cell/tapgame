@@ -81,7 +81,7 @@ if [ ! -f "$KS" ]; then
         -dname "CN=KhodroYar, OU=Mobile, O=KhodroYar, L=Tehran, C=IR" >/dev/null 2>&1
 fi
 
-FINAL_APK="$OUT_DIR/KhodroYar-v$VERSION_NAME.apk"
+FINAL_APK="$OUT_DIR/ManianKhodro-v$VERSION_NAME.apk"
 "$JAVA_BIN" -cp "$BT/lib/apksigner.jar" com.android.apksigner.ApkSignerTool sign \
     --ks "$KS" --ks-key-alias khodroyar \
     --ks-pass pass:khodroyar123 --key-pass pass:khodroyar123 \

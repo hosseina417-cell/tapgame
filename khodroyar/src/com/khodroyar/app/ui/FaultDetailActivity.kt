@@ -151,7 +151,7 @@ class FaultDetailActivity : Activity() {
     private fun share() {
         val f = fault ?: return
         val sb = StringBuilder()
-        sb.appendLine("🚗 گزارش خطای خودرو — خودرویار")
+        sb.appendLine("🚗 گزارش خطای خودرو — خط ریورک مانیان خودرو")
         sb.appendLine("━━━━━━━━━━━━━━━━━━")
         sb.appendLine("📌 " + f.title)
         if (f.carName.isNotBlank()) sb.appendLine("🚘 خودرو: " + f.carName)

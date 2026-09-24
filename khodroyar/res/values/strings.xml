@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">خودرویار</string>
+    <string name="app_name">خط ریورک مانیان خودرو</string>
     <string name="app_tagline">دستیار ثبت و رفع ایرادات خودرو</string>
 
     <!-- Main -->
@@ -78,7 +78,7 @@
     <string name="menu_crash_log">🐞 ارسال گزارش خطا</string>
     <string name="car_all">همهٔ خودروها</string>
     <string name="menu_about">ℹ️ دربارهٔ برنامه</string>
-    <string name="about_text">🚗 خودرویار — دستیار ثبت و رفع ایرادات خودرو\nنسخه: %s\n\n👤 طراحی و توسعه:\nحسین علویان</string>
+    <string name="about_text">🚗 خط ریورک مانیان خودرو — دستیار ثبت و رفع ایرادات خودرو\nنسخه: %s\n\n👤 طراحی و توسعه:\nحسین علویان</string>
     <string name="cat_all">همهٔ موارد</string>
     <string name="cat_open">🔧 در بازتعمیر</string>
     <string name="cat_fixed">✓ تعمیرشده</string>
