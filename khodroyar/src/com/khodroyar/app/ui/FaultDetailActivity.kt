@@ -65,13 +65,13 @@ class FaultDetailActivity : Activity() {
     private fun render() {
         val f = fault!!
         val dot = findViewById<View>(R.id.dotSeverity)
-        dot.background.setTint(resources.getColor(sevColors[f.severity.coerceIn(0, 3)]))
+        dot.background.mutate().setTint(resources.getColor(sevColors[f.severity.coerceIn(0, 3)]))
         findViewById<TextView>(R.id.txtDetailTitle).text = f.title
 
         val st = findViewById<TextView>(R.id.txtDetailStatus)
         st.text = getString(stLabels[f.status.coerceIn(0, 3)])
-        st.background.setTint(resources.getColor(stColors[f.status.coerceIn(0, 3)]))
-        st.setTextColor(resources.getColor(android.R.color.white))
+        st.background.mutate().setTint(resources.getColor(stColors[f.status.coerceIn(0, 3)]))
+        st.setTextColor(android.graphics.Color.WHITE)
 
         val obd = findViewById<TextView>(R.id.txtDetailObd)
         obd.visibility = if (f.obdCode.isBlank()) View.GONE else View.VISIBLE

@@ -146,6 +146,25 @@
                 android:paddingStart="14dp"
                 android:paddingEnd="14dp"
                 android:paddingTop="4dp"
+                android:paddingBottom="4dp"/>
+        </HorizontalScrollView>
+
+        <!-- Repair-state categories (همه / در بازتعمیر / تعمیرشده) -->
+        <HorizontalScrollView
+            android:id="@+id/scrollState"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/rowState"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="2dp"
                 android:paddingBottom="6dp"/>
         </HorizontalScrollView>
 

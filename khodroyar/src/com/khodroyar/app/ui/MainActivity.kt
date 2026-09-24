@@ -1,8 +1,10 @@
 package com.khodroyar.app.ui
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
@@ -47,10 +49,16 @@ class MainActivity : Activity() {
     private lateinit var boxStats: View
     private lateinit var scrollCars: View
     private lateinit var rowCars: LinearLayout
+    private lateinit var scrollState: View
+    private lateinit var rowState: LinearLayout
     private var query: String = ""
 
     /** "" = all cars; otherwise exact car name (the "folder" currently open) */
     private var carFilter: String = ""
+
+    /** 0 = همه موارد, 1 = در بازتعمیر, 2 = تعمیرشده */
+    private var stateFilter: Int = 0
+
     private var carNames: List<String> = emptyList()
 
     private val REQ_NEW_FAULT = 10
@@ -65,6 +73,7 @@ class MainActivity : Activity() {
         db = Db.get(this)
         prefs = getSharedPreferences("khodroyar", MODE_PRIVATE)
         carFilter = prefs.getString("car_filter", "") ?: ""
+        stateFilter = prefs.getInt("state_filter", 0)
 
         listView = findViewById(R.id.listFaults)
         boxEmpty = findViewById(R.id.boxEmpty)
@@ -76,6 +85,8 @@ class MainActivity : Activity() {
         boxStats = findViewById(R.id.boxStats)
         scrollCars = findViewById(R.id.scrollCars)
         rowCars = findViewById(R.id.rowCars)
+        scrollState = findViewById(R.id.scrollState)
+        rowState = findViewById(R.id.rowState)
 
         adapter = FaultAdapter(this, items)
         listView.adapter = adapter
@@ -93,6 +104,18 @@ class MainActivity : Activity() {
             }
         }
         findViewById<TextView>(R.id.btnMenu).setOnClickListener { anchor -> showMenu(anchor) }
+
+        // state category chips are static — build once, restore last selection
+        val stateLabels = listOf(
+            getString(R.string.cat_all),
+            getString(R.string.cat_open),
+            getString(R.string.cat_fixed)
+        )
+        ChipGroup.build(this, rowState, stateLabels, stateFilter) { idx ->
+            stateFilter = idx
+            prefs.edit().putInt("state_filter", idx).apply()
+            applyFilterAndRender()
+        }
 
         val search = findViewById<EditText>(R.id.edtSearch)
         search.addTextChangedListener(object : TextWatcher {
@@ -134,26 +157,35 @@ class MainActivity : Activity() {
         if (carNames.isEmpty()) {
             scrollCars.visibility = View.GONE
             if (carFilter.isNotEmpty()) carFilter = ""
-            return
-        }
-        scrollCars.visibility = View.VISIBLE
-        if (carFilter.isNotEmpty() && !carNames.contains(carFilter)) carFilter = ""
+        } else {
+            scrollCars.visibility = View.VISIBLE
+            if (carFilter.isNotEmpty() && !carNames.contains(carFilter)) carFilter = ""
 
-        val labels = ArrayList<String>(carNames.size + 1)
-        labels.add(getString(R.string.car_all))
-        labels.addAll(carNames.map { "🚗 " + it })
-        val selected = if (carFilter.isEmpty()) 0 else carNames.indexOf(carFilter) + 1
+            val labels = ArrayList<String>(carNames.size + 1)
+            labels.add(getString(R.string.car_all))
+            labels.addAll(carNames.map { "🚗 " + it })
+            val selected = if (carFilter.isEmpty()) 0 else carNames.indexOf(carFilter) + 1
 
-        ChipGroup.build(this, rowCars, labels, selected) { idx ->
-            carFilter = if (idx == 0) "" else carNames[idx - 1]
-            prefs.edit().putString("car_filter", carFilter).apply()
-            applyFilterAndRender()
+            ChipGroup.build(this, rowCars, labels, selected) { idx ->
+                carFilter = if (idx == 0) "" else carNames[idx - 1]
+                prefs.edit().putString("car_filter", carFilter).apply()
+                applyFilterAndRender()
+            }
         }
+        scrollState.visibility = if (all.isEmpty()) View.GONE else View.VISIBLE
+        ChipGroup.setSelected(this, rowState, stateFilter)
     }
 
-    private fun baseForFilter(): List<Fault> =
-        if (carFilter.isEmpty()) cacheAll
+    private fun baseForFilter(): List<Fault> {
+        var base = if (carFilter.isEmpty()) cacheAll
         else cacheAll.filter { it.carName.trim() == carFilter }
+        base = when (stateFilter) {
+            1 -> base.filter { it.status != Status.FIXED }   // در بازتعمیر
+            2 -> base.filter { it.status == Status.FIXED }   // تعمیرشده
+            else -> base
+        }
+        return base
+    }
 
     private fun applyFilterAndRender() {
         val base = baseForFilter()
@@ -175,7 +207,7 @@ class MainActivity : Activity() {
         emptyTitle.text = getString(if (query.isEmpty()) R.string.empty_title else R.string.no_results)
         txtEmptyHint.text = getString(if (query.isEmpty()) R.string.empty_hint else R.string.no_results_hint)
 
-        // stats over the open "folder" (car), not the text query
+        // stats over the current folder+state selection
         val total = base.size
         val open = base.count { it.status != Status.FIXED }
         val fixed = base.count { it.status == Status.FIXED }
@@ -193,15 +225,28 @@ class MainActivity : Activity() {
         if (CrashGuard.lastCrashReport() != null) {
             pm.menu.add(0, 3, 2, getString(R.string.menu_crash_log))
         }
+        pm.menu.add(0, 4, 3, getString(R.string.menu_about))
         pm.setOnMenuItemClickListener { mi ->
             when (mi.itemId) {
                 1 -> exportBackup()
                 2 -> importBackup()
                 3 -> shareCrashLog()
+                4 -> showAbout()
             }
             true
         }
         pm.show()
+    }
+
+    private fun showAbout() {
+        val ver = try {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        } catch (_: Exception) { "?" }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.app_name))
+            .setMessage(getString(R.string.about_text, Fmt.faDigits(ver)))
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     private fun shareCrashLog() {
@@ -322,25 +367,29 @@ class FaultAdapter(private val act: Activity, private val items: List<Fault>) : 
             h = v.tag as Holder
         }
         val f = items[position]
+        val stIdx = f.status.coerceIn(0, 3)
+        val sevIdx = f.severity.coerceIn(0, 3)
 
-        h.dot.background.setTint(act.resources.getColor(sevColors[f.severity.coerceIn(0, 3)]))
+        // severity dot — mutate() so the tint never bleeds into other views
+        h.dot.background.mutate().setTint(act.resources.getColor(sevColors[sevIdx]))
+
         h.title.text = f.title
+
         val meta = arrayListOf<String>()
         if (f.carName.isNotBlank()) meta.add("🚗 " + f.carName)
-        if (f.obdCode.isNotBlank()) meta.add("OBD " + f.obdCode)
-        meta.add(Jalali.formatShort(f.createdAt))
+        if (f.obdCode.isNotBlank()) meta.add("🏷 OBD: " + f.obdCode)
+        meta.add("🗓 " + Jalali.formatShort(f.createdAt))
+        if (f.status == Status.FIXED && f.fixedAt != null) {
+            meta.add("✓ " + act.getString(R.string.fixed_on) + " " + Jalali.formatShort(f.fixedAt!!))
+        }
         h.car.text = meta.joinToString("   ")
 
-        if (f.status == Status.FIXED) {
-            val d = f.fixedAt?.let { " " + Jalali.formatShort(it) } ?: ""
-            h.status.text = "✓ " + act.getString(stLabels[3]) + d
-            h.status.setTextColor(act.resources.getColor(R.color.stFixed))
-        } else {
-            h.status.text = act.getString(stLabels[f.status.coerceIn(0, 3)])
-            h.status.setTextColor(act.resources.getColor(stColors[f.status.coerceIn(0, 3)]))
-        }
+        // status badge: solid status color background + WHITE bold text (always readable)
+        h.status.background.mutate().setTint(act.resources.getColor(stColors[stIdx]))
+        h.status.setTextColor(Color.WHITE)
+        h.status.text = act.getString(stLabels[stIdx])
 
-        v.contentDescription = f.title + " - " + act.getString(sevLabels[f.severity.coerceIn(0, 3)])
+        v.contentDescription = f.title + " - " + act.getString(sevLabels[sevIdx])
         return v
     }
 
