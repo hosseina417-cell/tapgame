@@ -9,7 +9,7 @@ class Db private constructor(context: Context) :
     SQLiteOpenHelper(context, "khodroyar.db", null, DB_VERSION) {
 
     companion object {
-        const val DB_VERSION = 3
+        const val DB_VERSION = 4
 
         @Volatile private var instance: Db? = null
         fun get(context: Context): Db =
@@ -34,7 +34,8 @@ class Db private constructor(context: Context) :
                 cost REAL DEFAULT 0,
                 created_at INTEGER,
                 updated_at INTEGER,
-                fixed_at INTEGER
+                fixed_at INTEGER,
+                updated_by TEXT DEFAULT ''
             )"""
         )
         db.execSQL("CREATE INDEX idx_faults_status ON faults(status)")
@@ -64,6 +65,9 @@ class Db private constructor(context: Context) :
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE faults ADD COLUMN vin TEXT DEFAULT ''")
         }
+        if (oldVersion < 4) {
+            db.execSQL("ALTER TABLE faults ADD COLUMN updated_by TEXT DEFAULT ''")
+        }
         if (oldVersion < 3) {
             db.execSQL(
                 """CREATE TABLE IF NOT EXISTS fuses(
@@ -89,6 +93,13 @@ class Db private constructor(context: Context) :
     fun insertFault(f: Fault): Long {
         val cv = toValues(f)
         return writableDatabase.insert("faults", null, cv)
+    }
+
+    /** inserts with an explicit id (used by sync merge); keeps existing row replaced */
+    fun insertFaultWithId(f: Fault): Long {
+        val cv = toValues(f)
+        cv.put("id", f.id)
+        return writableDatabase.insertWithOnConflict("faults", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
     fun updateFault(f: Fault): Int {
@@ -219,6 +230,7 @@ class Db private constructor(context: Context) :
         put("created_at", f.createdAt)
         put("updated_at", f.updatedAt)
         put("fixed_at", f.fixedAt)
+        put("updated_by", f.updatedBy)
     }
 
     private fun fromCursor(c: android.database.Cursor) = Fault(
@@ -237,6 +249,7 @@ class Db private constructor(context: Context) :
         cost = c.getDouble(c.getColumnIndexOrThrow("cost")),
         createdAt = c.getLong(c.getColumnIndexOrThrow("created_at")),
         updatedAt = c.getLong(c.getColumnIndexOrThrow("updated_at")),
-        fixedAt = if (c.isNull(c.getColumnIndexOrThrow("fixed_at"))) null else c.getLong(c.getColumnIndexOrThrow("fixed_at"))
+        fixedAt = if (c.isNull(c.getColumnIndexOrThrow("fixed_at"))) null else c.getLong(c.getColumnIndexOrThrow("fixed_at")),
+        updatedBy = c.getString(c.getColumnIndexOrThrow("updated_by")) ?: ""
     )
 }

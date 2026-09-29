@@ -114,6 +114,7 @@ class FaultDetailActivity : Activity() {
             if (f.carName.isNotBlank()) append("🚗 " + f.carName + "\n")
             append("🗓 " + Jalali.formatFull(f.createdAt))
             if (f.fixedAt != null) append("\n✓ تعمیر: " + Jalali.formatShort(f.fixedAt!!))
+            if (f.updatedBy.isNotBlank()) append("\n" + getString(R.string.team_updated_by, f.updatedBy))
         }
 
         setOrHide(R.id.txtDetailSymptoms, f.symptoms)
@@ -346,6 +347,8 @@ class FaultDetailActivity : Activity() {
         f.updatedAt = System.currentTimeMillis()
         if (newStatus == Status.FIXED && f.fixedAt == null) f.fixedAt = f.updatedAt
         if (newStatus != Status.FIXED) f.fixedAt = null
+        f.updatedBy = getSharedPreferences("khodroyar", MODE_PRIVATE)
+            .getString("device_name", "")?.trim().orEmpty()
         val snapshot = f.copy()
         DbExec.async(this, { db.updateFault(snapshot) }, onDone = {
             Toast.makeText(this, getString(R.string.changed_to, getString(stLabels[newStatus])), Toast.LENGTH_SHORT).show()

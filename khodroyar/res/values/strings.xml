@@ -105,4 +105,26 @@
     <string name="photo_no_cam">برنامهٔ دوربین پیدا نشد</string>
     <string name="photo_del_title">حذف عکس؟</string>
     <string name="photo_del_msg">این عکس برای همیشه حذف می‌شود.</string>
+    <string name="menu_team">👥 همگام‌سازی تیمی</string>
+    <string name="team_title">همگام‌سازی تیمی</string>
+    <string name="team_note">⚠️ همهٔ گوشی‌ها باید به یک وای‌فای یا هات‌اسپات مشترک وصل باشند. مدیر «شروع پذیرش اتصال» را می‌زند و آدرس نمایش‌داده‌شده را به کارمندان می‌دهد.</string>
+    <string name="team_device_name">نام شما (نمایش داده می‌شود)</string>
+    <string name="team_device_hint">مثلاً: علی — تعمیرکار</string>
+    <string name="team_start_server">▶️ شروع پذیرش اتصال</string>
+    <string name="team_stop_server">⏹ توقف سرور</string>
+    <string name="team_server_started">سرور فعال شد</string>
+    <string name="team_server_running">✅ سرور فعال است — کارمندان این آدرس را در «حالت کارمند» وارد کنند:</string>
+    <string name="team_server_stopped">سرور خاموش است</string>
+    <string name="team_log_title">🔄 رویدادهای دریافتی از تیم:</string>
+    <string name="team_log_empty">هنوز کسی همگام‌سازی نکرده</string>
+    <string name="team_ip_label">آدرس گوشی مدیر</string>
+    <string name="team_ip_hint">مثلاً 192.168.1.10</string>
+    <string name="team_sync_now">🔄 اتصال و همگام‌سازی</string>
+    <string name="team_syncing">در حال همگام‌سازی…</string>
+    <string name="team_sync_ok">✓ <xliff:g xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2" id="n1">%1$s</xliff:g> مورد دریافت، <xliff:g xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2" id="n2">%2$s</xliff:g> مورد ارسال شد</string>
+    <string name="team_sync_fail">❌ اتصال ناموفق — آی‌پی و وای‌فای مشترک را بررسی کنید</string>
+    <string name="team_last_sync">آخرین همگام‌سازی: %s</string>
+    <string name="team_need_name">نام خود را وارد کنید</string>
+    <string name="team_need_ip">آدرس گوشی مدیر را وارد کنید</string>
+    <string name="team_updated_by">✍ آخرین تغییر: %s</string>
 </resources>

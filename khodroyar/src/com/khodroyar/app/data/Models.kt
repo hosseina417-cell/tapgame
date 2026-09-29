@@ -24,5 +24,6 @@ data class Fault(
     var cost: Double = 0.0,
     var createdAt: Long = System.currentTimeMillis(),
     var updatedAt: Long = System.currentTimeMillis(),
-    var fixedAt: Long? = null
+    var fixedAt: Long? = null,
+    var updatedBy: String = ""
 )

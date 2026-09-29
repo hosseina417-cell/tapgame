@@ -173,10 +173,13 @@ class FaultEditActivity : Activity() {
         val st = status
         val isEdit = editId > 0
         val editIdLocal = editId
+        val who = getSharedPreferences("khodroyar", MODE_PRIVATE)
+            .getString("device_name", "")?.trim().orEmpty()
 
         DbExec.async(this, {
             if (isEdit) {
                 val f = db.getFault(editIdLocal) ?: return@async false
+                f.updatedBy = who
                 f.title = title
                 f.carName = car
                 f.obdCode = obd
@@ -195,6 +198,7 @@ class FaultEditActivity : Activity() {
                 true
             } else {
                 val f = Fault(
+                    updatedBy = who,
                     title = title, carName = car, vin = vin, obdCode = obd,
                     severity = sev, status = st,
                     symptoms = symptoms, description = desc,

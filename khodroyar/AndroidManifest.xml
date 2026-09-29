@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.khodroyar.app">
 
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:name=".KhodroYarApp"
         android:label="@string/app_name"
@@ -28,6 +30,11 @@
             android:exported="false"
             android:label="@string/new_fault"
             android:windowSoftInputMode="adjustResize"
+            android:parentActivityName=".ui.MainActivity"/>
+
+        <activity android:name=".ui.TeamSyncActivity"
+            android:exported="false"
+            android:label="@string/team_title"
             android:parentActivityName=".ui.MainActivity"/>
 
         <activity android:name=".ui.FuseBoxActivity"

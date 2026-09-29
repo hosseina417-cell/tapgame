@@ -225,15 +225,17 @@ class MainActivity : Activity() {
         if (CrashGuard.lastCrashReport() != null) {
             pm.menu.add(0, 3, 2, getString(R.string.menu_crash_log))
         }
-        pm.menu.add(0, 4, 3, getString(R.string.menu_fusebox))
-        pm.menu.add(0, 5, 4, getString(R.string.menu_about))
+        pm.menu.add(0, 4, 3, getString(R.string.menu_team))
+        pm.menu.add(0, 5, 4, getString(R.string.menu_fusebox))
+        pm.menu.add(0, 6, 5, getString(R.string.menu_about))
         pm.setOnMenuItemClickListener { mi ->
             when (mi.itemId) {
                 1 -> exportBackup()
                 2 -> importBackup()
                 3 -> shareCrashLog()
-                4 -> startActivity(Intent(this, FuseBoxActivity::class.java))
-                5 -> showAbout()
+                4 -> startActivity(Intent(this, TeamSyncActivity::class.java))
+                5 -> startActivity(Intent(this, FuseBoxActivity::class.java))
+                6 -> showAbout()
             }
             true
         }

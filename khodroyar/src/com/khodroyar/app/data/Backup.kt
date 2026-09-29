@@ -30,6 +30,7 @@ object Backup {
                 put("created_at", f.createdAt)
                 put("updated_at", f.updatedAt)
                 if (f.fixedAt != null) put("fixed_at", f.fixedAt)
+                if (f.updatedBy.isNotBlank()) put("updated_by", f.updatedBy)
             })
         }
         return JSONObject().apply {
@@ -92,7 +93,8 @@ object Backup {
                     cost = o.optDouble("cost", 0.0),
                     createdAt = o.optLong("created_at", System.currentTimeMillis()),
                     updatedAt = o.optLong("updated_at", System.currentTimeMillis()),
-                    fixedAt = if (o.has("fixed_at") && !o.isNull("fixed_at")) o.optLong("fixed_at") else null
+                    fixedAt = if (o.has("fixed_at") && !o.isNull("fixed_at")) o.optLong("fixed_at") else null,
+                    updatedBy = o.optString("updated_by")
                 )
             )
         }

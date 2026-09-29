@@ -66,8 +66,7 @@
                     android:id="@+id/edtCar"
                     style="@style/TextInput"
                     android:maxLines="1"
-                    android:inputType="textCapSentences"
-                    android:hint="مثلاً: پژو ۲۰۶ مدل ۹۸"/>
+                    android:inputType="textCapSentences"/>
 
                 <TextView style="@style/FieldLabel" android:text="@string/obd_code_label"/>
                 <EditText
