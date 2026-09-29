@@ -30,6 +30,11 @@
             android:windowSoftInputMode="adjustResize"
             android:parentActivityName=".ui.MainActivity"/>
 
+        <activity android:name=".ui.FuseBoxActivity"
+            android:exported="false"
+            android:label="@string/fusebox_title"
+            android:parentActivityName=".ui.MainActivity"/>
+
         <activity android:name=".ui.FaultDetailActivity"
             android:exported="false"
             android:label="@string/faults_title"

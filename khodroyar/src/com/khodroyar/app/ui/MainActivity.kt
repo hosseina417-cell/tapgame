@@ -225,13 +225,15 @@ class MainActivity : Activity() {
         if (CrashGuard.lastCrashReport() != null) {
             pm.menu.add(0, 3, 2, getString(R.string.menu_crash_log))
         }
-        pm.menu.add(0, 4, 3, getString(R.string.menu_about))
+        pm.menu.add(0, 4, 3, getString(R.string.menu_fusebox))
+        pm.menu.add(0, 5, 4, getString(R.string.menu_about))
         pm.setOnMenuItemClickListener { mi ->
             when (mi.itemId) {
                 1 -> exportBackup()
                 2 -> importBackup()
                 3 -> shareCrashLog()
-                4 -> showAbout()
+                4 -> startActivity(Intent(this, FuseBoxActivity::class.java))
+                5 -> showAbout()
             }
             true
         }
@@ -299,7 +301,13 @@ class MainActivity : Activity() {
         val uri: Uri = data.data!!
         when (requestCode) {
             REQ_EXPORT -> DbExec.async(this, {
-                val json = Backup.toJson(cacheAll.ifEmpty { db.allFaults() })
+                val photos = db.allPhotos().mapNotNull { pr ->
+                    val bytes = try { java.io.File(pr.path).readBytes() } catch (_: Exception) { null }
+                    if (bytes == null) null
+                    else Triple(pr.faultId, java.io.File(pr.path).name,
+                        android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP))
+                }
+                val json = Backup.toJson(cacheAll.ifEmpty { db.allFaults() }, photos)
                 contentResolver.openOutputStream(uri)?.use { os ->
                     os.write(json.toByteArray(Charsets.UTF_8))
                 }
@@ -316,6 +324,15 @@ class MainActivity : Activity() {
                 for (f in list) {
                     val existing = db.getFault(f.id)
                     if (existing != null) { db.updateFault(f); n++ } else { db.insertFault(f); n++ }
+                }
+                // restore photos
+                val dir = java.io.File(filesDir, "photos").apply { mkdirs() }
+                for (p in Backup.photosFromJson(text)) {
+                    try {
+                        val f = java.io.File(dir, p.first.toString() + "_" + System.currentTimeMillis() + "_" + p.second)
+                        f.writeBytes(p.third)
+                        db.addPhoto(p.first, f.absolutePath)
+                    } catch (_: Exception) { }
                 }
                 n
             }, onDone = { n ->

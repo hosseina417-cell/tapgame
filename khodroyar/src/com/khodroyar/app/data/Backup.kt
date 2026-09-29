@@ -39,6 +39,35 @@ object Backup {
         }.toString(2)
     }
 
+    /** photos: (faultId, fileName, base64jpeg) — appended as "photos" array. */
+    fun toJson(faults: List<Fault>, photos: List<Triple<Long, String, String>>): String {
+        val root = JSONObject(toJson(faults))
+        val arr = JSONArray()
+        for (p in photos) {
+            arr.put(JSONObject().apply {
+                put("fault_id", p.first)
+                put("name", p.second)
+                put("b64", p.third)
+            })
+        }
+        root.put("photos", arr)
+        return root.toString(1)
+    }
+
+    /** returns photos stored inside the backup (empty if none). */
+    fun photosFromJson(text: String): List<Triple<Long, String, ByteArray>> {
+        val out = ArrayList<Triple<Long, String, ByteArray>>()
+        val arr = JSONObject(text).optJSONArray("photos") ?: return out
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            try {
+                val bytes = android.util.Base64.decode(o.getString("b64"), android.util.Base64.NO_WRAP)
+                out.add(Triple(o.optLong("fault_id", 0), o.optString("name"), bytes))
+            } catch (_: Exception) { /* skip broken entry */ }
+        }
+        return out
+    }
+
     fun fromJson(text: String): List<Fault> {
         val root = JSONObject(text)
         if (root.optString("app") != "khodroyar") return emptyList()

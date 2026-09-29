@@ -86,4 +86,23 @@
     <string name="vin_label">شماره VIN خودرو (اختیاری)</string>
     <string name="vin_hint">۱۷ کاراکتر — مثل: IRFC5EJG0HJ123456</string>
     <string name="vin_badge_copied">VIN کپی شد</string>
+    <string name="menu_fusebox">🔌 جعبه فیوز خودروها</string>
+    <string name="fusebox_title">جعبه فیوز خودروها</string>
+    <string name="fuse_add">افزودن فیوز</string>
+    <string name="fuse_edit">ویرایش فیوز</string>
+    <string name="fuse_no_hint">شماره فیوز (مثلاً F12 یا ۱۲)</string>
+    <string name="fuse_amp_hint">آمپر (مثلاً ۱۵)</string>
+    <string name="fuse_circuit_hint">مدار/توضیح (مثلاً: فن رادیاتور)</string>
+    <string name="fuse_empty">هنوز فیوزی ثبت نشده\nبا دکمهٔ «＋ فیوز» اضافه کنید</string>
+    <string name="fuse_no_required">شماره فیوز را بنویسید</string>
+    <string name="fuse_need_car">اول باید خودرویی در خطاها ثبت کرده باشید</string>
+    <string name="fuse_delete_title">حذف فیوز؟</string>
+    <string name="fuse_delete_msg">فیوز %s حذف شود؟</string>
+    <string name="fuse_no_circuit">بدون توضیح</string>
+    <string name="photo_take">📷 عکس گرفتن</string>
+    <string name="photo_pick">🖼 از گالری</string>
+    <string name="photo_fail">ذخیرهٔ عکس ممکن نشد</string>
+    <string name="photo_no_cam">برنامهٔ دوربین پیدا نشد</string>
+    <string name="photo_del_title">حذف عکس؟</string>
+    <string name="photo_del_msg">این عکس برای همیشه حذف می‌شود.</string>
 </resources>

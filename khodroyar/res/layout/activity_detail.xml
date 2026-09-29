@@ -171,6 +171,46 @@
                     style="@style/DetailValue"/>
             </LinearLayout>
 
+            <LinearLayout style="@style/CardBox" android:orientation="vertical">
+                <TextView style="@style/SectionTitle" android:text="📷 تصاویر ایراد"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btnCam"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        style="@style/Chip"
+                        android:gravity="center"
+                        android:paddingTop="11dp"
+                        android:paddingBottom="11dp"
+                        android:text="@string/photo_take"/>
+
+                    <TextView
+                        android:id="@+id/btnGallery"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        style="@style/Chip"
+                        android:gravity="center"
+                        android:paddingTop="11dp"
+                        android:paddingBottom="11dp"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/photo_pick"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/photosWrap"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="10dp"/>
+            </LinearLayout>
+
             <!-- Actions -->
             <LinearLayout
                 android:layout_width="match_parent"

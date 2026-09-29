@@ -9,7 +9,7 @@ class Db private constructor(context: Context) :
     SQLiteOpenHelper(context, "khodroyar.db", null, DB_VERSION) {
 
     companion object {
-        const val DB_VERSION = 2
+        const val DB_VERSION = 3
 
         @Volatile private var instance: Db? = null
         fun get(context: Context): Db =
@@ -39,11 +39,49 @@ class Db private constructor(context: Context) :
         )
         db.execSQL("CREATE INDEX idx_faults_status ON faults(status)")
         db.execSQL("CREATE INDEX idx_faults_created ON faults(created_at)")
+        db.execSQL(
+            """CREATE TABLE fuses(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                car_name TEXT NOT NULL,
+                fuse_no TEXT DEFAULT '',
+                amp TEXT DEFAULT '',
+                circuit TEXT DEFAULT ''
+            )"""
+        )
+        db.execSQL(
+            """CREATE TABLE photos(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fault_id INTEGER NOT NULL,
+                path TEXT NOT NULL,
+                created_at INTEGER
+            )"""
+        )
+        db.execSQL("CREATE INDEX idx_photos_fault ON photos(fault_id)")
+        db.execSQL("CREATE INDEX idx_fuses_car ON fuses(car_name)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE faults ADD COLUMN vin TEXT DEFAULT ''")
+        }
+        if (oldVersion < 3) {
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS fuses(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    car_name TEXT NOT NULL,
+                    fuse_no TEXT DEFAULT '',
+                    amp TEXT DEFAULT '',
+                    circuit TEXT DEFAULT ''
+                )"""
+            )
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS photos(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fault_id INTEGER NOT NULL,
+                    path TEXT NOT NULL,
+                    created_at INTEGER
+                )"""
+            )
         }
     }
 
@@ -71,6 +109,96 @@ class Db private constructor(context: Context) :
         readableDatabase.rawQuery(
             "SELECT * FROM faults ORDER BY (status=3), updated_at DESC", null
         ).use { c -> while (c.moveToNext()) out.add(fromCursor(c)) }
+        return out
+    }
+
+    // ---------------------------------------------------------------- fuses
+    data class Fuse(var id: Long = 0, var carName: String = "", var fuseNo: String = "", var amp: String = "", var circuit: String = "")
+
+    fun addFuse(f: Fuse): Long {
+        val cv = ContentValues().apply {
+            put("car_name", f.carName); put("fuse_no", f.fuseNo)
+            put("amp", f.amp); put("circuit", f.circuit)
+        }
+        return writableDatabase.insert("fuses", null, cv)
+    }
+
+    fun updateFuse(f: Fuse): Int {
+        val cv = ContentValues().apply {
+            put("car_name", f.carName); put("fuse_no", f.fuseNo)
+            put("amp", f.amp); put("circuit", f.circuit)
+        }
+        return writableDatabase.update("fuses", cv, "id=?", arrayOf(f.id.toString()))
+    }
+
+    fun deleteFuse(id: Long) = writableDatabase.delete("fuses", "id=?", arrayOf(id.toString()))
+
+    fun fusesFor(carName: String): List<Fuse> {
+        val out = ArrayList<Fuse>()
+        readableDatabase.rawQuery(
+            "SELECT * FROM fuses WHERE car_name=? ORDER BY id", arrayOf(carName)
+        ).use { c ->
+            while (c.moveToNext()) out.add(
+                Fuse(
+                    id = c.getLong(c.getColumnIndexOrThrow("id")),
+                    carName = c.getString(c.getColumnIndexOrThrow("car_name")),
+                    fuseNo = c.getString(c.getColumnIndexOrThrow("fuse_no")),
+                    amp = c.getString(c.getColumnIndexOrThrow("amp")),
+                    circuit = c.getString(c.getColumnIndexOrThrow("circuit"))
+                )
+            )
+        }
+        return out
+    }
+
+    fun fuseCars(): List<String> {
+        val out = LinkedHashSet<String>()
+        readableDatabase.rawQuery("SELECT DISTINCT car_name FROM fuses", null).use { c ->
+            while (c.moveToNext()) out.add(c.getString(0))
+        }
+        return out.toList()
+    }
+
+    // ---------------------------------------------------------------- photos
+    fun addPhoto(faultId: Long, path: String): Long {
+        val cv = ContentValues().apply {
+            put("fault_id", faultId); put("path", path)
+            put("created_at", System.currentTimeMillis())
+        }
+        return writableDatabase.insert("photos", null, cv)
+    }
+
+    fun deletePhoto(id: Long) = writableDatabase.delete("photos", "id=?", arrayOf(id.toString()))
+
+    data class PhotoRow(var id: Long = 0, var faultId: Long = 0, var path: String = "")
+
+    fun photosFor(faultId: Long): List<PhotoRow> {
+        val out = ArrayList<PhotoRow>()
+        readableDatabase.rawQuery(
+            "SELECT * FROM photos WHERE fault_id=? ORDER BY id", arrayOf(faultId.toString())
+        ).use { c ->
+            while (c.moveToNext()) out.add(
+                PhotoRow(
+                    id = c.getLong(c.getColumnIndexOrThrow("id")),
+                    faultId = c.getLong(c.getColumnIndexOrThrow("fault_id")),
+                    path = c.getString(c.getColumnIndexOrThrow("path"))
+                )
+            )
+        }
+        return out
+    }
+
+    fun allPhotos(): List<PhotoRow> {
+        val out = ArrayList<PhotoRow>()
+        readableDatabase.rawQuery("SELECT * FROM photos ORDER BY id", null).use { c ->
+            while (c.moveToNext()) out.add(
+                PhotoRow(
+                    id = c.getLong(c.getColumnIndexOrThrow("id")),
+                    faultId = c.getLong(c.getColumnIndexOrThrow("fault_id")),
+                    path = c.getString(c.getColumnIndexOrThrow("path"))
+                )
+            )
+        }
         return out
     }
 
