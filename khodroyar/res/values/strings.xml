@@ -134,4 +134,8 @@
     <string name="fuse_import_bad">فایل معتبر نیست — قالب: cars → fuses</string>
     <string name="fuse_export_ok">فایل خروجی ذخیره شد ✓</string>
     <string name="fuse_no_result">فیوزی با این عبارت پیدا نشد</string>
+    <string name="fuse_add_car">＋ خودرو</string>
+    <string name="fuse_new_car_title">خودروی جدید</string>
+    <string name="fuse_new_car_hint">نام خودرو (مثلاً: مکسوس T60)</string>
+    <string name="fuse_need_name_car">نام خودرو را بنویسید</string>
 </resources>

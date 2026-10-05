@@ -71,6 +71,7 @@ class FuseBoxActivity : Activity() {
         }
 
         findViewById<TextView>(R.id.btnBack).setOnClickListener { finish() }
+        findViewById<TextView>(R.id.btnAddCar).setOnClickListener { newCarDialog() }
         findViewById<TextView>(R.id.btnAddFuse).setOnClickListener { addFuseDialog() }
         findViewById<TextView>(R.id.btnFuseImport).setOnClickListener { importFromFile() }
         findViewById<TextView>(R.id.btnFuseExport).setOnClickListener { exportToFile() }
@@ -114,8 +115,8 @@ class FuseBoxActivity : Activity() {
         DbExec.async(this, {
             // only cars that actually have fuses (not every car from the faults list)
             val fuseCars = db.fuseCars().sorted()
-            if (fuseCars.isEmpty()) carFilter = ""
-            else if (!fuseCars.contains(carFilter)) carFilter = fuseCars[0]
+            // keep a pending new-car selection; only auto-pick when nothing is chosen
+            if (carFilter.isEmpty() && fuseCars.isNotEmpty()) carFilter = fuseCars[0]
             val fs = if (carFilter.isEmpty()) emptyList() else db.fusesFor(carFilter)
             fuseCars to fs
         }, onDone = { (names, fs) ->
@@ -194,7 +195,8 @@ class FuseBoxActivity : Activity() {
 
     private fun addFuseDialog() {
         if (carFilter.isEmpty()) {
-            Toast.makeText(this, R.string.fuse_need_car, Toast.LENGTH_SHORT).show()
+            // no car selected yet -> create one on the fly
+            newCarDialog()
             return
         }
         inputDialog(getString(R.string.fuse_add) + " — " + carFilter, null) { no, amp, circuit ->
@@ -202,6 +204,34 @@ class FuseBoxActivity : Activity() {
             DbExec.async(this, { db.addFuse(Db.Fuse(carName = car, fuseNo = no, amp = amp, circuit = circuit)) },
                 onDone = { reload() })
         }
+    }
+
+    /** Creates a brand-new car for the fuse box and jumps straight to its first fuse. */
+    private fun newCarDialog() {
+        val pad = (resources.displayMetrics.density * 20).toInt()
+        val input = EditText(this).apply {
+            hint = getString(R.string.fuse_new_car_hint)
+            setSingleLine(true)
+        }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        box.addView(input)
+        (input.layoutParams as LinearLayout.LayoutParams).setMargins(pad, pad / 2, pad, 0)
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.fuse_new_car_title)
+            .setView(box)
+            .setPositiveButton(R.string.save) { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isEmpty()) {
+                    Toast.makeText(this, R.string.fuse_need_name_car, Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                carFilter = name
+                prefs.edit().putString("fuse_car", name).apply()
+                addFuseDialog()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun editFuseDialog(f: Db.Fuse) {
