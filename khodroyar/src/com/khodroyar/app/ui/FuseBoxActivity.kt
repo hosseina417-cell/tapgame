@@ -87,7 +87,22 @@ class FuseBoxActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        reload()
+        ensurePresetLoaded { reload() }
+    }
+
+    /** One-time: seeds the built-in Maxus fuse chart on first launch. */
+    private fun ensurePresetLoaded(done: () -> Unit) {
+        if (prefs.getBoolean("fuse_preset_loaded", false)) { done(); return }
+        DbExec.async(this, {
+            try {
+                val text = assets.open("preset_fusebox.json").bufferedReader(Charsets.UTF_8).use { it.readText() }
+                importJson(text)
+            } catch (e: Exception) { -1 }
+        }, onDone = { n ->
+            prefs.edit().putBoolean("fuse_preset_loaded", true).apply()
+            if (n > 0) Toast.makeText(this, getString(R.string.fuse_import_ok, Fmt.faDigits(n.toString())), Toast.LENGTH_SHORT).show()
+            done()
+        })
     }
 
     private fun reload() {
