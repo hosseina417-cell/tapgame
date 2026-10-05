@@ -38,6 +38,7 @@ mkdir -p "$WORK/gen"
     -I "$PLATFORM" \
     --manifest AndroidManifest.xml \
     --java "$WORK/gen" \
+    -A assets \
     --min-sdk-version 21 \
     --target-sdk-version 34 \
     --version-code "$VERSION_CODE" \
