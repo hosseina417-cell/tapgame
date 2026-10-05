@@ -71,6 +71,10 @@
             android:paddingBottom="4dp"/>
     </HorizontalScrollView>
 
+    <include
+        android:id="@+id/fuseTools"
+        layout="@layout/fuse_tools"/>
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"

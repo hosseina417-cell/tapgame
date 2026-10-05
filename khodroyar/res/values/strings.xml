@@ -127,4 +127,11 @@
     <string name="team_need_name">نام خود را وارد کنید</string>
     <string name="team_need_ip">آدرس گوشی مدیر را وارد کنید</string>
     <string name="team_updated_by">✍ آخرین تغییر: %s</string>
+    <string name="fuse_search_hint">جست‌وجو در فیوزها (شماره، آمپر، مدار)…</string>
+    <string name="fuse_import">📥 ورود از فایل</string>
+    <string name="fuse_export">📤 خروجی فایل</string>
+    <string name="fuse_import_ok">%s فیوز جدید وارد شد ✓</string>
+    <string name="fuse_import_bad">فایل معتبر نیست — قالب: cars → fuses</string>
+    <string name="fuse_export_ok">فایل خروجی ذخیره شد ✓</string>
+    <string name="fuse_no_result">فیوزی با این عبارت پیدا نشد</string>
 </resources>

@@ -2,8 +2,12 @@ package com.khodroyar.app.ui
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
@@ -16,9 +20,16 @@ import com.khodroyar.app.R
 import com.khodroyar.app.data.Db
 import com.khodroyar.app.data.DbExec
 import com.khodroyar.app.util.Fmt
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.File
+import java.io.InputStreamReader
 
 /**
  * Fuse-box registry per car: fuse number, amperage, circuit description.
+ * Includes search and bulk import/export (JSON) so whole fuse charts
+ * (e.g. Maxus) can be loaded from a file in one go.
  */
 class FuseBoxActivity : Activity() {
 
@@ -28,10 +39,16 @@ class FuseBoxActivity : Activity() {
     private lateinit var txtFuseEmpty: TextView
     private lateinit var scrollCars: View
     private lateinit var rowCars: LinearLayout
+    private lateinit var edtFuseSearch: EditText
     private val fuses = ArrayList<Db.Fuse>()
+    private val shown = ArrayList<Db.Fuse>()
     private lateinit var adapter: FuseAdapter
     private var carFilter: String = ""
     private var carNames: List<String> = emptyList()
+    private var query: String = ""
+
+    private val REQ_IMPORT = 41
+    private val REQ_EXPORT = 42
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,16 +61,28 @@ class FuseBoxActivity : Activity() {
         txtFuseEmpty = findViewById(R.id.txtFuseEmpty)
         scrollCars = findViewById(R.id.scrollFuseCars)
         rowCars = findViewById(R.id.rowFuseCars)
+        edtFuseSearch = findViewById(R.id.edtFuseSearch)
 
-        adapter = FuseAdapter(this, fuses)
+        adapter = FuseAdapter(this, shown)
         listFuses.adapter = adapter
-        listFuses.setOnItemClickListener { _, _, pos, _ -> editFuseDialog(fuses[pos]) }
+        listFuses.setOnItemClickListener { _, _, pos, _ -> editFuseDialog(shown[pos]) }
         listFuses.setOnItemLongClickListener { _, _, pos, _ ->
-            confirmDelete(fuses[pos]); true
+            confirmDelete(shown[pos]); true
         }
 
         findViewById<TextView>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<TextView>(R.id.btnAddFuse).setOnClickListener { addFuseDialog() }
+        findViewById<TextView>(R.id.btnFuseImport).setOnClickListener { importFromFile() }
+        findViewById<TextView>(R.id.btnFuseExport).setOnClickListener { exportToFile() }
+
+        edtFuseSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                query = s?.toString()?.trim() ?: ""
+                refilter()
+            }
+        })
     }
 
     override fun onResume() {
@@ -84,12 +113,33 @@ class FuseBoxActivity : Activity() {
                 }
             }
             fuses.clear(); fuses.addAll(fs)
-            adapter.notifyDataSetChanged()
-            txtFuseEmpty.visibility =
-                if (fuses.isEmpty() || carFilter.isEmpty()) View.VISIBLE else View.GONE
+            refilter()
         })
     }
 
+    /** Applies the search query over [fuses] into [shown]. */
+    private fun refilter() {
+        shown.clear()
+        if (query.isEmpty()) {
+            shown.addAll(fuses)
+        } else {
+            val q = Fmt.normalize(query)
+            for (f in fuses) {
+                val hay = Fmt.normalize(f.fuseNo + " " + f.amp + " " + f.circuit)
+                if (hay.contains(q)) shown.add(f)
+            }
+        }
+        adapter.notifyDataSetChanged()
+        txtFuseEmpty.visibility =
+            if (shown.isEmpty() || carFilter.isEmpty()) View.VISIBLE else View.GONE
+        if (query.isNotEmpty() && fuses.isNotEmpty()) {
+            txtFuseEmpty.text = getString(R.string.fuse_no_result)
+        } else {
+            txtFuseEmpty.text = getString(R.string.fuse_empty)
+        }
+    }
+
+    // ---------------------------------------------------------------- dialogs
     private fun inputDialog(title: String, existing: Db.Fuse?, onOk: (String, String, String) -> Unit) {
         val pad = (resources.displayMetrics.density * 20).toInt()
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -154,6 +204,107 @@ class FuseBoxActivity : Activity() {
             val id = f.id
             DbExec.async(this, { db.deleteFuse(id) }, onDone = { reload() })
         }
+    }
+
+    // ------------------------------------------------------- bulk import/export
+    /** JSON shape: {"cars":[{"car":"مکسوس T60","fuses":[{"no":"F12","amp":"15","circuit":"فن رادیاتور"}]}]} */
+    private fun importFromFile() {
+        startActivityForResult(
+            Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*"
+            }, REQ_IMPORT
+        )
+    }
+
+    private fun exportToFile() {
+        startActivityForResult(
+            Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "application/json"
+                putExtra(Intent.EXTRA_TITLE, "fusebox-" +
+                    carFilter.ifBlank { "all" }.replace(" ", "-") + ".json")
+            }, REQ_EXPORT
+        )
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode != RESULT_OK || data?.data == null) return
+        val uri: Uri = data.data!!
+        when (requestCode) {
+            REQ_IMPORT -> DbExec.async(this, {
+                val text = contentResolver.openInputStream(uri)?.use { ins ->
+                    BufferedReader(InputStreamReader(ins, Charsets.UTF_8)).use { it.readText() }
+                } ?: return@async -1
+                importJson(text)
+            }, onDone = { n ->
+                if (n > 0) {
+                    Toast.makeText(this, getString(R.string.fuse_import_ok, Fmt.faDigits(n.toString())), Toast.LENGTH_LONG).show()
+                    reload()
+                } else {
+                    Toast.makeText(this, R.string.fuse_import_bad, Toast.LENGTH_LONG).show()
+                }
+            })
+            REQ_EXPORT -> DbExec.async(this, {
+                val root = JSONObject()
+                val cars = JSONArray()
+                val list = if (carFilter.isBlank()) carNames else listOf(carFilter)
+                for (car in list) {
+                    val o = JSONObject()
+                    o.put("car", car)
+                    val arr = JSONArray()
+                    for (f in db.fusesFor(car)) {
+                        arr.put(JSONObject().put("no", f.fuseNo).put("amp", f.amp).put("circuit", f.circuit))
+                    }
+                    o.put("fuses", arr)
+                    cars.put(o)
+                }
+                root.put("cars", cars)
+                contentResolver.openOutputStream(uri)?.use { os ->
+                    os.write(root.toString(2).toByteArray(Charsets.UTF_8))
+                }
+            }, onDone = {
+                Toast.makeText(this, R.string.fuse_export_ok, Toast.LENGTH_SHORT).show()
+            })
+        }
+    }
+
+    /** Parses import JSON and inserts (skipping exact duplicates). Returns count added (-1 = bad file). */
+    private fun importJson(text: String): Int {
+        var added = 0
+        val carsArr: JSONArray = try {
+            val root = JSONObject(text)
+            root.optJSONArray("cars") ?: if (root.has("car") && root.has("fuses")) {
+                JSONArray().put(root)
+            } else return -1
+        } catch (e: Exception) { return -1 }
+
+        for (i in 0 until carsArr.length()) {
+            try {
+                val o = carsArr.getJSONObject(i)
+                val car = o.optString("car").trim()
+                val arr = o.optJSONArray("fuses") ?: continue
+                if (car.isEmpty() || arr.length() == 0) continue
+                val existing = db.fusesFor(car).map {
+                    Triple(Fmt.normalize(it.fuseNo), Fmt.normalize(it.amp), Fmt.normalize(it.circuit))
+                }.toHashSet()
+                for (j in 0 until arr.length()) {
+                    val f = arr.getJSONObject(j)
+                    val no = f.optString("no").trim()
+                    if (no.isEmpty()) continue
+                    val amp = f.optString("amp").trim()
+                    val circuit = f.optString("circuit").trim()
+                    val key = Triple(Fmt.normalize(no), Fmt.normalize(amp), Fmt.normalize(circuit))
+                    if (key in existing) continue
+                    existing.add(key)
+                    db.addFuse(Db.Fuse(carName = car, fuseNo = no, amp = amp, circuit = circuit))
+                    added++
+                }
+            } catch (e: Exception) { /* skip bad entry */ }
+        }
+        return added
     }
 }
 
