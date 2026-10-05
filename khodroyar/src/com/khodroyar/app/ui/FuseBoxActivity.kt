@@ -74,9 +74,6 @@ class FuseBoxActivity : Activity() {
         findViewById<TextView>(R.id.btnAddFuse).setOnClickListener { addFuseDialog() }
         findViewById<TextView>(R.id.btnFuseImport).setOnClickListener { importFromFile() }
         findViewById<TextView>(R.id.btnFuseExport).setOnClickListener { exportToFile() }
-        findViewById<TextView>(R.id.btnPreset).setOnClickListener {
-            ensurePresetLoaded(force = true) { reload() }
-        }
 
         edtFuseSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -94,9 +91,8 @@ class FuseBoxActivity : Activity() {
     }
 
     /**
-     * Seeds the built-in Maxus fuse chart.
-     * v14.0 bug: the "loaded" flag was set even when loading failed, so later
-     * versions never retried. New namespaced flag + manual force button fix that.
+     * Seeds the built-in Maxus fuse chart automatically on first open
+     * (flag is only set on real success so failures are retried).
      */
     private fun ensurePresetLoaded(force: Boolean, done: () -> Unit) {
         if (!force && prefs.getBoolean("fuse_preset_v2_loaded", false)) { done(); return }
@@ -109,8 +105,6 @@ class FuseBoxActivity : Activity() {
             if (n > 0) {
                 prefs.edit().putBoolean("fuse_preset_v2_loaded", true).apply()
                 Toast.makeText(this, getString(R.string.fuse_import_ok, Fmt.faDigits(n.toString())), Toast.LENGTH_SHORT).show()
-            } else if (force) {
-                Toast.makeText(this, R.string.fuse_preset_fail, Toast.LENGTH_LONG).show()
             }
             done()
         })
@@ -118,13 +112,12 @@ class FuseBoxActivity : Activity() {
 
     private fun reload() {
         DbExec.async(this, {
-            val fuseCars = db.fuseCars()
-            val faultCars = db.allFaults().map { it.carName.trim() }.filter { it.isNotBlank() }.distinct()
-            val names = (fuseCars + faultCars).distinct().sorted()
-            if (names.isEmpty()) carFilter = ""
-            else if (!names.contains(carFilter)) carFilter = names[0]
+            // only cars that actually have fuses (not every car from the faults list)
+            val fuseCars = db.fuseCars().sorted()
+            if (fuseCars.isEmpty()) carFilter = ""
+            else if (!fuseCars.contains(carFilter)) carFilter = fuseCars[0]
             val fs = if (carFilter.isEmpty()) emptyList() else db.fusesFor(carFilter)
-            names to fs
+            fuseCars to fs
         }, onDone = { (names, fs) ->
             carNames = names
             if (carNames.isEmpty()) {

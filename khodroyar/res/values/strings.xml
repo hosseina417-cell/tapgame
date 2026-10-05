@@ -134,6 +134,4 @@
     <string name="fuse_import_bad">فایل معتبر نیست — قالب: cars → fuses</string>
     <string name="fuse_export_ok">فایل خروجی ذخیره شد ✓</string>
     <string name="fuse_no_result">فیوزی با این عبارت پیدا نشد</string>
-    <string name="fuse_preset_btn">🔌 جدول مکسوس</string>
-    <string name="fuse_preset_fail">بارگذاری جدول پیش‌فرض ممکن نشد</string>
 </resources>
