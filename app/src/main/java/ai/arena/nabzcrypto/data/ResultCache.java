@@ -6,8 +6,11 @@ import android.content.SharedPreferences;
 import ai.arena.nabzcrypto.model.AiAssessment;
 import ai.arena.nabzcrypto.model.MarketRegime;
 import ai.arena.nabzcrypto.model.MarketTicker;
+import ai.arena.nabzcrypto.model.OrderBookMetrics;
 import ai.arena.nabzcrypto.model.ScanResult;
 import ai.arena.nabzcrypto.model.Signal;
+import ai.arena.nabzcrypto.model.SignalDiagnostics;
+import ai.arena.nabzcrypto.model.TradeChartData;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -40,7 +43,7 @@ public final class ResultCache {
             int count = Math.min(140, results.size());
             for (int i = 0; i < count; i++) rows.put(encode(results.get(i)));
             JSONObject root = new JSONObject();
-            root.put("version", 4);
+            root.put("version", 5);
             root.put("savedAt", System.currentTimeMillis());
             root.put("results", rows);
             preferences.edit()
@@ -61,7 +64,7 @@ public final class ResultCache {
         try {
             JSONObject root = new JSONObject(payload);
             int version = root.optInt("version");
-            if (version != 4) return Collections.emptyList();
+            if (version != 5) return Collections.emptyList();
             JSONArray rows = root.optJSONArray("results");
             if (rows == null) return Collections.emptyList();
             for (int i = 0; i < rows.length(); i++) {
@@ -111,6 +114,30 @@ public final class ResultCache {
             row.put("aiAgreement", result.ai.horizonAgreement);
             row.put("aiModels", result.ai.modelsUsed);
             row.put("aiFolds", result.ai.validationFolds);
+            row.put("aiDrift", result.ai.driftDetected);
+            row.put("aiRecentAccuracy", result.ai.recentValidationAccuracy);
+            row.put("trend1h", result.diagnostics.oneHourTrend);
+            row.put("trend4h", result.diagnostics.fourHourTrend);
+            row.put("benchmarkTrend", result.diagnostics.benchmarkTrend);
+            row.put("higherAligned", result.diagnostics.higherTimeframeAligned);
+            row.put("bookAvailable", result.diagnostics.orderBook.available);
+            row.put("bookSpread", result.diagnostics.orderBook.spreadPct);
+            row.put("bookBidDepth", result.diagnostics.orderBook.bidDepthUsd);
+            row.put("bookAskDepth", result.diagnostics.orderBook.askDepthUsd);
+            row.put("bookImbalance", result.diagnostics.orderBook.imbalance);
+            row.put("bookSlippage", result.diagnostics.orderBook.estimatedSlippagePct);
+            row.put("rr1", result.diagnostics.riskReward1);
+            row.put("rr2", result.diagnostics.riskReward2);
+            row.put("roundTripCost", result.diagnostics.estimatedRoundTripCostPct);
+            row.put("position1000", result.diagnostics.positionSizePer1000);
+            row.put("rrPassed", result.diagnostics.riskRewardPassed);
+            row.put("liquidityPassed", result.diagnostics.liquidityPassed);
+            row.put("historyDays", result.diagnostics.historyDays);
+            row.put("qualityStrong", result.diagnostics.qualityStrong);
+            row.put("technicalStrong", result.diagnostics.technicalStrong);
+            row.put("regimeStrong", result.diagnostics.regimeStrong);
+            row.put("independentConfirmation", result.diagnostics.independentConfirmation);
+            row.put("strongEligible", result.diagnostics.strongEligible);
             row.put("rsi", result.rsi14);
             row.put("ema9", result.ema9);
             row.put("ema21", result.ema21);
@@ -135,6 +162,18 @@ public final class ResultCache {
             JSONArray spark = new JSONArray();
             for (double point : result.sparkline) spark.put(point);
             row.put("spark", spark);
+            JSONArray chart = new JSONArray();
+            int chartStart = Math.max(0, result.chartData.size() - 96);
+            for (int i = chartStart; i < result.chartData.size(); i++) {
+                JSONArray candle = new JSONArray();
+                candle.put(result.chartData.openTimes[i]);
+                candle.put(result.chartData.opens[i]);
+                candle.put(result.chartData.highs[i]);
+                candle.put(result.chartData.lows[i]);
+                candle.put(result.chartData.closes[i]);
+                chart.put(candle);
+            }
+            row.put("chart", chart);
         } catch (Exception ignored) {
             // org.json only fails for non-finite values; analysis guards against those.
         }
@@ -163,10 +202,26 @@ public final class ResultCache {
                     row.optDouble("aiBrier", 1), row.optInt("aiTrain", 0),
                     row.optInt("aiValidation", 0), row.optInt("aiVote", 0),
                     row.optBoolean("aiAgreement", false), row.optInt("aiModels", 1),
-                    row.optInt("aiFolds", 1));
+                    row.optInt("aiFolds", 1), row.optBoolean("aiDrift", false),
+                    row.optDouble("aiRecentAccuracy", 0));
             JSONArray sparkJson = row.optJSONArray("spark");
             double[] spark = new double[sparkJson == null ? 0 : sparkJson.length()];
             for (int i = 0; i < spark.length; i++) spark[i] = sparkJson.optDouble(i);
+            OrderBookMetrics book = new OrderBookMetrics(
+                    row.optBoolean("bookAvailable", false), row.optDouble("bookSpread", 0),
+                    row.optDouble("bookBidDepth", 0), row.optDouble("bookAskDepth", 0),
+                    row.optDouble("bookImbalance", 0), row.optDouble("bookSlippage", 0));
+            SignalDiagnostics diagnostics = new SignalDiagnostics(
+                    row.optInt("trend1h", 0), row.optInt("trend4h", 0),
+                    row.optInt("benchmarkTrend", 0), row.optBoolean("higherAligned", false),
+                    book, row.optDouble("rr1", 0), row.optDouble("rr2", 0),
+                    row.optDouble("roundTripCost", 0.20), row.optDouble("position1000", 0),
+                    row.optBoolean("rrPassed", false), row.optBoolean("liquidityPassed", true),
+                    row.optInt("historyDays", 0), row.optBoolean("qualityStrong", false),
+                    row.optBoolean("technicalStrong", false), row.optBoolean("regimeStrong", false),
+                    row.optBoolean("independentConfirmation", false),
+                    row.optBoolean("strongEligible", false));
+            TradeChartData chartData = readChart(row.optJSONArray("chart"));
             int combinedScore = row.getInt("score");
             return new ScanResult(ticker, signal, combinedScore,
                     row.optInt("technicalScore", combinedScore), row.getInt("strength"),
@@ -180,10 +235,31 @@ public final class ResultCache {
                     row.getDouble("zoneHigh"), row.getDouble("invalidation"),
                     row.getDouble("objective1"), row.getDouble("objective2"),
                     row.getLong("closedAt"), row.optString("source"), readStrings(row.optJSONArray("reasons")),
-                    readStrings(row.optJSONArray("cautions")), spark, true);
+                    readStrings(row.optJSONArray("cautions")), spark, true,
+                    diagnostics, chartData);
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    private static TradeChartData readChart(JSONArray array) {
+        if (array == null || array.length() == 0) return TradeChartData.empty();
+        int count = array.length();
+        long[] times = new long[count];
+        double[] opens = new double[count];
+        double[] highs = new double[count];
+        double[] lows = new double[count];
+        double[] closes = new double[count];
+        for (int i = 0; i < count; i++) {
+            JSONArray candle = array.optJSONArray(i);
+            if (candle == null || candle.length() < 5) return TradeChartData.empty();
+            times[i] = candle.optLong(0);
+            opens[i] = candle.optDouble(1);
+            highs[i] = candle.optDouble(2);
+            lows[i] = candle.optDouble(3);
+            closes[i] = candle.optDouble(4);
+        }
+        return new TradeChartData(times, opens, highs, lows, closes);
     }
 
     private static MarketRegime parseRegime(String value) {

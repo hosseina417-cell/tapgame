@@ -1,11 +1,13 @@
 package ai.arena.nabzcrypto.data;
 
+import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 
 import ai.arena.nabzcrypto.analysis.IndicatorEngine;
 import ai.arena.nabzcrypto.model.Candle;
 import ai.arena.nabzcrypto.model.MarketTicker;
+import ai.arena.nabzcrypto.model.OrderBookMetrics;
 import ai.arena.nabzcrypto.model.ScanConfig;
 import ai.arena.nabzcrypto.model.ScanResult;
 import ai.arena.nabzcrypto.model.Signal;
@@ -14,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -45,6 +48,13 @@ public final class MarketRepository {
     private final List<MarketProvider> providers = Arrays.asList(
             new BinanceProvider(), new KucoinProvider(), new BybitProvider(), new OkxProvider());
     private final AtomicBoolean scanning = new AtomicBoolean(false);
+    private final CandleHistoryStore historyStore;
+    private final SignalJournal journal;
+
+    public MarketRepository(Context context, SignalJournal journal) {
+        this.historyStore = new CandleHistoryStore(context.getApplicationContext());
+        this.journal = journal;
+    }
 
     public boolean isScanning() {
         return scanning.get();
@@ -65,20 +75,26 @@ public final class MarketRepository {
         try {
             SourceBundle bundle = discoverSources();
             List<MarketCandidate> universe = aggregate(bundle);
-            List<MarketCandidate> selected = selectMarkets(universe, config, favorites);
+            Set<String> required = new HashSet<>();
+            if (favorites != null) required.addAll(favorites);
+            if (journal != null) required.addAll(journal.activeSymbols());
+            List<MarketCandidate> selected = selectMarkets(universe, config, required);
             if (selected.isEmpty()) throw new ApiException("بازار واجد شرایطی پیدا نشد");
-            String sourceLabel = sourceLabel(bundle);
+            int benchmarkTrend = benchmarkTrend(universe);
+            String sourceLabel = sourceLabel(bundle) + " • زمینه بازار "
+                    + String.format(Locale.US, "%+d", benchmarkTrend);
             post(() -> callback.onSourceSelected(sourceLabel, selected.size()));
 
             workers = Executors.newFixedThreadPool(CANDLE_WORKERS);
             CompletionService<ScanResult> completion = new ExecutorCompletionService<>(workers);
             for (MarketCandidate candidate : selected) {
-                completion.submit(() -> analyze(candidate));
+                boolean favorite = favorites != null && favorites.contains(candidate.ticker.symbol);
+                completion.submit(() -> analyze(candidate, config, benchmarkTrend, favorite));
             }
 
             List<ScanResult> analyzed = new ArrayList<>();
             int failed = 0;
-            long seconds = Math.max(180L, selected.size() * 3L);
+            long seconds = Math.max(210L, selected.size() * 5L);
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Math.min(420L, seconds));
             for (int completed = 1; completed <= selected.size(); completed++) {
                 long remaining = deadline - System.nanoTime();
@@ -105,6 +121,7 @@ public final class MarketRepository {
             }
 
             sortResults(analyzed);
+            if (journal != null) journal.flush();
             if (analyzed.isEmpty()) {
                 throw new ApiException("کندل کافی دریافت نشد؛ منابع بازار یا اینترنت را بررسی کنید");
             }
@@ -121,6 +138,7 @@ public final class MarketRepository {
             post(() -> callback.onError("خطای غیرمنتظره در تجمیع و تحلیل بازار"));
         } finally {
             if (workers != null) workers.shutdownNow();
+            if (journal != null) journal.flush();
             scanning.set(false);
         }
     }
@@ -227,24 +245,40 @@ public final class MarketRepository {
         return result;
     }
 
-    private ScanResult analyze(MarketCandidate candidate) throws ApiException {
+    private ScanResult analyze(MarketCandidate candidate, ScanConfig config,
+                               int benchmarkTrend, boolean favorite) throws ApiException {
         ApiException lastError = null;
         int attempts = Math.min(3, candidate.alternatives.size());
         for (int i = 0; i < attempts; i++) {
             ProviderQuote quote = candidate.alternatives.get(i);
             try {
-                List<Candle> five = quote.provider.fetchCandles(quote.ticker, 5, 300);
-                if (five.size() < 55) throw new ApiException("کندل ۵دقیقه کافی نیست");
-                List<Candle> fifteen;
-                try {
-                    fifteen = quote.provider.fetchCandles(quote.ticker, 15, 90);
-                } catch (ApiException e) {
-                    fifteen = IndicatorEngine.aggregateToFifteenMinutes(five);
-                }
+                List<Candle> freshFive = quote.provider.fetchCandles(quote.ticker, 5, 1000);
+                if (freshFive.size() < 55) throw new ApiException("کندل ۵دقیقه کافی نیست");
+                List<Candle> five = historyStore.merge(candidate.ticker.symbol,
+                        freshFive, favorite);
+                List<Candle> fifteen = safeCandles(quote.provider, quote.ticker, 15, 300);
                 if (fifteen.size() < 55) fifteen = IndicatorEngine.aggregateToFifteenMinutes(five);
+                List<Candle> oneHour = safeCandles(quote.provider, quote.ticker, 60, 168);
+                if (oneHour.size() < 40) {
+                    oneHour = IndicatorEngine.aggregateCandles(fifteen, 15, 60);
+                }
+                List<Candle> fourHour = safeCandles(quote.provider, quote.ticker, 240, 180);
+                if (fourHour.size() < 40) {
+                    fourHour = IndicatorEngine.aggregateCandles(oneHour, 60, 240);
+                }
+                OrderBookMetrics orderBook;
+                try {
+                    orderBook = quote.provider.fetchOrderBook(quote.ticker);
+                } catch (ApiException ignored) {
+                    orderBook = OrderBookMetrics.unavailable();
+                }
                 String source = quote.provider.name() + " • اجماع "
                         + candidate.ticker.sourceCount + " منبع";
-                return IndicatorEngine.analyze(candidate.ticker, five, fifteen, source);
+                ScanResult result = IndicatorEngine.analyze(candidate.ticker, five, fifteen,
+                        oneHour, fourHour, benchmarkTrend, orderBook,
+                        config.feePerSidePct, config.riskPerTradePct, source);
+                if (journal != null) journal.observe(result, five);
+                return result;
             } catch (ApiException e) {
                 lastError = e;
             } catch (IllegalArgumentException e) {
@@ -252,6 +286,35 @@ public final class MarketRepository {
             }
         }
         throw lastError == null ? new ApiException("تحلیل بازار ممکن نشد") : lastError;
+    }
+
+    private static List<Candle> safeCandles(MarketProvider provider, MarketTicker ticker,
+                                            int interval, int limit) {
+        try {
+            return provider.fetchCandles(ticker, interval, limit);
+        } catch (ApiException ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    private static int benchmarkTrend(List<MarketCandidate> universe) {
+        int sum = 0;
+        int count = 0;
+        for (MarketCandidate candidate : universe) {
+            String base = candidate.ticker.baseAsset;
+            if (!("BTC".equals(base) || "ETH".equals(base))
+                    || candidate.alternatives.isEmpty()) continue;
+            ProviderQuote quote = candidate.alternatives.get(0);
+            List<Candle> oneHour = safeCandles(quote.provider, quote.ticker, 60, 168);
+            List<Candle> fourHour = safeCandles(quote.provider, quote.ticker, 240, 180);
+            int one = IndicatorEngine.timeframeTrend(oneHour);
+            int four = IndicatorEngine.timeframeTrend(fourHour);
+            if (oneHour.size() >= 40 || fourHour.size() >= 40) {
+                sum += Math.round(one * 0.45f + four * 0.55f);
+                count++;
+            }
+        }
+        return count == 0 ? 0 : Math.max(-100, Math.min(100, Math.round(sum / (float) count)));
     }
 
     private static List<MarketCandidate> selectMarkets(List<MarketCandidate> all,

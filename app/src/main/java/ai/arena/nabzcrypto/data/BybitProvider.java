@@ -2,6 +2,7 @@ package ai.arena.nabzcrypto.data;
 
 import ai.arena.nabzcrypto.model.Candle;
 import ai.arena.nabzcrypto.model.MarketTicker;
+import ai.arena.nabzcrypto.model.OrderBookMetrics;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -50,10 +51,10 @@ public final class BybitProvider implements MarketProvider {
 
     @Override public List<Candle> fetchCandles(MarketTicker ticker, int intervalMinutes, int limit)
             throws ApiException {
-        String interval = intervalMinutes == 5 ? "5" : intervalMinutes == 15 ? "15" : null;
+        String interval = intervalToken(intervalMinutes);
         if (interval == null) throw new ApiException("بازهٔ زمانی پشتیبانی نمی‌شود");
         String url = BASE + "/v5/market/kline?category=spot&symbol=" + ticker.apiSymbol
-                + "&interval=" + interval + "&limit=" + Math.max(60, Math.min(300, limit + 2));
+                + "&interval=" + interval + "&limit=" + Math.max(60, Math.min(1000, limit + 2));
         Object raw = HttpJson.get(url);
         if (!(raw instanceof JSONObject)) throw new ApiException("پاسخ کندل بای‌بیت نامعتبر است");
         JSONObject root = (JSONObject) raw;
@@ -76,6 +77,25 @@ public final class BybitProvider implements MarketProvider {
                     CandleNormalizer.number(row.optString(6))));
         }
         return CandleNormalizer.completed(candles, limit);
+    }
+
+    static String intervalToken(int minutes) {
+        return minutes == 5 ? "5" : minutes == 15 ? "15"
+                : minutes == 60 ? "60" : minutes == 240 ? "240" : null;
+    }
+
+    @Override public OrderBookMetrics fetchOrderBook(MarketTicker ticker) throws ApiException {
+        Object raw = HttpJson.get(BASE + "/v5/market/orderbook?category=spot&symbol="
+                + ticker.apiSymbol + "&limit=50");
+        if (!(raw instanceof JSONObject)) throw new ApiException("دفتر سفارش بای‌بیت نامعتبر است");
+        JSONObject root = (JSONObject) raw;
+        if (root.optInt("retCode", -1) != 0) throw new ApiException("دفتر سفارش بای‌بیت دریافت نشد");
+        JSONObject data = root.optJSONObject("result");
+        OrderBookMetrics metrics = data == null ? OrderBookMetrics.unavailable()
+                : OrderBookParser.parse(data.optJSONArray("b"), data.optJSONArray("a"),
+                        ticker.lastPrice);
+        if (!metrics.available) throw new ApiException("عمق بازار بای‌بیت کافی نیست");
+        return metrics;
     }
 
     private static long parseLong(String value) {

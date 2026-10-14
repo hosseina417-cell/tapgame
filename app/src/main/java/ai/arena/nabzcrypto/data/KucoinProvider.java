@@ -2,6 +2,7 @@ package ai.arena.nabzcrypto.data;
 
 import ai.arena.nabzcrypto.model.Candle;
 import ai.arena.nabzcrypto.model.MarketTicker;
+import ai.arena.nabzcrypto.model.OrderBookMetrics;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -52,7 +53,7 @@ public final class KucoinProvider implements MarketProvider {
 
     @Override public List<Candle> fetchCandles(MarketTicker ticker, int intervalMinutes, int limit)
             throws ApiException {
-        String type = intervalMinutes == 5 ? "5min" : intervalMinutes == 15 ? "15min" : null;
+        String type = intervalToken(intervalMinutes);
         if (type == null) throw new ApiException("بازهٔ زمانی پشتیبانی نمی‌شود");
         long nowSec = System.currentTimeMillis() / 1000L;
         long startSec = nowSec - (long) intervalMinutes * 60L * (limit + 3L);
@@ -82,5 +83,26 @@ public final class KucoinProvider implements MarketProvider {
                     CandleNormalizer.number(row.optString(6))));
         }
         return CandleNormalizer.completed(candles, limit);
+    }
+
+    static String intervalToken(int minutes) {
+        return minutes == 5 ? "5min" : minutes == 15 ? "15min"
+                : minutes == 60 ? "1hour" : minutes == 240 ? "4hour" : null;
+    }
+
+    @Override public OrderBookMetrics fetchOrderBook(MarketTicker ticker) throws ApiException {
+        Object raw = HttpJson.get(BASE + "/api/v1/market/orderbook/level2_100?symbol="
+                + ticker.apiSymbol);
+        if (!(raw instanceof JSONObject)) throw new ApiException("دفتر سفارش کوکوین نامعتبر است");
+        JSONObject root = (JSONObject) raw;
+        if (!"200000".equals(root.optString("code"))) {
+            throw new ApiException("دفتر سفارش کوکوین دریافت نشد");
+        }
+        JSONObject data = root.optJSONObject("data");
+        OrderBookMetrics metrics = data == null ? OrderBookMetrics.unavailable()
+                : OrderBookParser.parse(data.optJSONArray("bids"), data.optJSONArray("asks"),
+                        ticker.lastPrice);
+        if (!metrics.available) throw new ApiException("عمق بازار کوکوین کافی نیست");
+        return metrics;
     }
 }

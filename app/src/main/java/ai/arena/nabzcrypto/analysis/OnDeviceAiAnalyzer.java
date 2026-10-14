@@ -22,6 +22,7 @@ public final class OnDeviceAiAnalyzer {
     private static final int FEATURE_COUNT = 10;
     private static final int MIN_TRAINING_ROWS = 70;
     private static final int MIN_VALIDATION_ROWS = 36;
+    private static final int MAX_MODEL_CANDLES = 1200;
     private static final int EPOCHS = 105;
     private static final double L2 = 0.020;
 
@@ -66,19 +67,29 @@ public final class OnDeviceAiAnalyzer {
                 && shortDirection != 0 && longDirection != 0 && shortDirection != longDirection;
         boolean agreement = shortModel.reliable && longModel.reliable
                 && shortDirection != 0 && shortDirection == longDirection;
-        boolean reliable = reliableCount > 0 && !conflict;
+        boolean anyDrift = false;
+        for (HorizonModel model : trained) anyDrift |= model.drift;
+        // A validated degradation in either horizon disables the aggregate AI vote. The
+        // probabilities remain visible for audit, but cannot influence a trading label.
+        boolean reliable = reliableCount > 0 && !conflict && !anyDrift;
 
         double accuracySum = 0;
+        double recentAccuracySum = 0;
         double brierSum = 0;
         double metricWeight = 0;
+        double driftRecentRecall = 1.0;
         for (HorizonModel model : trained) {
+            if (model.drift) driftRecentRecall = Math.min(driftRecentRecall, model.recentRecall);
             if (reliableCount > 0 && !model.reliable) continue;
             double weight = Math.max(1, model.validationSamples);
             accuracySum += model.macroRecall * weight;
+            recentAccuracySum += model.recentRecall * weight;
             brierSum += model.brier * weight;
             metricWeight += weight;
         }
         double accuracy = metricWeight > 0 ? accuracySum / metricWeight : 0;
+        double recentAccuracy = metricWeight > 0 ? recentAccuracySum / metricWeight : 0;
+        if (anyDrift && driftRecentRecall < 1.0) recentAccuracy = driftRecentRecall;
         double brier = metricWeight > 0 ? brierSum / metricWeight : 1;
 
         int direction = reliable ? direction(combined) : 0;
@@ -103,7 +114,8 @@ public final class OnDeviceAiAnalyzer {
         return new AiAssessment(true, reliable,
                 combined[UP], combined[DOWN], combined[NEUTRAL], confidence,
                 accuracy, brier, trainingSamples, validationSamples, vote,
-                agreement, reliableCount > 0 ? reliableCount : trained.size(), folds);
+                agreement, reliableCount > 0 ? reliableCount : trained.size(), folds,
+                anyDrift, recentAccuracy);
     }
 
     private static HorizonModel fitHorizon(List<Candle> candles, int horizon) {
@@ -119,6 +131,7 @@ public final class OnDeviceAiAnalyzer {
         int[] ends = {midpoint, data.rows.size()};
         List<double[]> outOfFold = new ArrayList<>();
         List<Integer> outLabels = new ArrayList<>();
+        List<Double> foldRecalls = new ArrayList<>();
         int completedFolds = 0;
 
         for (int fold = 0; fold < starts.length; fold++) {
@@ -129,10 +142,16 @@ public final class OnDeviceAiAnalyzer {
             if (trainEnd < MIN_TRAINING_ROWS || !enoughClasses(counts, 8, 4)) continue;
             Standardizer standardizer = fitStandardizer(data.rows, trainEnd);
             double[][] weights = train(data, trainEnd, counts, standardizer);
+            List<double[]> foldProbabilities = new ArrayList<>();
+            List<Integer> foldLabels = new ArrayList<>();
             for (int i = validationStart; i < validationEnd; i++) {
-                outOfFold.add(softmax(weights, standardizer.transform(data.rows.get(i))));
+                double[] prediction = softmax(weights, standardizer.transform(data.rows.get(i)));
+                outOfFold.add(prediction);
                 outLabels.add(data.labels.get(i));
+                foldProbabilities.add(prediction);
+                foldLabels.add(data.labels.get(i));
             }
+            foldRecalls.add(validate(foldProbabilities, foldLabels, 1.0).macroRecall);
             completedFolds++;
         }
 
@@ -146,14 +165,20 @@ public final class OnDeviceAiAnalyzer {
         double[] current = features(candles, candles.size() - 1);
         double[] probabilities = calibrate(
                 softmax(finalWeights, finalStandardizer.transform(current)), temperature);
+        double recentRecall = foldRecalls.isEmpty() ? 0
+                : foldRecalls.get(foldRecalls.size() - 1);
+        double earlierRecall = foldRecalls.size() < 2 ? recentRecall : foldRecalls.get(0);
+        boolean drift = completedFolds == 2
+                && (recentRecall < 0.34 || earlierRecall - recentRecall >= 0.18);
         boolean reliable = completedFolds == 2
                 && validation.samples >= MIN_VALIDATION_ROWS
                 && validation.classMinimum >= 5
                 && validation.macroRecall >= 0.40
-                && validation.brier <= 0.215;
+                && validation.brier <= 0.215
+                && !drift;
         return new HorizonModel(true, reliable, probabilities,
                 validation.macroRecall, validation.brier, data.rows.size(),
-                validation.samples, completedFolds);
+                validation.samples, completedFolds, drift, recentRecall);
     }
 
     private static Dataset dataset(List<Candle> candles, int horizon) {
@@ -409,6 +434,9 @@ public final class OnDeviceAiAnalyzer {
                 unique.add(candle);
             }
         }
+        if (unique.size() > MAX_MODEL_CANDLES) {
+            return new ArrayList<>(unique.subList(unique.size() - MAX_MODEL_CANDLES, unique.size()));
+        }
         return unique;
     }
 
@@ -502,10 +530,13 @@ public final class OnDeviceAiAnalyzer {
         final int trainingSamples;
         final int validationSamples;
         final int folds;
+        final boolean drift;
+        final double recentRecall;
 
         HorizonModel(boolean trained, boolean reliable, double[] probabilities,
                      double macroRecall, double brier, int trainingSamples,
-                     int validationSamples, int folds) {
+                     int validationSamples, int folds, boolean drift,
+                     double recentRecall) {
             this.trained = trained;
             this.reliable = reliable;
             this.probabilities = probabilities;
@@ -514,12 +545,14 @@ public final class OnDeviceAiAnalyzer {
             this.trainingSamples = trainingSamples;
             this.validationSamples = validationSamples;
             this.folds = folds;
+            this.drift = drift;
+            this.recentRecall = recentRecall;
         }
 
         static HorizonModel unavailable() {
             return new HorizonModel(false, false,
                     new double[]{1.0 / 3, 1.0 / 3, 1.0 / 3},
-                    0, 1, 0, 0, 0);
+                    0, 1, 0, 0, 0, false, 0);
         }
     }
 }

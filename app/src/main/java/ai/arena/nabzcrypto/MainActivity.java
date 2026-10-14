@@ -1,11 +1,14 @@
 package ai.arena.nabzcrypto;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.ConnectivityManager;
@@ -38,8 +41,13 @@ import android.widget.Toast;
 import ai.arena.nabzcrypto.data.AppPreferences;
 import ai.arena.nabzcrypto.data.MarketRepository;
 import ai.arena.nabzcrypto.data.ResultCache;
+import ai.arena.nabzcrypto.data.SignalJournal;
+import ai.arena.nabzcrypto.data.SignalNotifier;
+import ai.arena.nabzcrypto.model.MarketRegime;
+import ai.arena.nabzcrypto.model.PerformanceStats;
 import ai.arena.nabzcrypto.model.ScanResult;
 import ai.arena.nabzcrypto.model.Signal;
+import ai.arena.nabzcrypto.model.SignalRecord;
 import ai.arena.nabzcrypto.ui.ExternalLinks;
 import ai.arena.nabzcrypto.ui.Formatters;
 import ai.arena.nabzcrypto.ui.MarketListAdapter;
@@ -51,12 +59,16 @@ import ai.arena.nabzcrypto.ui.TradePlanChartView;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public final class MainActivity extends Activity implements MarketListAdapter.Listener {
+    public static final String EXTRA_OPEN_PERFORMANCE = "open_performance";
     private static final int TAB_SCANNER = 0;
     private static final int TAB_MOVEMENTS = 1;
     private static final int TAB_FAVORITES = 2;
-    private static final int TAB_SETTINGS = 3;
+    private static final int TAB_PERFORMANCE = 3;
+    private static final int TAB_SETTINGS = 4;
+    private static final int NOTIFICATION_PERMISSION_REQUEST = 901;
     private static final long AUTO_REFRESH_MS = 5L * 60L * 1000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -66,6 +78,8 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
 
     private AppPreferences preferences;
     private ResultCache cache;
+    private SignalJournal signalJournal;
+    private SignalNotifier signalNotifier;
     private MarketRepository repository;
     private FrameLayout root;
     private FrameLayout content;
@@ -103,9 +117,15 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         super.onCreate(savedInstanceState);
         preferences = new AppPreferences(this);
         cache = new ResultCache(this);
-        repository = new MarketRepository();
+        signalJournal = new SignalJournal(this);
+        signalNotifier = new SignalNotifier(this);
+        repository = new MarketRepository(this, signalJournal);
         results.addAll(cache.load());
         if (!results.isEmpty()) currentSource = results.get(0).source;
+        if (getIntent() != null
+                && getIntent().getBooleanExtra(EXTRA_OPEN_PERFORMANCE, false)) {
+            currentTab = TAB_PERFORMANCE;
+        }
 
         configureWindow();
         buildShell();
@@ -212,7 +232,8 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
                 Theme.dp(this, 7), Theme.dp(this, 6));
         bar.setBackground(Theme.rounded(Theme.SURFACE, Theme.dp(this, 18),
                 Theme.dp(this, 1), Theme.BORDER));
-        String[] labels = {"◉\nاسکنر", "ϟ\nحرکت‌ها", "★\nمنتخب‌ها", "ⓘ\nتنظیمات"};
+        String[] labels = {"◉\nاسکنر", "ϟ\nحرکت‌ها", "★\nمنتخب‌ها",
+                "◎\nعملکرد", "ⓘ\nتنظیمات"};
         for (int i = 0; i < labels.length; i++) {
             final int index = i;
             TextView item = Theme.text(this, labels[i], 11.5f, Theme.MUTED, false);
@@ -257,6 +278,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         pageStatus = null;
         filterButtons.clear();
         if (currentTab == TAB_SETTINGS) renderSettings();
+        else if (currentTab == TAB_PERFORMANCE) renderPerformance();
         else renderListPage();
     }
 
@@ -590,6 +612,8 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
                 results.clear();
                 results.addAll(fresh);
                 cache.save(results);
+                signalNotifier.notifyEvents(signalJournal.drainEvents(),
+                        preferences.notificationsEnabled());
                 finishScanUi();
                 headerStatus.setText(source + " • " + results.size() + " بازار • اکنون");
                 if (!requestedSymbol.isEmpty() && requestedNeedsScan) {
@@ -613,17 +637,21 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
                 if (failedMarkets > 0) {
                     toast(failedMarkets + " بازار به‌دلیل دادهٔ ناکافی رد شد");
                 }
-                if (currentTab != TAB_SETTINGS) refreshVisibleList();
+                if (currentTab == TAB_PERFORMANCE) renderCurrentTab();
+                else if (currentTab != TAB_SETTINGS) refreshVisibleList();
             }
 
             @Override public void onError(String message) {
                 scanUiActive = false;
                 requestedSymbol = "";
                 requestedNeedsScan = false;
+                signalNotifier.notifyEvents(signalJournal.drainEvents(),
+                        preferences.notificationsEnabled());
                 finishScanUi();
                 headerStatus.setText("خطا • دادهٔ قبلی حفظ شد");
                 showTransientError(message);
-                if (currentTab != TAB_SETTINGS) refreshVisibleList();
+                if (currentTab == TAB_PERFORMANCE) renderCurrentTab();
+                else if (currentTab != TAB_SETTINGS) refreshVisibleList();
             }
         });
     }
@@ -646,6 +674,155 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         if (network == null) return false;
         NetworkCapabilities capabilities = manager.getNetworkCapabilities(network);
         return capabilities != null && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+    }
+
+    private void renderPerformance() {
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        page.setPadding(Theme.dp(this, 12), Theme.dp(this, 8),
+                Theme.dp(this, 12), Theme.dp(this, 24));
+        scroll.addView(page, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        content.addView(scroll, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        PerformanceStats stats = signalJournal.stats();
+        LinearLayout summary = Theme.card(this);
+        summary.addView(Theme.text(this, "دفتر کاغذی و چرخهٔ سیگنال", 16, Theme.TEXT, true));
+        summary.addView(metricPair("کل سیگنال‌ها", String.valueOf(stats.totalSignals),
+                "فعال", String.valueOf(stats.activeSignals)));
+        summary.addView(metricPair("نتیجهٔ نهایی", String.valueOf(stats.completedSignals),
+                "نتیجهٔ مثبت پس از هزینه", String.format(Locale.US, "%.1f%%", stats.positiveRatePct)));
+        summary.addView(metricPair("میانگین R خالص", String.format(Locale.US, "%+.2fR", stats.averageR),
+                "میانگین بازده خالص", String.format(Locale.US, "%+.2f%%", stats.averageNetReturnPct)));
+        TextView sampleWarning = bodyText(stats.completedSignals < 20
+                ? "برای قضاوت آماری هنوز نمونه کافی نیست؛ حداقل ۲۰ نتیجه و ترجیحاً چند رژیم بازار لازم است."
+                : "این آمار خارج از معاملهٔ واقعی و بر پایهٔ OHLC است؛ تضمین تکرار در آینده نیست.");
+        sampleWarning.setTextColor(Theme.AMBER);
+        summary.addView(sampleWarning);
+        page.addView(summary, marginParams(0, 0, 0, 10));
+
+        page.addView(section("عملکرد بر اساس جهت"));
+        LinearLayout directionCard = Theme.card(this);
+        Map<Integer, PerformanceStats> directions = signalJournal.directionStats();
+        PerformanceStats buyStats = directions.get(1);
+        PerformanceStats sellStats = directions.get(-1);
+        directionCard.addView(performanceBreakdownRow("صعودی", buyStats, Theme.GREEN));
+        directionCard.addView(performanceBreakdownRow("نزولی", sellStats, Theme.RED));
+        page.addView(directionCard, marginParams(0, 0, 0, 10));
+
+        page.addView(section("عملکرد بر اساس ارز"));
+        LinearLayout symbolCard = Theme.card(this);
+        int shownSymbols = 0;
+        for (Map.Entry<String, PerformanceStats> entry : signalJournal.symbolStats().entrySet()) {
+            PerformanceStats item = entry.getValue();
+            if (item.completedSignals == 0 || shownSymbols >= 20) continue;
+            symbolCard.addView(performanceBreakdownRow(entry.getKey().replace("USDT", ""),
+                    item, item.averageR >= 0 ? Theme.GREEN : Theme.RED));
+            shownSymbols++;
+        }
+        if (shownSymbols == 0) symbolCard.addView(bodyText("هنوز نتیجهٔ نهایی برای تفکیک ارز وجود ندارد."));
+        page.addView(symbolCard, marginParams(0, 0, 0, 10));
+
+        page.addView(section("عملکرد بر اساس رژیم بازار"));
+        Map<MarketRegime, PerformanceStats> regimes = signalJournal.regimeStats();
+        LinearLayout regimeCard = Theme.card(this);
+        boolean hasRegime = false;
+        for (MarketRegime regime : MarketRegime.values()) {
+            PerformanceStats item = regimes.get(regime);
+            if (item == null || item.completedSignals == 0) continue;
+            hasRegime = true;
+            regimeCard.addView(levelRow(regime.faLabel,
+                    String.format(Locale.US, "%d نتیجه • %.0f%% مثبت • %+.2fR",
+                            item.completedSignals, item.positiveRatePct, item.averageR),
+                    item.averageR >= 0 ? Theme.GREEN : Theme.RED));
+        }
+        if (!hasRegime) regimeCard.addView(bodyText("هنوز نتیجهٔ نهایی برای تفکیک رژیم وجود ندارد."));
+        page.addView(regimeCard, marginParams(0, 0, 0, 10));
+
+        page.addView(section("آخرین چرخه‌ها"));
+        List<SignalRecord> records = signalJournal.records();
+        if (records.isEmpty()) {
+            page.addView(noteCard("پس از صدور خرید/فروش، وضعیت در اسکن‌های بعدی به تأیید، هدف، ابطال یا انقضا تغییر می‌کند."),
+                    marginParams(0, 0, 0, 10));
+        } else {
+            int count = Math.min(30, records.size());
+            for (int i = 0; i < count; i++) {
+                page.addView(signalRecordCard(records.get(i)), marginParams(0, 0, 0, 7));
+            }
+        }
+
+        LinearLayout methodology = Theme.card(this);
+        methodology.addView(Theme.text(this, "روش محاسبه", 13, Theme.CYAN, true));
+        methodology.addView(bodyText("• کارمزد رفت‌وبرگشت و لغزش برآوردی دفتر سفارش از نتیجه کم می‌شود.\n"
+                + "• اگر STOP و هدف در یک کندل لمس شوند، برای جلوگیری از خوش‌بینی STOP مقدم فرض می‌شود.\n"
+                + "• هدف ۱ سپس ابطال، با خروج فرضی نصف در TP1 و نصف در STOP محاسبه می‌شود.\n"
+                + "• این دفتر paper tracking است و هیچ سفارش واقعی اجرا نمی‌کند."));
+        page.addView(methodology, marginParams(0, 4, 0, 10));
+
+        TextView clear = Theme.button(this, "پاک‌کردن دفتر عملکرد", Theme.SURFACE_2, Theme.RED);
+        clear.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
+                .setTitle("پاک‌کردن دفتر عملکرد؟")
+                .setMessage("همهٔ چرخه‌ها و آمار paper این گوشی برای همیشه پاک می‌شود.")
+                .setNegativeButton("انصراف", null)
+                .setPositiveButton("پاک شود", (dialog, which) -> {
+                    signalJournal.clear();
+                    toast("دفتر عملکرد پاک شد");
+                    renderCurrentTab();
+                }).show());
+        page.addView(clear, marginParams(0, 0, 0, 10));
+    }
+
+    private View performanceBreakdownRow(String label, PerformanceStats stats, int color) {
+        PerformanceStats safe = stats == null ? PerformanceStats.empty() : stats;
+        return levelRow(label, String.format(Locale.US, "%d نتیجه • %.0f%% مثبت • %+.2fR",
+                safe.completedSignals, safe.positiveRatePct, safe.averageR), color);
+    }
+
+    private View signalRecordCard(SignalRecord record) {
+        LinearLayout card = Theme.card(this);
+        int color = record.active() ? Theme.AMBER
+                : record.outcomeR > 0 ? Theme.GREEN : record.outcomeR < 0 ? Theme.RED : Theme.MUTED;
+        TextView title = Theme.text(this, record.baseAsset + "/USDT • "
+                + record.directionFa() + " • " + record.state.faLabel, 13, color, true);
+        card.addView(title);
+        card.addView(metricPair("قیمت دقیق صدور", Formatters.compactPrice(record.entryPrice),
+                "سطح ابطال", Formatters.compactPrice(record.invalidation)));
+        card.addView(metricPair("TP1 / TP2", Formatters.compactPrice(record.target1)
+                        + " / " + Formatters.compactPrice(record.target2),
+                "کارمزد / لغزش", String.format(Locale.US, "%.2f%% / %.2f%%",
+                        record.estimatedFeePct, record.estimatedSlippagePct)));
+        String outcome = record.active() ? "در حال ارزیابی"
+                : String.format(Locale.US, "%+.2f%% • %+.2fR",
+                        record.netReturnPct, record.outcomeR);
+        card.addView(levelRow("نتیجهٔ خالص", outcome, color));
+        TextView age = bodyText("صدور: " + Formatters.dateTime(record.issuedAt)
+                + " (" + Formatters.age(record.issuedAt) + ")"
+                + " • رژیم: " + record.regime.faLabel
+                + " • کیفیت: " + record.dataQuality + "/100");
+        age.setTextSize(10.5f);
+        card.addView(age);
+        StringBuilder milestones = new StringBuilder();
+        if (record.confirmedAt > 0) {
+            milestones.append("تأیید: ").append(Formatters.dateTime(record.confirmedAt));
+        }
+        if (record.target1HitAt > 0) {
+            if (milestones.length() > 0) milestones.append(" • ");
+            milestones.append("TP1: ").append(Formatters.dateTime(record.target1HitAt));
+        }
+        if (record.closedAt > 0) {
+            if (milestones.length() > 0) milestones.append(" • ");
+            milestones.append("پایان: ").append(Formatters.dateTime(record.closedAt));
+        }
+        if (milestones.length() > 0) {
+            TextView lifecycle = bodyText(milestones.toString());
+            lifecycle.setTextSize(10.5f);
+            card.addView(lifecycle);
+        }
+        return card;
     }
 
     private void renderSettings() {
@@ -672,7 +849,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
             preferences.setMarketLimit(value);
             renderCurrentTab();
         }), marginParams(0, 0, 0, 8));
-        page.addView(noteCard("نسخهٔ ۸ تا ۱۲۰ بازار را با گیت کیفیت داده، تشخیص رژیم، اندیکاتورها و ensemble هوش مصنوعی تحلیل می‌کند. خروجی‌های کمتر اما سخت‌گیرانه‌تر هدف این نسخه است."), marginParams(0, 0, 0, 10));
+        page.addView(noteCard("نسخهٔ ۹ تا ۱۲۰ بازار را با تاریخچهٔ محلی، زمینهٔ ۱ساعته/۴ساعته و BTC/ETH، دفتر سفارش، نسبت سود‌به‌ریسک و ensemble محلی تحلیل می‌کند. هدف همچنان سیگنال کمتر و قابل‌ممیزی‌تر است."), marginParams(0, 0, 0, 10));
 
         page.addView(section("حداقل نقدشوندگی تجمیعی ۲۴ساعته"));
         long currentVolume = Math.round(preferences.minimumVolume());
@@ -693,15 +870,53 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         switchCard.addView(auto);
         page.addView(switchCard, marginParams(0, 0, 0, 10));
 
-        page.addView(section("روش سیگنال نسخه ۸"));
+        LinearLayout notificationCard = Theme.card(this);
+        notificationCard.setOrientation(LinearLayout.HORIZONTAL);
+        notificationCard.setGravity(Gravity.CENTER_VERTICAL);
+        TextView notificationLabel = Theme.text(this,
+                "اعلان فقط هنگام تغییر وضعیت\nسیگنال جدید، تأیید، هدف، ابطال یا انقضا",
+                12.5f, Theme.TEXT, true);
+        notificationCard.addView(notificationLabel, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Switch notifications = new Switch(this);
+        notifications.setChecked(preferences.notificationsEnabled());
+        notifications.setOnCheckedChangeListener((button, enabled) -> {
+            preferences.setNotificationsEnabled(enabled);
+            if (enabled && Build.VERSION.SDK_INT >= 33
+                    && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                        NOTIFICATION_PERMISSION_REQUEST);
+            }
+        });
+        notificationCard.addView(notifications);
+        page.addView(notificationCard, marginParams(0, 0, 0, 10));
+
+        page.addView(section("هزینه و ریسک paper tracking"));
+        page.addView(bodyText("کارمزد هر سمت"));
+        page.addView(labeledChoiceRow(
+                new String[]{"۰.۰۵٪", "۰.۱۰٪", "۰.۲۰٪", "۰.۳۰٪"},
+                new int[]{5, 10, 20, 30},
+                (int) Math.round(preferences.feePerSidePct() * 100),
+                value -> preferences.setFeePerSideBps(value)), marginParams(0, 0, 0, 7));
+        page.addView(bodyText("ریسک فرضی هر سیگنال"));
+        page.addView(labeledChoiceRow(
+                new String[]{"۰.۵٪", "۱٪", "۲٪"}, new int[]{5, 10, 20},
+                (int) Math.round(preferences.riskPerTradePct() * 10),
+                value -> preferences.setRiskPerTradeTenths(value)), marginParams(0, 0, 0, 5));
+        page.addView(noteCard("ردیف اول کارمزد هر سمت معامله و ردیف دوم ریسک فرضی هر سیگنال است. اندازهٔ موقعیت فقط به‌صورت نمونه برای هر ۱۰۰۰ دلار نمایش داده می‌شود و سفارش نیست."),
+                marginParams(0, 0, 0, 10));
+
+        page.addView(section("روش سیگنال نسخه ۹"));
         LinearLayout method = Theme.card(this);
         method.addView(bodyText("• قیمت و حجم اجماعی چهار صرافی با حذف منبع پرت\n"
-                + "• تشخیص رژیم روند/رنج/نوسان با ADX و ATR\n"
-                + "• تأیید EMA و مومنتوم در تایم‌فریم‌های ۵ و ۱۵ دقیقه\n"
-                + "• دو مدل سه‌کلاسهٔ بالا/خنثی/پایین برای افق ۱۵ و ۳۰ دقیقه\n"
-                + "• دو پنجرهٔ walk-forward، purge زمانی و کالیبراسیون خروجی\n"
-                + "• مسدودکردن سیگنال هنگام مخالفت AI، رژیم یا کیفیت پایین داده\n"
-                + "• رأی AI حداکثر ۱۲ امتیاز؛ هشدار پامپ/دامپ همیشه اولویت دارد"));
+                + "• روند ۱ساعته، ۴ساعته و زمینهٔ BTC/ETH روی ۷ تا ۳۰ روز\n"
+                + "• عمق ±۰.۵٪، spread، عدم‌تعادل و لغزش دفتر سفارش\n"
+                + "• نسبت سود‌به‌ریسک پس از کارمزد و اندازهٔ موقعیت paper\n"
+                + "• دو مدل سه‌کلاسه با walk-forward، purge، calibration و تشخیص drift\n"
+                + "• دفتر عملکرد محلی با چرخهٔ تأیید/هدف/ابطال/انقضا\n"
+                + "• مسدودکردن سیگنال در تعارض AI، رژیم، نقدشوندگی یا تایم‌فریم\n"
+                + "• هشدار پامپ/دامپ همچنان اولویت دارد و هیچ سفارشی اجرا نمی‌شود"));
         page.addView(method, marginParams(0, 0, 0, 10));
 
         page.addView(section("TradingView، CoinMarketCap و Google"));
@@ -711,7 +926,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
 
         page.addView(section("حریم خصوصی و ریسک"));
         LinearLayout privacy = Theme.card(this);
-        privacy.addView(bodyText("هیچ ثبت‌نامی وجود ندارد. آموزش و اجرای AI کاملاً روی گوشی انجام می‌شود و کندل‌ها برای سرویس هوش مصنوعی ارسال نمی‌شوند. منتخب‌ها، تنظیمات و آخرین نتیجه فقط روی گوشی ذخیره می‌شوند. دادهٔ شخصی به سروری ارسال نمی‌شود. پیش از تصمیم، قیمت را در صرافی خود بررسی کنید."));
+        privacy.addView(bodyText("هیچ ثبت‌نامی وجود ندارد. آموزش و اجرای AI کاملاً روی گوشی انجام می‌شود و کندل‌ها برای سرویس هوش مصنوعی ارسال نمی‌شوند. تاریخچهٔ incremental، دفتر paper، منتخب‌ها، تنظیمات و آخرین نتیجه فقط در فضای خصوصی همین برنامه ذخیره می‌شوند. دادهٔ شخصی به سروری ارسال نمی‌شود. پیش از تصمیم، قیمت را در صرافی خود بررسی کنید."));
         page.addView(privacy, marginParams(0, 0, 0, 10));
 
         TextView scanNow = Theme.button(this, "اسکن بازار همین حالا", Theme.CYAN, Theme.BG);
@@ -730,7 +945,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         page.addView(clear, marginParams(0, 0, 0, 14));
 
         TextView version = Theme.text(this,
-                "نبض کریپتو ۸.۱.۰  •  نقشهٔ ورود/خروج + Pine + ensemble AI\nسیگنال قطعی و تضمین سود وجود ندارد.",
+                "نبض کریپتو ۹.۰.۰  •  چرخهٔ سیگنال + چندتایم‌فریم + عمق بازار\nسیگنال قطعی و تضمین سود وجود ندارد.",
                 10.5f, Theme.MUTED, false);
         version.setGravity(Gravity.CENTER);
         page.addView(version);
@@ -756,6 +971,26 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
     }
 
     private interface IntChoice { void choose(int value); }
+
+    private View labeledChoiceRow(String[] labels, int[] values, int selected,
+                                  IntChoice callback) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        int count = Math.min(labels.length, values.length);
+        for (int i = 0; i < count; i++) {
+            final int value = values[i];
+            boolean active = value == selected;
+            TextView button = Theme.button(this, labels[i],
+                    active ? Theme.CYAN : Theme.SURFACE, active ? Theme.BG : Theme.TEXT);
+            button.setOnClickListener(v -> {
+                callback.choose(value);
+                renderCurrentTab();
+            });
+            row.addView(button, weightedMarginParams());
+        }
+        return row;
+    }
 
     private View optionRow(int[] values, int selected, IntChoice callback) {
         LinearLayout row = new LinearLayout(this);
@@ -912,17 +1147,26 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         price.setPadding(0, Theme.dp(this, 12), 0, 0);
         panel.addView(price);
         TextView score = Theme.text(this,
-                String.format(Locale.US,
-                        "امتیاز نهایی %+d  •  تکنیکال %+d  •  قدرت شواهد %d/100",
-                        result.score, result.technicalScore, result.evidenceStrength),
+                Formatters.directionalScore(result.score)
+                        + String.format(Locale.US,
+                        "  •  تکنیکال %+d  •  قدرت شواهد %d/100",
+                        result.technicalScore, result.evidenceStrength),
                 12, signalColor, true);
         panel.addView(score);
 
         boolean directionalPlan = result.signal.isBuy() || result.signal.isSell();
         panel.addView(detailSection(directionalPlan
                 ? "نقشهٔ خودکار ورود و خروج" : "نقشهٔ پایش؛ بدون سیگنال ورود"));
+        SignalRecord trackedSignal = signalJournal.latestForSymbol(result.ticker.symbol);
         TradePlanChartView tradeMap = new TradePlanChartView(this);
         tradeMap.setPlan(result, signalColor);
+        if (trackedSignal != null && trackedSignal.active()) {
+            tradeMap.setTrackedLevels(trackedSignal.entryPrice, trackedSignal.invalidation,
+                    trackedSignal.target1, trackedSignal.target2);
+            tradeMap.setSignalTime(trackedSignal.issuedAt);
+        } else {
+            tradeMap.setSignalTime(0L);
+        }
         LinearLayout.LayoutParams mapParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Theme.dp(this, 238));
         mapParams.setMargins(0, Theme.dp(this, 3), 0, Theme.dp(this, 5));
@@ -930,12 +1174,20 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         String zoneLabel = directionalPlan ? "ENTRY ناحیهٔ بررسی ورود است"
                 : "WATCH فقط ناحیهٔ پایش است و ورود پیشنهاد نمی‌شود";
         TextView mapNote = bullet(zoneLabel
-                + "؛ STOP سطح ابطال و TP1/TP2 اهداف آماری‌اند. نمودار از ۳۲ کندل بسته‌شدهٔ ۵دقیقه‌ای ساخته می‌شود و سفارش خودکار نیست.", Theme.MUTED);
+                + "؛ STOP سطح ابطال و TP1/TP2 اهداف آماری‌اند. نمودار تا ۹۶ کندل OHLC دارد؛ با pinch زوم و با drag افقی جابه‌جا شوید. خط کهربایی زمان صدور دفتر است.", Theme.MUTED);
         mapNote.setTextSize(10.5f);
         panel.addView(mapNote);
+        if (trackedSignal != null) {
+            int trackedColor = trackedSignal.active() ? Theme.AMBER
+                    : trackedSignal.outcomeR > 0 ? Theme.GREEN : Theme.RED;
+            panel.addView(levelRow("آخرین وضعیت دفتر", trackedSignal.state.faLabel
+                    + " • صدور " + Formatters.age(trackedSignal.issuedAt), trackedColor));
+        }
 
         panel.addView(detailSection("تصویر بازار"));
         panel.addView(metricGrid(result));
+        panel.addView(detailSection("چک‌لیست برچسب قوی"));
+        panel.addView(strongChecklistCard(result));
         panel.addView(detailSection("تحلیل هوش مصنوعی روی دستگاه"));
         panel.addView(aiAnalysisCard(result));
         panel.addView(detailSection("چرا این برچسب؟"));
@@ -1027,6 +1279,37 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         showWideDialog(dialog, 0.96f, Math.round(getResources().getDisplayMetrics().heightPixels * 0.91f));
     }
 
+    private View strongChecklistCard(ScanResult result) {
+        LinearLayout card = Theme.card(this);
+        boolean bookStrong = result.diagnostics.orderBook.available
+                && result.diagnostics.orderBook.spreadPct <= 0.35
+                && result.diagnostics.orderBook.minimumDepthUsd() >= 50_000
+                && result.diagnostics.orderBook.estimatedSlippagePct <= 0.30;
+        card.addView(checkRow("کیفیت داده حداقل ۷۵", result.diagnostics.qualityStrong));
+        card.addView(checkRow("قدرت تکنیکال حداقل ۴۸", result.diagnostics.technicalStrong));
+        card.addView(checkRow("رژیم غیررنج و غیرپرنوسان", result.diagnostics.regimeStrong));
+        card.addView(checkRow("تأیید مستقل AI یا ADX", result.diagnostics.independentConfirmation));
+        card.addView(checkRow("هم‌جهتی ۱ساعت، ۴ساعت و BTC/ETH",
+                result.diagnostics.higherTimeframeAligned));
+        card.addView(checkRow("عمق و لغزش مناسب دفتر سفارش", bookStrong));
+        card.addView(checkRow("نسبت سود‌به‌ریسک پس از هزینه", result.diagnostics.riskRewardPassed));
+        card.addView(checkRow("بدون افت کیفیت AI", !result.ai.driftDetected));
+        TextView verdict = bodyText(result.diagnostics.strongEligible
+                ? "همهٔ گیت‌های مستقل برچسب قوی آماده‌اند؛ آستانهٔ امتیاز و جهت نیز باید پاس شود."
+                : "به همین دلیل ممکن است امتیاز عددی بالا باشد اما برچسب فقط خرید/فروش عادی یا صبر بماند.");
+        verdict.setTextColor(result.diagnostics.strongEligible ? Theme.GREEN : Theme.AMBER);
+        card.addView(verdict);
+        return card;
+    }
+
+    private View checkRow(String label, boolean passed) {
+        TextView row = Theme.text(this, (passed ? "✓  " : "✕  ") + label,
+                11.5f, passed ? Theme.GREEN : Theme.RED, passed);
+        row.setPadding(Theme.dp(this, 3), Theme.dp(this, 4),
+                Theme.dp(this, 3), Theme.dp(this, 4));
+        return row;
+    }
+
     private View aiAnalysisCard(ScanResult result) {
         LinearLayout card = Theme.card(this);
         card.setBackground(Theme.rounded(Theme.SURFACE_2, Theme.dp(this, 13),
@@ -1048,6 +1331,12 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
                     result.ai.trainingSamples + " / " + result.ai.validationSamples,
                     "مدل / پنجرهٔ آزمون", result.ai.modelsUsed + " / "
                             + result.ai.validationFolds));
+            card.addView(metricPair("Recall جهت اخیر",
+                    result.ai.recentValidationAccuracy > 0
+                            ? String.format(Locale.US, "%.0f%%", result.ai.recentValidationAccuracy * 100)
+                            : "نمونه ناکافی",
+                    "پایش drift", result.ai.driftDetected
+                            ? "افت معتبر؛ رأی غیرفعال" : "پایدار"));
         }
         TextView explanation = bodyText(result.ai.explanationFa());
         explanation.setTextColor(Theme.TEXT);
@@ -1076,6 +1365,30 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
                 "رأی محدود AI", String.format(Locale.US, "%+d", result.ai.vote)));
         grid.addView(metricPair("منابع معتبر قیمت", String.valueOf(result.ticker.sourceCount),
                 "اختلاف بین منابع", String.format(Locale.US, "%.2f%%", result.ticker.priceSpreadPct)));
+        grid.addView(metricPair("روند ۱ساعت / ۴ساعت",
+                String.format(Locale.US, "%+d / %+d", result.diagnostics.oneHourTrend,
+                        result.diagnostics.fourHourTrend),
+                "زمینهٔ BTC/ETH", String.format(Locale.US, "%+d",
+                        result.diagnostics.benchmarkTrend)));
+        String bookDepth = result.diagnostics.orderBook.available
+                ? Formatters.volume(result.diagnostics.orderBook.minimumDepthUsd()) : "ناموجود";
+        String bookSpread = result.diagnostics.orderBook.available
+                ? String.format(Locale.US, "%.3f%%", result.diagnostics.orderBook.spreadPct) : "—";
+        grid.addView(metricPair("عمق ±۰.۵٪", bookDepth,
+                "spread دفتر سفارش", bookSpread));
+        grid.addView(metricPair("عدم‌تعادل Bid/Ask",
+                String.format(Locale.US, "%+.2f", result.diagnostics.orderBook.imbalance),
+                "لغزش ۱۰۰۰ دلار", result.diagnostics.orderBook.available
+                        ? String.format(Locale.US, "%.3f%%",
+                                result.diagnostics.orderBook.estimatedSlippagePct) : "—"));
+        grid.addView(metricPair("R:R هدف ۱ / ۲",
+                String.format(Locale.US, "%.2f / %.2f", result.diagnostics.riskReward1,
+                        result.diagnostics.riskReward2),
+                "هزینهٔ رفت‌وبرگشت", String.format(Locale.US, "%.2f%%",
+                        result.diagnostics.estimatedRoundTripCostPct)));
+        grid.addView(metricPair("موقعیت نمونه برای $1000",
+                "$" + String.format(Locale.US, "%.0f", result.diagnostics.positionSizePer1000),
+                "پوشش تاریخچهٔ ۵دقیقه", result.diagnostics.historyDays + " روز"));
         String rank = result.ticker.marketCapRank > 0 ? "#" + result.ticker.marketCapRank : "—";
         String marketCap = result.ticker.marketCapUsd > 0
                 ? Formatters.volume(result.ticker.marketCapUsd) : "—";
@@ -1225,6 +1538,29 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
     private void toast(String message) {
         Toast toast = Toast.makeText(this, message, Toast.LENGTH_LONG);
         toast.show();
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                                                     int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == NOTIFICATION_PERMISSION_REQUEST) {
+            boolean granted = grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            preferences.setNotificationsEnabled(granted);
+            toast(granted ? "اعلان تغییر وضعیت فعال شد"
+                    : "بدون اجازهٔ اعلان، فقط دفتر عملکرد داخل برنامه به‌روز می‌شود");
+            if (currentTab == TAB_SETTINGS) renderCurrentTab();
+        }
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent != null && intent.getBooleanExtra(EXTRA_OPEN_PERFORMANCE, false)) {
+            currentTab = TAB_PERFORMANCE;
+            updateNavigation();
+            renderCurrentTab();
+        }
     }
 
     @Override protected void onResume() {

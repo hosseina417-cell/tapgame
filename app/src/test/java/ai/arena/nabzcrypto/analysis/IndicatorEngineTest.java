@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import ai.arena.nabzcrypto.model.Candle;
 import ai.arena.nabzcrypto.model.MarketRegime;
 import ai.arena.nabzcrypto.model.MarketTicker;
+import ai.arena.nabzcrypto.model.OrderBookMetrics;
 import ai.arena.nabzcrypto.model.ScanResult;
 import ai.arena.nabzcrypto.model.Signal;
 
@@ -119,6 +120,78 @@ public final class IndicatorEngineTest {
             assertEquals(15L * 60L * 1000L - 1L,
                     candle.closeTime - candle.openTime);
         }
+    }
+
+    @Test public void liquidityIsAGateAndNeverAddsToScore() {
+        Fixture fixture = fixture(50, 0.0009, 1.0);
+        List<Candle> one = trendCandles(90, 60, 100, 0.0015);
+        List<Candle> four = trendCandles(90, 240, 100, 0.0020);
+        OrderBookMetrics liquid = new OrderBookMetrics(true, 0.05,
+                200_000, 200_000, 0, 0.03);
+        OrderBookMetrics thin = new OrderBookMetrics(true, 1.2,
+                2_000, 2_000, 0, 1.1);
+        ScanResult accepted = IndicatorEngine.analyze(fixture.ticker, fixture.five,
+                fixture.fifteen, one, four, 40, liquid, 0.10, 1.0, "test");
+        ScanResult blocked = IndicatorEngine.analyze(fixture.ticker, fixture.five,
+                fixture.fifteen, one, four, 40, thin, 0.10, 1.0, "test");
+        assertTrue(accepted.signal.isBuy());
+        assertEquals(accepted.score, blocked.score);
+        assertEquals(accepted.technicalScore, blocked.technicalScore);
+        assertFalse(blocked.diagnostics.liquidityPassed);
+        assertEquals(Signal.NEUTRAL, blocked.signal);
+    }
+
+    @Test public void costAdjustedRiskRewardCanForceWait() {
+        Fixture fixture = fixture(50, 0.0009, 1.0);
+        List<Candle> one = trendCandles(90, 60, 100, 0.0015);
+        List<Candle> four = trendCandles(90, 240, 100, 0.0020);
+        OrderBookMetrics liquid = new OrderBookMetrics(true, 0.05,
+                200_000, 200_000, 0, 0.20);
+        ScanResult expensive = IndicatorEngine.analyze(fixture.ticker, fixture.five,
+                fixture.fifteen, one, four, 40, liquid, 1.0, 1.0, "test");
+        assertFalse(expensive.diagnostics.riskRewardPassed);
+        assertEquals(Signal.NEUTRAL, expensive.signal);
+        assertTrue(expensive.diagnostics.estimatedRoundTripCostPct >= 2.4);
+    }
+
+    @Test public void severeHigherTimeframeOppositionBlocksDirection() {
+        Fixture fixture = fixture(50, 0.0009, 1.0);
+        List<Candle> one = trendCandles(90, 60, 200, -0.0020);
+        List<Candle> four = trendCandles(90, 240, 200, -0.0020);
+        OrderBookMetrics liquid = new OrderBookMetrics(true, 0.05,
+                200_000, 200_000, 0, 0.03);
+        ScanResult result = IndicatorEngine.analyze(fixture.ticker, fixture.five,
+                fixture.fifteen, one, four, -60, liquid, 0.10, 1.0, "test");
+        assertTrue(result.technicalScore >= 28);
+        assertTrue(result.diagnostics.oneHourTrend < -35);
+        assertTrue(result.diagnostics.fourHourTrend < -35);
+        assertFalse(result.diagnostics.higherTimeframeAligned);
+        assertEquals(Signal.NEUTRAL, result.signal);
+    }
+
+    @Test public void chartContainsBoundedRealOhlcWindow() {
+        Fixture fixture = fixture(50, 0.0003, 1.0);
+        ScanResult result = IndicatorEngine.analyze(fixture.ticker, fixture.five,
+                fixture.fifteen, "test");
+        assertTrue(result.chartData.size() > 0);
+        assertTrue(result.chartData.size() <= 120);
+        int last = result.chartData.size() - 1;
+        assertTrue(result.chartData.highs[last] >= result.chartData.opens[last]);
+        assertTrue(result.chartData.lows[last] <= result.chartData.closes[last]);
+    }
+
+    private static List<Candle> trendCandles(int count, int intervalMinutes,
+                                              double initial, double step) {
+        List<Candle> candles = new ArrayList<>();
+        long width = intervalMinutes * 60_000L;
+        long start = System.currentTimeMillis() - (count + 2L) * width;
+        double price = initial;
+        for (int i = 0; i < count; i++) {
+            double next = price * (1 + step);
+            candles.add(candle(start + i * width, width, price, next, 1));
+            price = next;
+        }
+        return candles;
     }
 
     private static Fixture fixture(double initial, double fiveStep, double volumeMultiplier) {

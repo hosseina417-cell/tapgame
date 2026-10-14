@@ -2,6 +2,8 @@ package ai.arena.nabzcrypto.ui;
 
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Locale;
 
 public final class Formatters {
@@ -27,6 +29,13 @@ public final class Formatters {
         return format("0.########", value);
     }
 
+    public static String directionalScore(int score) {
+        int bounded = Math.max(-100, Math.min(100, score));
+        if (bounded > 0) return "قدرت صعودی " + bounded + "/100";
+        if (bounded < 0) return "قدرت نزولی " + Math.abs(bounded) + "/100";
+        return "قدرت جهت‌دار 0/100";
+    }
+
     public static String signedPercent(double value) {
         if (!Double.isFinite(value)) return "—";
         return String.format(Locale.US, "%+.2f%%", value);
@@ -38,6 +47,12 @@ public final class Formatters {
         if (value >= 1_000_000) return String.format(Locale.US, "$%.1fM", value / 1_000_000.0);
         if (value >= 1_000) return String.format(Locale.US, "$%.1fK", value / 1_000.0);
         return String.format(Locale.US, "$%.0f", value);
+    }
+
+    public static String dateTime(long timestamp) {
+        if (timestamp <= 0) return "نامشخص";
+        return new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+                .format(new Date(timestamp));
     }
 
     public static String age(long timestamp) {

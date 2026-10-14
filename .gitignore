@@ -8,3 +8,7 @@ build-logs/
 .DS_Store
 captures/
 .signing/
+*.jks
+*.keystore
+*.p12
+*.idsig

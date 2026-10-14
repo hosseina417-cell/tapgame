@@ -21,12 +21,26 @@ public final class AiAssessment {
     public final boolean horizonAgreement;
     public final int modelsUsed;
     public final int validationFolds;
+    public final boolean driftDetected;
+    public final double recentValidationAccuracy;
 
     public AiAssessment(boolean trained, boolean reliable,
                         double probabilityUp, double probabilityDown, double probabilityNeutral,
                         int confidence, double validationAccuracy, double validationBrier,
                         int trainingSamples, int validationSamples, int vote,
                         boolean horizonAgreement, int modelsUsed, int validationFolds) {
+        this(trained, reliable, probabilityUp, probabilityDown, probabilityNeutral,
+                confidence, validationAccuracy, validationBrier, trainingSamples,
+                validationSamples, vote, horizonAgreement, modelsUsed, validationFolds,
+                false, validationAccuracy);
+    }
+
+    public AiAssessment(boolean trained, boolean reliable,
+                        double probabilityUp, double probabilityDown, double probabilityNeutral,
+                        int confidence, double validationAccuracy, double validationBrier,
+                        int trainingSamples, int validationSamples, int vote,
+                        boolean horizonAgreement, int modelsUsed, int validationFolds,
+                        boolean driftDetected, double recentValidationAccuracy) {
         this.trained = trained;
         this.reliable = trained && reliable;
         double up = finiteNonNegative(probabilityUp);
@@ -49,6 +63,8 @@ public final class AiAssessment {
         this.horizonAgreement = this.reliable && horizonAgreement;
         this.modelsUsed = trained ? clampInt(modelsUsed, 0, 2) : 0;
         this.validationFolds = trained ? Math.max(0, validationFolds) : 0;
+        this.driftDetected = trained && driftDetected;
+        this.recentValidationAccuracy = clampFinite(recentValidationAccuracy, 0, 1, 0);
     }
 
     public static AiAssessment unavailable() {
@@ -58,6 +74,7 @@ public final class AiAssessment {
 
     public String labelFa() {
         if (!trained) return "دادهٔ ناکافی";
+        if (driftDetected) return "افت کیفیت اخیر؛ AI غیرفعال";
         if (!reliable) return "مدل نامطمئن";
         if (vote > 0) return horizonAgreement ? "صعودی با توافق دو افق" : "گرایش صعودی محتاط";
         if (vote < 0) return horizonAgreement ? "نزولی با توافق دو افق" : "گرایش نزولی محتاط";
@@ -82,9 +99,13 @@ public final class AiAssessment {
         int down = (int) Math.round(probabilityDown * 100.0);
         int neutral = (int) Math.round(probabilityNeutral * 100.0);
         if (!reliable) {
+            int recent = (int) Math.round(recentValidationAccuracy * 100.0);
+            String gate = driftDetected
+                    ? "عملکرد پنجرهٔ اخیر به " + recent + "٪ افت کرده است"
+                    : "گیت کیفیت یا توافق افق‌ها رد شده است";
             return String.format(Locale.US,
-                    "ensemble روی %d نمونه ساخته شد، اما گیت کیفیت یا توافق افق‌ها را رد کرد؛ در %d پیش‌بینی خارج‌نمونه و %d پنجرهٔ زمانی دقت متوازن %d%% بود. خروجی بالا/خنثی/پایین %d/%d/%d%% فقط نمایش داده می‌شود و در سیگنال دخالت ندارد.",
-                    trainingSamples, validationSamples, validationFolds, accuracy,
+                    "ensemble روی %d نمونه ساخته شد، اما %s؛ در %d پیش‌بینی خارج‌نمونه و %d پنجرهٔ زمانی دقت متوازن %d%% بود. خروجی بالا/خنثی/پایین %d/%d/%d%% فقط نمایش داده می‌شود و در سیگنال دخالت ندارد.",
+                    trainingSamples, gate, validationSamples, validationFolds, accuracy,
                     up, neutral, down);
         }
         String agreement = horizonAgreement ? "دو افق ۱۵ و ۳۰ دقیقه هم‌جهت‌اند"

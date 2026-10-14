@@ -2,6 +2,7 @@ package ai.arena.nabzcrypto.data;
 
 import ai.arena.nabzcrypto.model.Candle;
 import ai.arena.nabzcrypto.model.MarketTicker;
+import ai.arena.nabzcrypto.model.OrderBookMetrics;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -46,10 +47,10 @@ public final class BinanceProvider implements MarketProvider {
 
     @Override public List<Candle> fetchCandles(MarketTicker ticker, int intervalMinutes, int limit)
             throws ApiException {
-        String interval = intervalMinutes == 5 ? "5m" : intervalMinutes == 15 ? "15m" : null;
+        String interval = intervalToken(intervalMinutes);
         if (interval == null) throw new ApiException("بازهٔ زمانی پشتیبانی نمی‌شود");
         String path = "/api/v3/klines?symbol=" + ticker.apiSymbol + "&interval=" + interval
-                + "&limit=" + Math.max(60, Math.min(300, limit + 2));
+                + "&limit=" + Math.max(60, Math.min(1000, limit + 2));
         ApiException first;
         try {
             return parseCandles(HttpJson.get(activeBase + path), limit);
@@ -67,6 +68,26 @@ public final class BinanceProvider implements MarketProvider {
             }
         }
         throw first;
+    }
+
+    @Override public OrderBookMetrics fetchOrderBook(MarketTicker ticker) throws ApiException {
+        String path = "/api/v3/depth?symbol=" + ticker.apiSymbol + "&limit=100";
+        ApiException last = null;
+        for (String base : orderedBases()) {
+            try {
+                Object raw = HttpJson.get(base + path);
+                if (!(raw instanceof JSONObject)) throw new ApiException("دفتر سفارش بایننس نامعتبر است");
+                JSONObject root = (JSONObject) raw;
+                OrderBookMetrics metrics = OrderBookParser.parse(root.optJSONArray("bids"),
+                        root.optJSONArray("asks"), ticker.lastPrice);
+                if (!metrics.available) throw new ApiException("عمق بازار بایننس کافی نیست");
+                activeBase = base;
+                return metrics;
+            } catch (ApiException e) {
+                last = e;
+            }
+        }
+        throw last == null ? new ApiException("دفتر سفارش بایننس در دسترس نیست") : last;
     }
 
     private List<String> orderedBases() {
@@ -93,6 +114,11 @@ public final class BinanceProvider implements MarketProvider {
             if (ticker.isValid()) result.add(ticker);
         }
         return result;
+    }
+
+    static String intervalToken(int minutes) {
+        return minutes == 5 ? "5m" : minutes == 15 ? "15m"
+                : minutes == 60 ? "1h" : minutes == 240 ? "4h" : null;
     }
 
     private static List<Candle> parseCandles(Object raw, int limit) throws ApiException {

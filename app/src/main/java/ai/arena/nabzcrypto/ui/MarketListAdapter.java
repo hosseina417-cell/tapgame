@@ -83,8 +83,8 @@ public final class MarketListAdapter extends BaseAdapter {
         holder.price.setText("$" + Formatters.price(result.ticker.lastPrice));
         holder.change.setText("۲۴ساعت  " + Formatters.signedPercent(result.ticker.change24hPct));
         holder.change.setTextColor(result.ticker.change24hPct >= 0 ? Theme.GREEN : Theme.RED);
-        holder.signal.setText(result.signal.faLabel + "  "
-                + String.format(Locale.US, "%+d", result.score));
+        holder.signal.setText(result.signal.faLabel + " • "
+                + Formatters.directionalScore(result.score));
         holder.signal.setTextColor(color);
         holder.signal.setBackground(Theme.rounded(Theme.withAlpha(color, 24),
                 Theme.dp(context, 10), Theme.dp(context, 1), Theme.withAlpha(color, 90)));

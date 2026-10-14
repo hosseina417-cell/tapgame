@@ -51,8 +51,35 @@ public final class AppPreferences {
         preferences.edit().putBoolean("auto_refresh", enabled).apply();
     }
 
+    public boolean notificationsEnabled() {
+        return preferences.getBoolean("signal_notifications_v9", false);
+    }
+
+    public void setNotificationsEnabled(boolean enabled) {
+        preferences.edit().putBoolean("signal_notifications_v9", enabled).apply();
+    }
+
+    public double feePerSidePct() {
+        return preferences.getInt("fee_per_side_bps_v9", 10) / 100.0;
+    }
+
+    public void setFeePerSideBps(int basisPoints) {
+        int safe = basisPoints <= 5 ? 5 : basisPoints <= 10 ? 10 : basisPoints <= 20 ? 20 : 30;
+        preferences.edit().putInt("fee_per_side_bps_v9", safe).apply();
+    }
+
+    public double riskPerTradePct() {
+        return preferences.getInt("risk_per_trade_tenths_v9", 10) / 10.0;
+    }
+
+    public void setRiskPerTradeTenths(int tenths) {
+        int safe = Math.max(1, Math.min(50, tenths));
+        preferences.edit().putInt("risk_per_trade_tenths_v9", safe).apply();
+    }
+
     public ScanConfig scanConfig() {
-        return new ScanConfig(marketLimit(), minimumVolume());
+        return new ScanConfig(marketLimit(), minimumVolume(),
+                feePerSidePct(), riskPerTradePct());
     }
 
     public Set<String> favorites() {

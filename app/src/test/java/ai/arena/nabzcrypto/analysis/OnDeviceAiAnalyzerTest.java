@@ -62,6 +62,39 @@ public final class OnDeviceAiAnalyzerTest {
         assertEquals(1.0 / 3.0, result.probabilityNeutral, 1e-12);
     }
 
+    @Test public void validatedRecentDriftDisablesEntireAiVote() {
+        AiAssessment result = OnDeviceAiAnalyzer.analyze(driftCandles(500, 80));
+        assertTrue(result.trained);
+        assertTrue(result.driftDetected);
+        assertFalse(result.reliable);
+        assertEquals(0, result.vote);
+        assertTrue(result.validationAccuracy - result.recentValidationAccuracy >= 0.18);
+    }
+
+    private static List<Candle> driftCandles(int count, int noisyTail) {
+        List<Candle> result = new ArrayList<>();
+        long width = 5L * 60L * 1000L;
+        long start = System.currentTimeMillis() - (count + 2L) * width;
+        long random = 1_234_567L;
+        double price = 100;
+        for (int i = 0; i < count; i++) {
+            double step;
+            if (i < count - noisyTail) {
+                int phase = i % 36;
+                step = phase < 10 ? 0.003 : phase < 18 ? 0
+                        : phase < 28 ? -0.003 : 0;
+            } else {
+                random = (random * 1_103_515_245L + 12_345L) & 0x7fffffffL;
+                step = ((random % 3L) - 1L) * 0.003;
+            }
+            double next = price * (1 + step);
+            result.add(candle(start + i * width, width, price, next,
+                    1_000 * (1 + (i % 5) * 0.04)));
+            price = next;
+        }
+        return result;
+    }
+
     private static List<Candle> regimeCandles(int count) {
         List<Candle> result = new ArrayList<>();
         long width = 5L * 60L * 1000L;

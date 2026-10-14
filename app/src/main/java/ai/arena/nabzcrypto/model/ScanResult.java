@@ -13,6 +13,8 @@ public final class ScanResult {
     public final int evidenceStrength;
     public final int dataQuality;
     public final AiAssessment ai;
+    public final SignalDiagnostics diagnostics;
+    public final TradeChartData chartData;
     public final MarketRegime regime;
     public final double adx14;
     public final double rsi14;
@@ -50,6 +52,26 @@ public final class ScanResult {
                       double objective1, double objective2, long candleClosedAt,
                       String source, List<String> reasons, List<String> cautions,
                       double[] sparkline, boolean fromCache) {
+        this(ticker, signal, score, technicalScore, evidenceStrength, dataQuality,
+                ai, regime, adx14, rsi14, ema9, ema21, ema50, macdHistogram, atr14,
+                return5mPct, return15mPct, return1hPct, volumeRatio, movementZScore,
+                referencePrice, zoneLow, zoneHigh, invalidation, objective1, objective2,
+                candleClosedAt, source, reasons, cautions, sparkline, fromCache,
+                SignalDiagnostics.unavailable(), TradeChartData.empty());
+    }
+
+    public ScanResult(MarketTicker ticker, Signal signal, int score, int technicalScore,
+                      int evidenceStrength, int dataQuality, AiAssessment ai,
+                      MarketRegime regime, double adx14,
+                      double rsi14, double ema9, double ema21, double ema50,
+                      double macdHistogram, double atr14,
+                      double return5mPct, double return15mPct, double return1hPct,
+                      double volumeRatio, double movementZScore, double referencePrice,
+                      double zoneLow, double zoneHigh, double invalidation,
+                      double objective1, double objective2, long candleClosedAt,
+                      String source, List<String> reasons, List<String> cautions,
+                      double[] sparkline, boolean fromCache,
+                      SignalDiagnostics diagnostics, TradeChartData chartData) {
         this.ticker = ticker;
         this.signal = signal;
         this.score = score;
@@ -57,6 +79,9 @@ public final class ScanResult {
         this.evidenceStrength = evidenceStrength;
         this.dataQuality = Math.max(0, Math.min(100, dataQuality));
         this.ai = ai == null ? AiAssessment.unavailable() : ai;
+        this.diagnostics = diagnostics == null
+                ? SignalDiagnostics.unavailable() : diagnostics;
+        this.chartData = chartData == null ? TradeChartData.empty() : chartData;
         this.regime = regime == null ? MarketRegime.TRANSITION : regime;
         this.adx14 = Double.isFinite(adx14) ? Math.max(0, Math.min(100, adx14)) : 0;
         this.rsi14 = rsi14;
@@ -90,6 +115,6 @@ public final class ScanResult {
                 ema50, macdHistogram, atr14, return5mPct, return15mPct, return1hPct,
                 volumeRatio, movementZScore, referencePrice, zoneLow, zoneHigh,
                 invalidation, objective1, objective2, candleClosedAt, source,
-                reasons, cautions, sparkline, true);
+                reasons, cautions, sparkline, true, diagnostics, chartData);
     }
 }

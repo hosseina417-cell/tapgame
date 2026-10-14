@@ -4,8 +4,11 @@ import ai.arena.nabzcrypto.model.AiAssessment;
 import ai.arena.nabzcrypto.model.Candle;
 import ai.arena.nabzcrypto.model.MarketRegime;
 import ai.arena.nabzcrypto.model.MarketTicker;
+import ai.arena.nabzcrypto.model.OrderBookMetrics;
 import ai.arena.nabzcrypto.model.ScanResult;
 import ai.arena.nabzcrypto.model.Signal;
+import ai.arena.nabzcrypto.model.SignalDiagnostics;
+import ai.arena.nabzcrypto.model.TradeChartData;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -25,11 +28,26 @@ public final class IndicatorEngine {
 
     public static ScanResult analyze(MarketTicker ticker, List<Candle> fiveMinuteInput,
                                      List<Candle> fifteenMinuteInput, String source) {
+        return analyze(ticker, fiveMinuteInput, fifteenMinuteInput,
+                new ArrayList<>(), new ArrayList<>(), 0,
+                OrderBookMetrics.unavailable(), 0.05, 1.0, source);
+    }
+
+    public static ScanResult analyze(MarketTicker ticker, List<Candle> fiveMinuteInput,
+                                     List<Candle> fifteenMinuteInput,
+                                     List<Candle> oneHourInput, List<Candle> fourHourInput,
+                                     int benchmarkTrend, OrderBookMetrics orderBook,
+                                     double feePerSidePct, double riskPerTradePct,
+                                     String source) {
         if (ticker == null || !ticker.isValid()) {
             throw new IllegalArgumentException("Invalid ticker");
         }
         List<Candle> five = clean(fiveMinuteInput);
         List<Candle> fifteen = clean(fifteenMinuteInput);
+        List<Candle> oneHour = clean(oneHourInput);
+        List<Candle> fourHour = clean(fourHourInput);
+        OrderBookMetrics book = orderBook == null
+                ? OrderBookMetrics.unavailable() : orderBook;
         if (five.size() < MIN_FIVE_MINUTE_CANDLES) {
             throw new IllegalArgumentException("Not enough 5m candles");
         }
@@ -113,6 +131,9 @@ public final class IndicatorEngine {
         if (regime == MarketRegime.RANGE) score = (int) Math.round(score * 0.82);
         else if (regime == MarketRegime.VOLATILE) score = (int) Math.round(score * 0.90);
         int technicalScore = (int) clamp(score, -100, 100);
+        int oneHourTrend = timeframeTrend(oneHour);
+        int fourHourTrend = timeframeTrend(fourHour);
+        int contextVote = contextVote(oneHourTrend, fourHourTrend, benchmarkTrend);
         AiAssessment ai;
         try {
             ai = OnDeviceAiAnalyzer.analyze(five);
@@ -120,18 +141,87 @@ public final class IndicatorEngine {
             // AI is supplementary; a numerical/model failure must never hide technical analysis.
             ai = AiAssessment.unavailable();
         }
-        score = (int) clamp(technicalScore + ai.vote, -100, 100);
+        score = (int) clamp(technicalScore + ai.vote + contextVote, -100, 100);
         long candleClosedAt = five.get(five.size() - 1).closeTime;
         long age = Math.max(0, System.currentTimeMillis() - candleClosedAt);
         int dataQuality = dataQuality(ticker, five.size(), age);
 
+        boolean bearishPlan = score < 0;
+        double zoneLow = bearishPlan ? Math.max(0, reference - atr * 0.15)
+                : Math.max(0, reference - atr * 0.25);
+        double zoneHigh = bearishPlan ? reference + atr * 0.25 : reference + atr * 0.15;
+        double invalidation = bearishPlan ? reference + atr : Math.max(0, reference - atr);
+        double objective1 = bearishPlan ? Math.max(0, reference - 1.5 * atr)
+                : reference + 1.5 * atr;
+        double objective2 = bearishPlan ? Math.max(0, reference - 2.5 * atr)
+                : reference + 2.5 * atr;
+        // R:R and journal outcomes are anchored to the exact issuance price. The displayed
+        // zone is contextual, not an assumption of a better fill.
+        double risk = Math.abs(reference - invalidation);
+        double reward1 = Math.abs(objective1 - reference);
+        double reward2 = Math.abs(objective2 - reference);
+        double rawRiskReward1 = risk > 0 ? reward1 / risk : 0;
+        double rawRiskReward2 = risk > 0 ? reward2 / risk : 0;
+        double fee = Double.isFinite(feePerSidePct) ? clamp(feePerSidePct, 0, 1) : 0.10;
+        double slippageRoundTrip = book.available
+                ? Math.min(2.0, book.estimatedSlippagePct * 2.0) : 0.10;
+        double roundTripCost = fee * 2.0 + slippageRoundTrip;
+        double riskPct = risk / Math.max(1e-12, reference) * 100.0;
+        double reward1Pct = reward1 / Math.max(1e-12, reference) * 100.0;
+        double reward2Pct = reward2 / Math.max(1e-12, reference) * 100.0;
+        double netRisk = Math.max(1e-9, riskPct + roundTripCost);
+        double netRiskReward2 = (reward2Pct - roundTripCost) / netRisk;
+        double blendedRewardPct = (reward1Pct + reward2Pct) / 2.0;
+        double netBlendedRiskReward = (blendedRewardPct - roundTripCost) / netRisk;
+        // The journal scales out half at each target, so the cost gate evaluates that full
+        // lifecycle rather than demanding TP1 alone pay for the entire remaining position.
+        boolean riskRewardPassed = rawRiskReward1 >= 1.45 && rawRiskReward2 >= 2.30
+                && netRiskReward2 >= 1.20 && netBlendedRiskReward >= 0.85;
+        boolean liquidityPassed = !book.available || (book.spreadPct <= 0.80
+                && book.minimumDepthUsd() >= 10_000 && book.estimatedSlippagePct <= 0.75);
+        boolean liquidityStrong = book.available && book.spreadPct <= 0.35
+                && book.minimumDepthUsd() >= 50_000 && book.estimatedSlippagePct <= 0.30;
+        int intendedDirection = score > 0 ? 1 : score < 0 ? -1 : 0;
+        boolean higherAligned = higherTimeframeAligned(intendedDirection,
+                oneHourTrend, fourHourTrend, benchmarkTrend,
+                oneHour.size() >= 40, fourHour.size() >= 40);
+        boolean independentConfirmation = intendedDirection > 0
+                ? (ai.reliable && ai.vote > 0 && ai.confidence >= 25)
+                    || (regime == MarketRegime.TREND_UP && directional.adx >= 25)
+                : intendedDirection < 0
+                    && ((ai.reliable && ai.vote < 0 && ai.confidence >= 25)
+                    || (regime == MarketRegime.TREND_DOWN && directional.adx >= 25));
+        boolean qualityStrong = dataQuality >= 75;
+        boolean technicalStrong = Math.abs(technicalScore) >= 48;
+        boolean regimeStrong = regime != MarketRegime.RANGE && regime != MarketRegime.VOLATILE;
+        boolean strongEligible = qualityStrong && technicalStrong && regimeStrong
+                && independentConfirmation && higherAligned && liquidityStrong
+                && riskRewardPassed && !ai.driftDetected;
+        int historyDays = historyDays(five);
+        double riskSetting = Double.isFinite(riskPerTradePct)
+                ? clamp(riskPerTradePct, 0.1, 5.0) : 1.0;
+        double totalLossPct = riskPct + roundTripCost;
+        double positionPer1000 = totalLossPct > 0
+                ? Math.min(1_000, 1_000 * riskSetting / totalLossPct) : 0;
+        SignalDiagnostics diagnostics = new SignalDiagnostics(oneHourTrend, fourHourTrend,
+                benchmarkTrend, higherAligned, book, rawRiskReward1, rawRiskReward2,
+                roundTripCost, positionPer1000, riskRewardPassed, liquidityPassed,
+                historyDays, qualityStrong, technicalStrong, regimeStrong,
+                independentConfirmation, strongEligible);
+
         Signal signal = classifySignal(score, technicalScore, ai, regime, directional,
-                dataQuality, pump, dump);
+                dataQuality, diagnostics, pump, dump);
 
         List<String> reasons = buildReasons(signal, score, ema9, ema21, ema50, rsi,
                 macd, return5, return15, effectiveVolumeRatio, movementZ);
         reasons.add(String.format(Locale.US, "رژیم بازار: %s • ADX %.1f • کیفیت داده %d/100",
                 regime.faLabel, directional.adx, dataQuality));
+        reasons.add(String.format(Locale.US,
+                "روند ۱ساعت %+d • ۴ساعت %+d • زمینهٔ BTC/ETH %+d",
+                oneHourTrend, fourHourTrend, benchmarkTrend));
+        reasons.add(String.format(Locale.US,
+                "نسبت سود‌به‌ریسک هدف ۱/۲: %.2f / %.2f • هزینهٔ برآوردی %.2f%%",
+                rawRiskReward1, rawRiskReward2, roundTripCost));
         reasons.add(ai.shortFa());
         List<String> cautions = buildCautions(ticker, signal, rsi, effectiveVolumeRatio,
                 reference, atr, candleClosedAt);
@@ -146,6 +236,20 @@ public final class IndicatorEngine {
         }
         if (dataQuality < 75) {
             cautions.add("کیفیت داده برای سیگنال قوی کافی نیست؛ تعداد منبع، spread، حجم و تازگی بررسی شوند.");
+        }
+        if (!higherAligned && intendedDirection != 0) {
+            cautions.add("تایم‌فریم ۱ساعته/۴ساعته یا زمینهٔ BTC/ETH جهت فعلی را کامل تأیید نمی‌کند.");
+        }
+        if (!riskRewardPassed) {
+            cautions.add("پس از هزینه و لغزش، نسبت سود‌به‌ریسک برای ورود جهت‌دار کافی نیست.");
+        }
+        if (!liquidityPassed) {
+            cautions.add("عمق دفتر سفارش یا spread برای ورود قابل‌اتکا کافی نیست؛ سیگنال جهت‌دار مسدود شد.");
+        } else if (!book.available) {
+            cautions.add("دفتر سفارش در این اسکن در دسترس نبود؛ برچسب قوی صادر نمی‌شود.");
+        }
+        if (ai.driftDetected) {
+            cautions.add("دقت پنجرهٔ اخیر AI افت کرده است؛ رأی مدل تا بازیابی کیفیت غیرفعال شد.");
         }
         if (signal == Signal.NEUTRAL && Math.abs(score) >= 36) {
             cautions.add("با وجود امتیاز جهت‌دار، گیت AI/رژیم/کیفیت تأیید کامل نداد؛ خروجی عمداً «صبر» است.");
@@ -164,55 +268,109 @@ public final class IndicatorEngine {
             evidence += Integer.signum(ai.vote) == signalDirection ? 4 : -8;
         }
         evidence = (int) clamp(evidence, 25, 95);
-        double zoneLow = Math.max(0, reference - atr * 0.25);
-        double zoneHigh = reference + atr * 0.15;
-        boolean bearish = signal.isSell() || signal == Signal.DUMP_ALERT || score < 0;
-        double invalidation = bearish ? reference + 1.5 * atr : Math.max(0, reference - 1.5 * atr);
-        double objective1 = bearish ? Math.max(0, reference - 1.5 * atr) : reference + 1.5 * atr;
-        double objective2 = bearish ? Math.max(0, reference - 2.5 * atr) : reference + 2.5 * atr;
 
         return new ScanResult(ticker, signal, score, technicalScore, evidence, dataQuality,
                 ai, regime, directional.adx, rsi, ema9, ema21, ema50,
                 macd, atr, return5, return15, return1h, effectiveVolumeRatio, movementZ,
                 reference, zoneLow, zoneHigh, invalidation, objective1, objective2,
                 candleClosedAt, source, reasons, cautions,
-                tail(close5, 32), false);
+                tail(close5, 32), false, diagnostics,
+                TradeChartData.fromCandles(five, 120));
     }
 
     private static Signal classifySignal(int score, int technicalScore, AiAssessment ai,
                                          MarketRegime regime, DirectionalStrength directional,
-                                         int dataQuality, boolean pump, boolean dump) {
+                                         int dataQuality, SignalDiagnostics diagnostics,
+                                         boolean pump, boolean dump) {
         if (pump) return Signal.PUMP_ALERT;
         if (dump) return Signal.DUMP_ALERT;
-        if (dataQuality < 60) return Signal.NEUTRAL;
+        if (dataQuality < 60 || !diagnostics.riskRewardPassed
+                || !diagnostics.liquidityPassed) return Signal.NEUTRAL;
 
         boolean aiBlocksBuy = ai.reliable && ai.vote < 0 && ai.confidence >= 18;
         boolean aiBlocksSell = ai.reliable && ai.vote > 0 && ai.confidence >= 18;
         boolean regimeBlocksBuy = regime == MarketRegime.TREND_DOWN && directional.adx >= 22;
         boolean regimeBlocksSell = regime == MarketRegime.TREND_UP && directional.adx >= 22;
+        boolean higherBlocksBuy = diagnostics.oneHourTrend <= -50
+                || diagnostics.fourHourTrend <= -35 || diagnostics.benchmarkTrend <= -50;
+        boolean higherBlocksSell = diagnostics.oneHourTrend >= 50
+                || diagnostics.fourHourTrend >= 35 || diagnostics.benchmarkTrend >= 50;
+        boolean bookBlocksBuy = diagnostics.orderBook.available
+                && diagnostics.orderBook.imbalance <= -0.65;
+        boolean bookBlocksSell = diagnostics.orderBook.available
+                && diagnostics.orderBook.imbalance >= 0.65;
         int threshold = regime == MarketRegime.RANGE || regime == MarketRegime.VOLATILE ? 44 : 36;
 
-        boolean aiSupportsBuy = ai.reliable && ai.vote > 0 && ai.confidence >= 25;
-        boolean aiSupportsSell = ai.reliable && ai.vote < 0 && ai.confidence >= 25;
-        boolean trendSupportsBuy = regime == MarketRegime.TREND_UP && directional.adx >= 25;
-        boolean trendSupportsSell = regime == MarketRegime.TREND_DOWN && directional.adx >= 25;
-        boolean strongRegime = regime != MarketRegime.RANGE && regime != MarketRegime.VOLATILE;
-
-        if (score >= 68 && technicalScore >= 48 && dataQuality >= 75 && strongRegime
-                && !aiBlocksBuy && !regimeBlocksBuy && (aiSupportsBuy || trendSupportsBuy)) {
+        if (score >= 68 && technicalScore >= 48 && diagnostics.strongEligible
+                && !aiBlocksBuy && !regimeBlocksBuy && !higherBlocksBuy && !bookBlocksBuy) {
             return Signal.STRONG_BUY;
         }
-        if (score <= -68 && technicalScore <= -48 && dataQuality >= 75 && strongRegime
-                && !aiBlocksSell && !regimeBlocksSell && (aiSupportsSell || trendSupportsSell)) {
+        if (score <= -68 && technicalScore <= -48 && diagnostics.strongEligible
+                && !aiBlocksSell && !regimeBlocksSell && !higherBlocksSell && !bookBlocksSell) {
             return Signal.STRONG_SELL;
         }
-        if (score >= threshold && technicalScore >= 28 && !aiBlocksBuy && !regimeBlocksBuy) {
+        if (score >= threshold && technicalScore >= 28 && !aiBlocksBuy
+                && !regimeBlocksBuy && !higherBlocksBuy && !bookBlocksBuy) {
             return Signal.BUY;
         }
-        if (score <= -threshold && technicalScore <= -28 && !aiBlocksSell && !regimeBlocksSell) {
+        if (score <= -threshold && technicalScore <= -28 && !aiBlocksSell
+                && !regimeBlocksSell && !higherBlocksSell && !bookBlocksSell) {
             return Signal.SELL;
         }
         return Signal.NEUTRAL;
+    }
+
+    public static int timeframeTrend(List<Candle> input) {
+        List<Candle> candles = clean(input);
+        if (candles.size() < 40) return 0;
+        double[] close = closes(candles);
+        int last = close.length - 1;
+        double[] fast = emaSeries(close, 9);
+        double[] medium = emaSeries(close, 21);
+        double[] slow = emaSeries(close, 50);
+        int score = 0;
+        score += relativeVote(fast[last], medium[last], 30, 0.04);
+        score += relativeVote(medium[last], slow[last], 25, 0.06);
+        score += relativeVote(close[last], medium[last], 15, 0.04);
+        score += relativeVote(medium[last], medium[Math.max(0, last - 4)], 15, 0.05);
+        double momentum = percent(close[last], close[Math.max(0, last - 6)]);
+        score += (int) Math.round(clamp(momentum * 4.0, -10, 10));
+        double valueRsi = rsi(close, 14);
+        if (valueRsi >= 55 && valueRsi <= 72) score += 8;
+        else if (valueRsi <= 45 && valueRsi >= 28) score -= 8;
+        return (int) clamp(score, -100, 100);
+    }
+
+    private static int contextVote(int oneHourTrend, int fourHourTrend, int benchmarkTrend) {
+        int vote = 0;
+        if (oneHourTrend >= 20) vote += 3;
+        else if (oneHourTrend <= -20) vote -= 3;
+        if (fourHourTrend >= 20) vote += 4;
+        else if (fourHourTrend <= -20) vote -= 4;
+        if (benchmarkTrend >= 25) vote += 3;
+        else if (benchmarkTrend <= -25) vote -= 3;
+        return (int) clamp(vote, -10, 10);
+    }
+
+    private static boolean higherTimeframeAligned(int direction, int oneHourTrend,
+                                                  int fourHourTrend, int benchmarkTrend,
+                                                  boolean oneHourAvailable,
+                                                  boolean fourHourAvailable) {
+        if (direction == 0 || !oneHourAvailable || !fourHourAvailable) return false;
+        if (direction > 0) {
+            return oneHourTrend >= 5 && fourHourTrend >= 0 && benchmarkTrend >= -20;
+        }
+        return oneHourTrend <= -5 && fourHourTrend <= 0 && benchmarkTrend <= 20;
+    }
+
+    private static int historyDays(List<Candle> candles) {
+        if (candles == null || candles.size() < 2) return 0;
+        long span = Math.max(0, candles.get(candles.size() - 1).closeTime
+                - candles.get(0).openTime);
+        long day = 24L * 60L * 60L * 1000L;
+        int spanDays = (int) Math.max(1, (span + day / 2L) / day);
+        int coverageDays = candles.size() / (24 * 12);
+        return Math.min(30, Math.min(spanDays, coverageDays));
     }
 
     private static int dataQuality(MarketTicker ticker, int candleCount, long ageMs) {
@@ -281,15 +439,23 @@ public final class IndicatorEngine {
 
     /** Builds closed 15-minute candles when a provider's 15m endpoint is temporarily unavailable. */
     public static List<Candle> aggregateToFifteenMinutes(List<Candle> fiveMinuteInput) {
-        List<Candle> source = clean(fiveMinuteInput);
+        return aggregateCandles(fiveMinuteInput, 5, 15);
+    }
+
+    public static List<Candle> aggregateCandles(List<Candle> input, int sourceMinutes,
+                                                int targetMinutes) {
+        List<Candle> source = clean(input);
         List<Candle> result = new ArrayList<>();
-        final long width = 15L * 60L * 1000L;
+        if (sourceMinutes <= 0 || targetMinutes <= sourceMinutes
+                || targetMinutes % sourceMinutes != 0) return result;
+        int required = targetMinutes / sourceMinutes;
+        final long width = targetMinutes * 60_000L;
         int index = 0;
         while (index < source.size()) {
             long bucket = (source.get(index).openTime / width) * width;
             int end = index;
             while (end < source.size() && (source.get(end).openTime / width) * width == bucket) end++;
-            if (end - index >= 3) {
+            if (end - index >= required) {
                 Candle first = source.get(index);
                 Candle last = source.get(end - 1);
                 double high = -Double.MAX_VALUE;

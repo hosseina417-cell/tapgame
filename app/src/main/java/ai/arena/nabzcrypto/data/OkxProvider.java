@@ -2,6 +2,7 @@ package ai.arena.nabzcrypto.data;
 
 import ai.arena.nabzcrypto.model.Candle;
 import ai.arena.nabzcrypto.model.MarketTicker;
+import ai.arena.nabzcrypto.model.OrderBookMetrics;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -49,7 +50,7 @@ public final class OkxProvider implements MarketProvider {
 
     @Override public List<Candle> fetchCandles(MarketTicker ticker, int intervalMinutes, int limit)
             throws ApiException {
-        String interval = intervalMinutes == 5 ? "5m" : intervalMinutes == 15 ? "15m" : null;
+        String interval = intervalToken(intervalMinutes);
         if (interval == null) throw new ApiException("بازهٔ زمانی پشتیبانی نمی‌شود");
         String url = BASE + "/api/v5/market/candles?instId=" + ticker.apiSymbol
                 + "&bar=" + interval + "&limit=" + Math.max(60, Math.min(300, limit + 2));
@@ -78,6 +79,26 @@ public final class OkxProvider implements MarketProvider {
                     CandleNormalizer.number(row.optString(5)), quoteVolume));
         }
         return CandleNormalizer.completed(candles, limit);
+    }
+
+    static String intervalToken(int minutes) {
+        return minutes == 5 ? "5m" : minutes == 15 ? "15m"
+                : minutes == 60 ? "1H" : minutes == 240 ? "4H" : null;
+    }
+
+    @Override public OrderBookMetrics fetchOrderBook(MarketTicker ticker) throws ApiException {
+        Object raw = HttpJson.get(BASE + "/api/v5/market/books?instId="
+                + ticker.apiSymbol + "&sz=50");
+        if (!(raw instanceof JSONObject)) throw new ApiException("دفتر سفارش OKX نامعتبر است");
+        JSONObject root = (JSONObject) raw;
+        if (!"0".equals(root.optString("code"))) throw new ApiException("دفتر سفارش OKX دریافت نشد");
+        JSONArray rows = root.optJSONArray("data");
+        JSONObject data = rows == null ? null : rows.optJSONObject(0);
+        OrderBookMetrics metrics = data == null ? OrderBookMetrics.unavailable()
+                : OrderBookParser.parse(data.optJSONArray("bids"), data.optJSONArray("asks"),
+                        ticker.lastPrice);
+        if (!metrics.available) throw new ApiException("عمق بازار OKX کافی نیست");
+        return metrics;
     }
 
     private static long parseLong(String value) {
