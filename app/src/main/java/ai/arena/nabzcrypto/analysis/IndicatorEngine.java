@@ -1,5 +1,6 @@
 package ai.arena.nabzcrypto.analysis;
 
+import ai.arena.nabzcrypto.model.AiAssessment;
 import ai.arena.nabzcrypto.model.Candle;
 import ai.arena.nabzcrypto.model.MarketTicker;
 import ai.arena.nabzcrypto.model.ScanResult;
@@ -12,8 +13,8 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Deterministic technical-analysis engine. It consumes completed candles only and does not
- * represent its evidence score as a probability or a promise of future returns.
+ * Hybrid technical-analysis engine. It consumes completed candles only and gives a bounded vote
+ * to a locally trained classifier; neither score is represented as a promise of future returns.
  */
 public final class IndicatorEngine {
     private static final int MIN_FIVE_MINUTE_CANDLES = 55;
@@ -99,7 +100,15 @@ public final class IndicatorEngine {
             if (return15 > 0.15) score += volumeVote;
             else if (return15 < -0.15) score -= volumeVote;
         }
-        score = (int) clamp(score, -100, 100);
+        int technicalScore = (int) clamp(score, -100, 100);
+        AiAssessment ai;
+        try {
+            ai = OnDeviceAiAnalyzer.analyze(five);
+        } catch (RuntimeException ignored) {
+            // AI is supplementary; a numerical/model failure must never hide technical analysis.
+            ai = AiAssessment.unavailable();
+        }
+        score = (int) clamp(technicalScore + ai.vote, -100, 100);
 
         Signal signal;
         if (pump) signal = Signal.PUMP_ALERT;
@@ -112,8 +121,13 @@ public final class IndicatorEngine {
 
         List<String> reasons = buildReasons(signal, score, ema9, ema21, ema50, rsi,
                 macd, return5, return15, effectiveVolumeRatio, movementZ);
+        reasons.add(ai.shortFa());
         List<String> cautions = buildCautions(ticker, signal, rsi, effectiveVolumeRatio,
                 reference, atr, five.get(five.size() - 1).closeTime);
+        if (ai.reliable && technicalScore != 0 && ai.vote != 0
+                && Integer.signum(technicalScore) != Integer.signum(ai.vote)) {
+            cautions.add("رأی مدل AI با جهت اندیکاتورهای تکنیکال مخالف است؛ عدم‌قطعیت تحلیل بالاتر است.");
+        }
 
         long age = System.currentTimeMillis() - five.get(five.size() - 1).closeTime;
         if (age > 30L * 60L * 1000L) {
@@ -130,7 +144,7 @@ public final class IndicatorEngine {
         double objective1 = bearish ? Math.max(0, reference - 1.5 * atr) : reference + 1.5 * atr;
         double objective2 = bearish ? Math.max(0, reference - 2.5 * atr) : reference + 2.5 * atr;
 
-        return new ScanResult(ticker, signal, score, evidence, rsi, ema9, ema21, ema50,
+        return new ScanResult(ticker, signal, score, evidence, ai, rsi, ema9, ema21, ema50,
                 macd, atr, return5, return15, return1h, effectiveVolumeRatio, movementZ,
                 reference, zoneLow, zoneHigh, invalidation, objective1, objective2,
                 five.get(five.size() - 1).closeTime, source, reasons, cautions,

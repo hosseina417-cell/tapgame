@@ -7,3 +7,4 @@ build-log.txt
 build-logs/
 .DS_Store
 captures/
+.signing/

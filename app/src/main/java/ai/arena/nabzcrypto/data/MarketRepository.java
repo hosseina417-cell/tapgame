@@ -233,7 +233,7 @@ public final class MarketRepository {
         for (int i = 0; i < attempts; i++) {
             ProviderQuote quote = candidate.alternatives.get(i);
             try {
-                List<Candle> five = quote.provider.fetchCandles(quote.ticker, 5, 180);
+                List<Candle> five = quote.provider.fetchCandles(quote.ticker, 5, 300);
                 if (five.size() < 55) throw new ApiException("کندل ۵دقیقه کافی نیست");
                 List<Candle> fifteen;
                 try {

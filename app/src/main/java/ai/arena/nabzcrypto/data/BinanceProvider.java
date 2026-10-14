@@ -49,7 +49,7 @@ public final class BinanceProvider implements MarketProvider {
         String interval = intervalMinutes == 5 ? "5m" : intervalMinutes == 15 ? "15m" : null;
         if (interval == null) throw new ApiException("بازهٔ زمانی پشتیبانی نمی‌شود");
         String path = "/api/v3/klines?symbol=" + ticker.apiSymbol + "&interval=" + interval
-                + "&limit=" + Math.max(60, Math.min(200, limit + 2));
+                + "&limit=" + Math.max(60, Math.min(300, limit + 2));
         ApiException first;
         try {
             return parseCandles(HttpJson.get(activeBase + path), limit);

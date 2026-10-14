@@ -92,7 +92,8 @@ public final class MarketListAdapter extends BaseAdapter {
                 result.return5mPct, result.return15mPct, result.rsi14, result.volumeRatio,
                 Formatters.volume(result.ticker.quoteVolume24h)));
         String reason = result.reasons.isEmpty() ? result.signal.faDescription : result.reasons.get(0);
-        holder.reason.setText(reason + (result.fromCache ? "  •  ذخیره‌شده" : ""));
+        holder.reason.setText(result.ai.shortFa() + "\n" + reason
+                + (result.fromCache ? "  •  ذخیره‌شده" : ""));
         holder.favorite.setText(preferences.isFavorite(result.ticker.symbol) ? "★" : "☆");
         holder.favorite.setTextColor(preferences.isFavorite(result.ticker.symbol)
                 ? Theme.AMBER : Theme.MUTED);

@@ -53,7 +53,7 @@ public final class BybitProvider implements MarketProvider {
         String interval = intervalMinutes == 5 ? "5" : intervalMinutes == 15 ? "15" : null;
         if (interval == null) throw new ApiException("بازهٔ زمانی پشتیبانی نمی‌شود");
         String url = BASE + "/v5/market/kline?category=spot&symbol=" + ticker.apiSymbol
-                + "&interval=" + interval + "&limit=" + Math.max(60, Math.min(200, limit + 2));
+                + "&interval=" + interval + "&limit=" + Math.max(60, Math.min(300, limit + 2));
         Object raw = HttpJson.get(url);
         if (!(raw instanceof JSONObject)) throw new ApiException("پاسخ کندل بای‌بیت نامعتبر است");
         JSONObject root = (JSONObject) raw;

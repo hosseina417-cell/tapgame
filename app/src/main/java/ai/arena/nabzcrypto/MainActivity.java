@@ -554,7 +554,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         scanButton.setAlpha(0.65f);
         scanProgress.setVisibility(View.VISIBLE);
         scanProgress.setIndeterminate(true);
-        headerStatus.setText("در حال جمع‌آوری Binance، KuCoin، Bybit، OKX و CoinGecko…");
+        headerStatus.setText("جمع‌آوری چهار صرافی و آماده‌سازی AI محلی…");
         if (pageStatus != null) {
             pageStatus.setText("در حال اسکن…");
             pageStatus.setTextColor(Theme.CYAN);
@@ -576,7 +576,8 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
             @Override public void onProgress(int completed, int total, ScanResult newResult) {
                 int value = total <= 0 ? 0 : Math.round(completed * 100f / total);
                 scanProgress.setProgress(value);
-                headerStatus.setText("تحلیل بازار " + completed + " از " + total + " • " + currentSource);
+                headerStatus.setText("تحلیل تکنیکال + AI بازار " + completed + " از " + total
+                        + " • " + currentSource);
                 if (pageStatus != null) pageStatus.setText(completed + " / " + total);
             }
 
@@ -660,7 +661,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         LinearLayout safety = Theme.card(this);
         TextView safetyTitle = Theme.text(this, "تحلیل شفاف، بدون معاملهٔ خودکار", 15, Theme.AMBER, true);
         safety.addView(safetyTitle);
-        safety.addView(bodyText("نبض کریپتو فقط داده‌های عمومی را می‌خواند؛ حساب، کلید API و دسترسی معامله نمی‌خواهد. امتیازها احتمال موفقیت نیستند و هیچ سفارش مالی اجرا نمی‌شود."));
+        safety.addView(bodyText("نبض کریپتو فقط داده‌های عمومی را می‌خواند؛ حساب، کلید API و دسترسی معامله نمی‌خواهد. مدل AI روی گوشی آموزش می‌بیند. امتیازها و درصد مدل احتمال موفقیت نیستند و هیچ سفارش مالی اجرا نمی‌شود."));
         page.addView(safety, marginParams(0, 0, 0, 10));
 
         page.addView(section("دامنهٔ اسکن گسترده"));
@@ -668,7 +669,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
             preferences.setMarketLimit(value);
             renderCurrentTab();
         }), marginParams(0, 0, 0, 8));
-        page.addView(noteCard("نسخهٔ ۶ تا ۱۲۰ بازار را در هر دور تحلیل می‌کند. هر نمادی که با «＋ تحلیل» اضافه کنید، حتی خارج از فهرست پرحجم‌ها بررسی می‌شود."), marginParams(0, 0, 0, 10));
+        page.addView(noteCard("نسخهٔ ۷ تا ۱۲۰ بازار را در هر دور با اندیکاتورها و مدل AI محلی تحلیل می‌کند. هر نمادی که با «＋ تحلیل» اضافه کنید، حتی خارج از فهرست پرحجم‌ها بررسی می‌شود."), marginParams(0, 0, 0, 10));
 
         page.addView(section("حداقل نقدشوندگی تجمیعی ۲۴ساعته"));
         long currentVolume = Math.round(preferences.minimumVolume());
@@ -689,14 +690,14 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         switchCard.addView(auto);
         page.addView(switchCard, marginParams(0, 0, 0, 10));
 
-        page.addView(section("منابع و روش تحلیل نسخه ۶"));
+        page.addView(section("منابع و روش تحلیل نسخه ۷"));
         LinearLayout method = Theme.card(this);
         method.addView(bodyText("• قیمت اجماعی و حجم تجمیعی Binance، KuCoin، Bybit و OKX\n"
                 + "• رتبه و ارزش بازار از API عمومی CoinGecko، در صورت دسترسی\n"
-                + "• انتخاب خودکار عمیق‌ترین صرافی برای کندل بسته‌شدهٔ ۵ و ۱۵ دقیقه\n"
+                + "• مدل رگرسیون لجستیک زمان‌محور که جداگانه برای هر ارز روی گوشی آموزش می‌بیند\n"
+                + "• اعتبارسنجی روی بخش جدیدترِ دیده‌نشده و حذف رأی AI ضعیف یا نامطمئن\n"
                 + "• EMA ۹/۲۱/۵۰، RSI ۱۴، MACD، ATR و Median/MAD\n"
-                + "• حذف قیمت پرت و هشدار اختلاف قیمت بین منابع\n"
-                + "• جلوگیری از سیگنال خرید هنگام جهش پامپی"));
+                + "• رأی AI حداکثر ۱۲ امتیاز است و هشدار پامپ/دامپ همیشه اولویت دارد"));
         page.addView(method, marginParams(0, 0, 0, 10));
 
         page.addView(section("TradingView، CoinMarketCap و Google"));
@@ -706,7 +707,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
 
         page.addView(section("حریم خصوصی و ریسک"));
         LinearLayout privacy = Theme.card(this);
-        privacy.addView(bodyText("هیچ ثبت‌نامی وجود ندارد. منتخب‌ها، تنظیمات و آخرین نتیجه فقط روی گوشی ذخیره می‌شوند. دادهٔ شخصی به سروری ارسال نمی‌شود. دادهٔ بازار ممکن است با تأخیر، قطعی یا خطا همراه باشد؛ پیش از تصمیم، قیمت را در صرافی خود بررسی کنید."));
+        privacy.addView(bodyText("هیچ ثبت‌نامی وجود ندارد. آموزش و اجرای AI کاملاً روی گوشی انجام می‌شود و کندل‌ها برای سرویس هوش مصنوعی ارسال نمی‌شوند. منتخب‌ها، تنظیمات و آخرین نتیجه فقط روی گوشی ذخیره می‌شوند. دادهٔ شخصی به سروری ارسال نمی‌شود. پیش از تصمیم، قیمت را در صرافی خود بررسی کنید."));
         page.addView(privacy, marginParams(0, 0, 0, 10));
 
         TextView scanNow = Theme.button(this, "اسکن بازار همین حالا", Theme.CYAN, Theme.BG);
@@ -725,7 +726,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         page.addView(clear, marginParams(0, 0, 0, 14));
 
         TextView version = Theme.text(this,
-                "نبض کریپتو ۶.۰.۰  •  ابزار آموزشی چندمنبعی\nسیگنال قطعی و تضمین سود وجود ندارد.",
+                "نبض کریپتو ۷.۰.۰  •  تحلیل چندمنبعی + AI محلی\nسیگنال قطعی و تضمین سود وجود ندارد.",
                 10.5f, Theme.MUTED, false);
         version.setGravity(Gravity.CENTER);
         page.addView(version);
@@ -803,12 +804,12 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         panel.addView(title);
         panel.addView(Theme.spacer(this, 10));
         TextView message = bodyText("این برنامه ابزار اسکن و تحلیل آموزشی بازار است، نه مشاورهٔ مالی.\n\n"
-                + "• برچسب خرید/فروش صرفاً جمع‌بندی اندیکاتورهاست.\n"
-                + "• امتیاز شواهد، احتمال برد یا تضمین سود نیست.\n"
+                + "• برچسب خرید/فروش جمع‌بندی اندیکاتورها و رأی محدود مدل محلی است.\n"
+                + "• درصد خروجی AI، امتیاز شواهد و دقت آزمون، احتمال برد یا تضمین سود نیستند.\n"
                 + "• هشدار پامپ/دامپ فقط حرکت غیرعادی را نشان می‌دهد و دست‌کاری را اثبات نمی‌کند.\n"
                 + "• بازار کریپتو ممکن است تمام سرمایه را در معرض زیان قرار دهد.\n"
                 + "• قیمت اجماعی نیز ممکن است تأخیر یا اختلاف منبع داشته باشد؛ پیش از تصمیم دفتر سفارش را بررسی کنید.\n\n"
-                + "برنامه از فیدهای عمومی چهار صرافی و CoinGecko استفاده می‌کند، معامله نمی‌کند، کلید API نمی‌گیرد و اطلاعات شخصی ارسال نمی‌کند.");
+                + "برنامه از فیدهای عمومی چهار صرافی و CoinGecko استفاده می‌کند. AI روی گوشی آموزش می‌بیند؛ برنامه معامله نمی‌کند، کلید API نمی‌گیرد و اطلاعات شخصی یا کندل را به سرویس AI ارسال نمی‌کند.");
         message.setTextColor(Theme.TEXT);
         panel.addView(message);
         panel.addView(Theme.spacer(this, 16));
@@ -907,7 +908,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         price.setPadding(0, Theme.dp(this, 12), 0, 0);
         panel.addView(price);
         TextView score = Theme.text(this,
-                String.format(Locale.US, "امتیاز تکنیکال %+d از ۱۰۰  •  قدرت شواهد %d از ۱۰۰",
+                String.format(Locale.US, "امتیاز ترکیبی %+d از ۱۰۰  •  قدرت شواهد %d از ۱۰۰",
                         result.score, result.evidenceStrength),
                 12, signalColor, true);
         panel.addView(score);
@@ -921,6 +922,8 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
 
         panel.addView(detailSection("تصویر بازار"));
         panel.addView(metricGrid(result));
+        panel.addView(detailSection("تحلیل هوش مصنوعی روی دستگاه"));
+        panel.addView(aiAnalysisCard(result));
         panel.addView(detailSection("چرا این برچسب؟"));
         for (String reason : result.reasons) panel.addView(bullet("• " + reason, Theme.TEXT));
 
@@ -970,13 +973,40 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         panel.addView(sourceLinks);
 
         panel.addView(detailSection("یادآوری"));
-        panel.addView(bullet("تحلیل بر پایهٔ کندل بسته‌شده است. پیش از هر تصمیم، قیمت زنده و دفتر سفارش صرافی خود را کنترل کنید.", Theme.MUTED));
+        panel.addView(bullet("تحلیل و AI بر پایهٔ تاریخچهٔ کوتاه کندل بسته‌شده‌اند و تغییر رژیم بازار را تضمین نمی‌کنند. پیش از هر تصمیم، قیمت زنده و دفتر سفارش صرافی خود را کنترل کنید.", Theme.MUTED));
 
         TextView close = Theme.button(this, "بستن", Theme.CYAN, Theme.BG);
         close.setOnClickListener(v -> dialog.dismiss());
         panel.addView(close, marginParams(0, 16, 0, 0));
         dialog.setContentView(scroll);
         showWideDialog(dialog, 0.96f, Math.round(getResources().getDisplayMetrics().heightPixels * 0.91f));
+    }
+
+    private View aiAnalysisCard(ScanResult result) {
+        LinearLayout card = Theme.card(this);
+        card.setBackground(Theme.rounded(Theme.SURFACE_2, Theme.dp(this, 13),
+                Theme.dp(this, 1), Theme.withAlpha(Theme.CYAN, 45)));
+        int color = !result.ai.trained ? Theme.MUTED
+                : result.ai.vote > 0 ? Theme.GREEN : result.ai.vote < 0 ? Theme.RED : Theme.AMBER;
+        TextView title = Theme.text(this, "AI • " + result.ai.labelFa(), 14, color, true);
+        card.addView(title);
+        if (result.ai.trained) {
+            int up = (int) Math.round(result.ai.probabilityUp * 100.0);
+            int validation = (int) Math.round(result.ai.validationAccuracy * 100.0);
+            card.addView(metricPair("خروجی صعود مدل", up + "٪",
+                    "اعتبار فعلی", result.ai.confidence + " از ۱۰۰"));
+            card.addView(metricPair("دقت متوازن آزمون زمانی", validation + "٪",
+                    "نمونهٔ آموزش / آزمون", result.ai.trainingSamples + " / "
+                            + result.ai.validationSamples));
+        }
+        TextView explanation = bodyText(result.ai.explanationFa());
+        explanation.setTextColor(Theme.TEXT);
+        card.addView(explanation);
+        TextView note = bodyText("مدل برای افق تقریبی ۱۵ دقیقه روی همان گوشی آموزش می‌بیند. درصد خروجی، احتمال سود یا تضمین جهت بازار نیست.");
+        note.setTextSize(10.5f);
+        note.setTextColor(Theme.AMBER);
+        card.addView(note);
+        return card;
     }
 
     private View metricGrid(ScanResult result) {

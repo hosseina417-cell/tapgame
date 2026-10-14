@@ -3,6 +3,7 @@ package ai.arena.nabzcrypto.data;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import ai.arena.nabzcrypto.model.AiAssessment;
 import ai.arena.nabzcrypto.model.MarketTicker;
 import ai.arena.nabzcrypto.model.ScanResult;
 import ai.arena.nabzcrypto.model.Signal;
@@ -38,7 +39,7 @@ public final class ResultCache {
             int count = Math.min(140, results.size());
             for (int i = 0; i < count; i++) rows.put(encode(results.get(i)));
             JSONObject root = new JSONObject();
-            root.put("version", 2);
+            root.put("version", 3);
             root.put("savedAt", System.currentTimeMillis());
             root.put("results", rows);
             preferences.edit()
@@ -59,7 +60,7 @@ public final class ResultCache {
         try {
             JSONObject root = new JSONObject(payload);
             int version = root.optInt("version");
-            if (version != 1 && version != 2) return Collections.emptyList();
+            if (version < 1 || version > 3) return Collections.emptyList();
             JSONArray rows = root.optJSONArray("results");
             if (rows == null) return Collections.emptyList();
             for (int i = 0; i < rows.length(); i++) {
@@ -91,6 +92,15 @@ public final class ResultCache {
             row.put("signal", result.signal.name());
             row.put("score", result.score);
             row.put("strength", result.evidenceStrength);
+            row.put("aiTrained", result.ai.trained);
+            row.put("aiReliable", result.ai.reliable);
+            row.put("aiUp", result.ai.probabilityUp);
+            row.put("aiConfidence", result.ai.confidence);
+            row.put("aiAccuracy", result.ai.validationAccuracy);
+            row.put("aiBrier", result.ai.validationBrier);
+            row.put("aiTrain", result.ai.trainingSamples);
+            row.put("aiValidation", result.ai.validationSamples);
+            row.put("aiVote", result.ai.vote);
             row.put("rsi", result.rsi14);
             row.put("ema9", result.ema9);
             row.put("ema21", result.ema21);
@@ -133,11 +143,16 @@ public final class ResultCache {
                     row.optDouble("marketCap", 0));
             if (!ticker.isValid()) return null;
             Signal signal = Signal.valueOf(row.getString("signal"));
+            AiAssessment ai = new AiAssessment(row.optBoolean("aiTrained", false),
+                    row.optBoolean("aiReliable", false), row.optDouble("aiUp", 0.5),
+                    row.optInt("aiConfidence", 0), row.optDouble("aiAccuracy", 0),
+                    row.optDouble("aiBrier", 1), row.optInt("aiTrain", 0),
+                    row.optInt("aiValidation", 0), row.optInt("aiVote", 0));
             JSONArray sparkJson = row.optJSONArray("spark");
             double[] spark = new double[sparkJson == null ? 0 : sparkJson.length()];
             for (int i = 0; i < spark.length; i++) spark[i] = sparkJson.optDouble(i);
             return new ScanResult(ticker, signal, row.getInt("score"),
-                    row.getInt("strength"), row.getDouble("rsi"), row.getDouble("ema9"),
+                    row.getInt("strength"), ai, row.getDouble("rsi"), row.getDouble("ema9"),
                     row.getDouble("ema21"), row.getDouble("ema50"), row.getDouble("macd"),
                     row.getDouble("atr"), row.getDouble("ret5"), row.getDouble("ret15"),
                     row.getDouble("ret1h"), row.getDouble("volumeRatio"), row.getDouble("z"),

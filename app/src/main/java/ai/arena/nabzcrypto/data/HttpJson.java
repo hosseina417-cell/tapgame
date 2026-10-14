@@ -34,7 +34,7 @@ final class HttpJson {
             connection.setInstanceFollowRedirects(true);
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Accept-Encoding", "gzip");
-            connection.setRequestProperty("User-Agent", "NabzCrypto/6.0 Android");
+            connection.setRequestProperty("User-Agent", "NabzCrypto/7.0 Android");
 
             int status = connection.getResponseCode();
             InputStream raw = status >= 200 && status < 300
