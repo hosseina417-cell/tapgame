@@ -945,7 +945,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         page.addView(clear, marginParams(0, 0, 0, 14));
 
         TextView version = Theme.text(this,
-                "نبض کریپتو ۹.۰.۰  •  چرخهٔ سیگنال + چندتایم‌فریم + عمق بازار\nسیگنال قطعی و تضمین سود وجود ندارد.",
+                "نبض کریپتو ۹.۰.۱  •  چرخهٔ سیگنال + چندتایم‌فریم + عمق بازار\nسیگنال قطعی و تضمین سود وجود ندارد.",
                 10.5f, Theme.MUTED, false);
         version.setGravity(Gravity.CENTER);
         page.addView(version);

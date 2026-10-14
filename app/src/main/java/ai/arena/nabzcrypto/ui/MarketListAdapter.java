@@ -1,6 +1,7 @@
 package ai.arena.nabzcrypto.ui;
 
 import android.content.Context;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -132,9 +133,13 @@ public final class MarketListAdapter extends BaseAdapter {
         holder.symbol = Theme.text(context, "", 18, Theme.TEXT, true);
         holder.symbol.setTextDirection(View.TEXT_DIRECTION_LTR);
         holder.symbol.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        holder.symbol.setSingleLine(true);
+        holder.symbol.setEllipsize(TextUtils.TruncateAt.END);
         holder.quote = Theme.text(context, "", 10.5f, Theme.MUTED, false);
         holder.quote.setTextDirection(View.TEXT_DIRECTION_LTR);
         holder.quote.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        holder.quote.setSingleLine(true);
+        holder.quote.setEllipsize(TextUtils.TruncateAt.END);
         symbolBlock.addView(holder.symbol);
         symbolBlock.addView(holder.quote);
         top.addView(symbolBlock, new LinearLayout.LayoutParams(0,
@@ -150,22 +155,32 @@ public final class MarketListAdapter extends BaseAdapter {
         holder.price = Theme.text(context, "", 13, Theme.TEXT, true);
         holder.price.setTextDirection(View.TEXT_DIRECTION_LTR);
         holder.price.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        holder.price.setSingleLine(true);
+        holder.price.setEllipsize(TextUtils.TruncateAt.END);
         holder.change = Theme.text(context, "", 10.5f, Theme.MUTED, false);
         holder.change.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG_LTR);
         holder.change.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        holder.change.setSingleLine(true);
+        holder.change.setEllipsize(TextUtils.TruncateAt.END);
         priceBlock.addView(holder.price);
         priceBlock.addView(holder.change);
         top.addView(priceBlock, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f));
 
-        holder.signal = Theme.text(context, "", 11, Theme.CYAN, true);
-        holder.signal.setGravity(Gravity.CENTER);
-        holder.signal.setPadding(Theme.dp(context, 9), Theme.dp(context, 6),
-                Theme.dp(context, 9), Theme.dp(context, 6));
-        top.addView(holder.signal, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         card.addView(top, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        holder.signal = Theme.text(context, "", 11, Theme.CYAN, true);
+        holder.signal.setGravity(Gravity.CENTER);
+        holder.signal.setSingleLine(true);
+        holder.signal.setEllipsize(TextUtils.TruncateAt.END);
+        holder.signal.setPadding(Theme.dp(context, 9), Theme.dp(context, 6),
+                Theme.dp(context, 9), Theme.dp(context, 6));
+        LinearLayout.LayoutParams signalParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        signalParams.gravity = Gravity.RIGHT;
+        signalParams.setMargins(0, Theme.dp(context, 8), 0, 0);
+        card.addView(holder.signal, signalParams);
 
         holder.metrics = Theme.text(context, "", 11.5f, Theme.MUTED, false);
         holder.metrics.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);

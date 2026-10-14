@@ -39,7 +39,7 @@
 - ۳۰ تست deterministic: اندیکاتور، AI/drift، Pine، journal، cache merge، Order Book و interval چهار provider؛ همگی پاس.
 - ۸ کنترل مستقل AI و ۶ کنترل اجماع چندمنبعی؛ همگی پاس.
 - compile کامل با صفر خطا (فقط warningهای deprecation سازگار).
-- APK با minSdk 24، targetSdk 35، versionCode 90000 و versionName 9.0.0.
+- APK با minSdk 24، targetSdk 35، versionCode 90001 و versionName 9.0.1؛ کارت‌های بازار در عرض‌های کوچک نیز تک‌خط و پایدارند.
 - `classes.dex` بدون فشرده‌سازی و ۴-byte aligned.
 - امضای APK Signature Scheme v2 و v3 و verify موفق.
 - checksum SHA-256 کنار APK منتشر شده است.
