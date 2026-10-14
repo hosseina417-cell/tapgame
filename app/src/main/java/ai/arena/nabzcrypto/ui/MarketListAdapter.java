@@ -1,7 +1,6 @@
 package ai.arena.nabzcrypto.ui;
 
 import android.content.Context;
-import android.graphics.Color;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -66,7 +65,6 @@ public final class MarketListAdapter extends BaseAdapter {
             outer.addView(card, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             holder = build(card);
-            holder.outer = outer;
             holder.card = card;
             outer.setTag(holder);
             convertView = outer;
@@ -178,7 +176,6 @@ public final class MarketListAdapter extends BaseAdapter {
     }
 
     private static final class Holder {
-        FrameLayout outer;
         LinearLayout card;
         TextView favorite;
         TextView symbol;

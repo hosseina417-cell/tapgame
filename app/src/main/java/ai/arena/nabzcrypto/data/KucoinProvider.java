@@ -6,8 +6,6 @@ import ai.arena.nabzcrypto.model.MarketTicker;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 

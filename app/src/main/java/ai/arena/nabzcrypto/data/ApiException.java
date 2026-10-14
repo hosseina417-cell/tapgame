@@ -1,6 +1,7 @@
 package ai.arena.nabzcrypto.data;
 
 public final class ApiException extends Exception {
+    private static final long serialVersionUID = 1L;
     public final int statusCode;
 
     public ApiException(String message) {

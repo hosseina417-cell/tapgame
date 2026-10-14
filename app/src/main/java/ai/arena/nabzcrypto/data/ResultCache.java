@@ -45,7 +45,7 @@ public final class ResultCache {
                     .putLong("saved_at", root.optLong("savedAt"))
                     .putString("payload", root.toString())
                     .apply();
-        } catch (RuntimeException ignored) {
+        } catch (Exception ignored) {
             // Cache failure must never break a live scan.
         }
     }

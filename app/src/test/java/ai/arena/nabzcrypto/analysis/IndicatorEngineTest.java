@@ -120,8 +120,9 @@ public final class IndicatorEngineTest {
                     i == 179 ? volumeMultiplier : 1.0));
             price = next;
         }
-        double fifteenPrice = initial;
         double fifteenStep = fiveStep * 3.0;
+        // Both timeframes must end at the same market price despite covering different history.
+        double fifteenPrice = price / Math.pow(1.0 + fifteenStep, 90);
         for (int i = 0; i < 90; i++) {
             double next = fifteenPrice * (1.0 + fifteenStep);
             fifteen.add(candle(fifteenStart + i * fifteenWidth, fifteenWidth,
