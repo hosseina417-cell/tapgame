@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import ai.arena.nabzcrypto.model.Candle;
+import ai.arena.nabzcrypto.model.MarketRegime;
 import ai.arena.nabzcrypto.model.MarketTicker;
 import ai.arena.nabzcrypto.model.ScanResult;
 import ai.arena.nabzcrypto.model.Signal;
@@ -41,6 +42,7 @@ public final class IndicatorEngineTest {
         ScanResult result = IndicatorEngine.analyze(fixture.ticker, fixture.five,
                 fixture.fifteen, "test");
         assertEquals(Signal.NEUTRAL, result.signal);
+        assertEquals(MarketRegime.RANGE, result.regime);
         assertTrue(Math.abs(result.score) < 20);
     }
 
@@ -49,7 +51,10 @@ public final class IndicatorEngineTest {
         ScanResult result = IndicatorEngine.analyze(fixture.ticker, fixture.five,
                 fixture.fifteen, "test");
         assertTrue(result.signal.isBuy());
-        assertTrue(result.score >= 32);
+        assertEquals(MarketRegime.TREND_UP, result.regime);
+        assertTrue(result.adx14 >= 22);
+        assertTrue(result.dataQuality >= 75);
+        assertTrue(result.score >= 36);
         assertTrue(result.objective1 > result.referencePrice);
         assertTrue(result.invalidation < result.referencePrice);
     }
@@ -62,6 +67,18 @@ public final class IndicatorEngineTest {
         assertTrue(result.score <= -32);
         assertTrue(result.objective1 < result.referencePrice);
         assertTrue(result.invalidation > result.referencePrice);
+    }
+
+    @Test public void lowQualityFeedAbstainsFromDirectionalSignal() {
+        Fixture fixture = fixture(50, 0.0009, 1.0);
+        MarketTicker lowQuality = new MarketTicker("TESTUSDT", "TESTUSDT", "TEST", "USDT",
+                fixture.ticker.lastPrice, fixture.ticker.change24hPct, 100_000,
+                System.currentTimeMillis(), 1, 5.0, 0, 0);
+        ScanResult result = IndicatorEngine.analyze(lowQuality, fixture.five,
+                fixture.fifteen, "test");
+        assertTrue(result.technicalScore >= 28);
+        assertTrue(result.dataQuality < 60);
+        assertEquals(Signal.NEUTRAL, result.signal);
     }
 
     @Test public void abruptHighVolumeMoveIsPumpAlertNotBuy() {

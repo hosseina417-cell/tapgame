@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 import ai.arena.nabzcrypto.model.AiAssessment;
+import ai.arena.nabzcrypto.model.MarketRegime;
 import ai.arena.nabzcrypto.model.MarketTicker;
 import ai.arena.nabzcrypto.model.ScanResult;
 import ai.arena.nabzcrypto.model.Signal;
@@ -39,7 +40,7 @@ public final class ResultCache {
             int count = Math.min(140, results.size());
             for (int i = 0; i < count; i++) rows.put(encode(results.get(i)));
             JSONObject root = new JSONObject();
-            root.put("version", 3);
+            root.put("version", 4);
             root.put("savedAt", System.currentTimeMillis());
             root.put("results", rows);
             preferences.edit()
@@ -60,7 +61,7 @@ public final class ResultCache {
         try {
             JSONObject root = new JSONObject(payload);
             int version = root.optInt("version");
-            if (version < 1 || version > 3) return Collections.emptyList();
+            if (version != 4) return Collections.emptyList();
             JSONArray rows = root.optJSONArray("results");
             if (rows == null) return Collections.emptyList();
             for (int i = 0; i < rows.length(); i++) {
@@ -91,16 +92,25 @@ public final class ResultCache {
             row.put("marketCap", result.ticker.marketCapUsd);
             row.put("signal", result.signal.name());
             row.put("score", result.score);
+            row.put("technicalScore", result.technicalScore);
             row.put("strength", result.evidenceStrength);
+            row.put("dataQuality", result.dataQuality);
+            row.put("regime", result.regime.name());
+            row.put("adx", result.adx14);
             row.put("aiTrained", result.ai.trained);
             row.put("aiReliable", result.ai.reliable);
             row.put("aiUp", result.ai.probabilityUp);
+            row.put("aiDown", result.ai.probabilityDown);
+            row.put("aiNeutral", result.ai.probabilityNeutral);
             row.put("aiConfidence", result.ai.confidence);
             row.put("aiAccuracy", result.ai.validationAccuracy);
             row.put("aiBrier", result.ai.validationBrier);
             row.put("aiTrain", result.ai.trainingSamples);
             row.put("aiValidation", result.ai.validationSamples);
             row.put("aiVote", result.ai.vote);
+            row.put("aiAgreement", result.ai.horizonAgreement);
+            row.put("aiModels", result.ai.modelsUsed);
+            row.put("aiFolds", result.ai.validationFolds);
             row.put("rsi", result.rsi14);
             row.put("ema9", result.ema9);
             row.put("ema21", result.ema21);
@@ -143,16 +153,26 @@ public final class ResultCache {
                     row.optDouble("marketCap", 0));
             if (!ticker.isValid()) return null;
             Signal signal = Signal.valueOf(row.getString("signal"));
+            double aiUp = row.optDouble("aiUp", 0.5);
+            double aiDown = row.has("aiDown") ? row.optDouble("aiDown", 0)
+                    : Math.max(0, 1.0 - aiUp);
+            double aiNeutral = row.optDouble("aiNeutral", 0);
             AiAssessment ai = new AiAssessment(row.optBoolean("aiTrained", false),
-                    row.optBoolean("aiReliable", false), row.optDouble("aiUp", 0.5),
+                    row.optBoolean("aiReliable", false), aiUp, aiDown, aiNeutral,
                     row.optInt("aiConfidence", 0), row.optDouble("aiAccuracy", 0),
                     row.optDouble("aiBrier", 1), row.optInt("aiTrain", 0),
-                    row.optInt("aiValidation", 0), row.optInt("aiVote", 0));
+                    row.optInt("aiValidation", 0), row.optInt("aiVote", 0),
+                    row.optBoolean("aiAgreement", false), row.optInt("aiModels", 1),
+                    row.optInt("aiFolds", 1));
             JSONArray sparkJson = row.optJSONArray("spark");
             double[] spark = new double[sparkJson == null ? 0 : sparkJson.length()];
             for (int i = 0; i < spark.length; i++) spark[i] = sparkJson.optDouble(i);
-            return new ScanResult(ticker, signal, row.getInt("score"),
-                    row.getInt("strength"), ai, row.getDouble("rsi"), row.getDouble("ema9"),
+            int combinedScore = row.getInt("score");
+            return new ScanResult(ticker, signal, combinedScore,
+                    row.optInt("technicalScore", combinedScore), row.getInt("strength"),
+                    row.optInt("dataQuality", 80), ai,
+                    parseRegime(row.optString("regime", "TRANSITION")),
+                    row.optDouble("adx", 0), row.getDouble("rsi"), row.getDouble("ema9"),
                     row.getDouble("ema21"), row.getDouble("ema50"), row.getDouble("macd"),
                     row.getDouble("atr"), row.getDouble("ret5"), row.getDouble("ret15"),
                     row.getDouble("ret1h"), row.getDouble("volumeRatio"), row.getDouble("z"),
@@ -163,6 +183,14 @@ public final class ResultCache {
                     readStrings(row.optJSONArray("cautions")), spark, true);
         } catch (Exception ignored) {
             return null;
+        }
+    }
+
+    private static MarketRegime parseRegime(String value) {
+        try {
+            return MarketRegime.valueOf(value);
+        } catch (RuntimeException ignored) {
+            return MarketRegime.TRANSITION;
         }
     }
 

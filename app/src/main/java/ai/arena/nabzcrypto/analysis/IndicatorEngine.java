@@ -2,6 +2,7 @@ package ai.arena.nabzcrypto.analysis;
 
 import ai.arena.nabzcrypto.model.AiAssessment;
 import ai.arena.nabzcrypto.model.Candle;
+import ai.arena.nabzcrypto.model.MarketRegime;
 import ai.arena.nabzcrypto.model.MarketTicker;
 import ai.arena.nabzcrypto.model.ScanResult;
 import ai.arena.nabzcrypto.model.Signal;
@@ -41,6 +42,8 @@ public final class IndicatorEngine {
         double[] ema9Series = emaSeries(close15, 9);
         double[] ema21Series = emaSeries(close15, 21);
         double[] ema50Series = emaSeries(close15, 50);
+        double[] ema5FastSeries = emaSeries(close5, 9);
+        double[] ema5SlowSeries = emaSeries(close5, 21);
         int last15 = close15.length - 1;
         int last5 = close5.length - 1;
 
@@ -54,6 +57,8 @@ public final class IndicatorEngine {
         double previousMacd = histogram[Math.max(0, last15 - 1)];
         double atr = atr(fifteen, 14);
         if (!finitePositive(atr)) atr = reference * 0.01;
+        DirectionalStrength directional = directionalStrength(fifteen, 14);
+        MarketRegime regime = marketRegime(directional, atr / reference * 100.0);
 
         double return5 = percent(reference, close5[last5 - 1]);
         double return15 = percent(reference, close5[last5 - 3]);
@@ -78,6 +83,11 @@ public final class IndicatorEngine {
         score += relativeVote(reference, ema21, 10, 0.03);
         double ema21Past = ema21Series[Math.max(0, last15 - 4)];
         score += relativeVote(ema21, ema21Past, 8, 0.03);
+        score += relativeVote(ema5FastSeries[last5], ema5SlowSeries[last5], 6, 0.025);
+        if (directional.adx >= 20 && Math.abs(directional.plusDi - directional.minusDi) >= 3) {
+            int adxVote = directional.adx >= 28 ? 8 : directional.adx >= 23 ? 6 : 4;
+            score += directional.plusDi > directional.minusDi ? adxVote : -adxVote;
+        }
         double macdNoise = Math.max(reference * 0.00005, 1e-12);
         if (macd > macdNoise) score += 12;
         else if (macd < -macdNoise) score -= 12;
@@ -100,6 +110,8 @@ public final class IndicatorEngine {
             if (return15 > 0.15) score += volumeVote;
             else if (return15 < -0.15) score -= volumeVote;
         }
+        if (regime == MarketRegime.RANGE) score = (int) Math.round(score * 0.82);
+        else if (regime == MarketRegime.VOLATILE) score = (int) Math.round(score * 0.90);
         int technicalScore = (int) clamp(score, -100, 100);
         AiAssessment ai;
         try {
@@ -109,27 +121,36 @@ public final class IndicatorEngine {
             ai = AiAssessment.unavailable();
         }
         score = (int) clamp(technicalScore + ai.vote, -100, 100);
+        long candleClosedAt = five.get(five.size() - 1).closeTime;
+        long age = Math.max(0, System.currentTimeMillis() - candleClosedAt);
+        int dataQuality = dataQuality(ticker, five.size(), age);
 
-        Signal signal;
-        if (pump) signal = Signal.PUMP_ALERT;
-        else if (dump) signal = Signal.DUMP_ALERT;
-        else if (score >= 62) signal = Signal.STRONG_BUY;
-        else if (score >= 32) signal = Signal.BUY;
-        else if (score <= -62) signal = Signal.STRONG_SELL;
-        else if (score <= -32) signal = Signal.SELL;
-        else signal = Signal.NEUTRAL;
+        Signal signal = classifySignal(score, technicalScore, ai, regime, directional,
+                dataQuality, pump, dump);
 
         List<String> reasons = buildReasons(signal, score, ema9, ema21, ema50, rsi,
                 macd, return5, return15, effectiveVolumeRatio, movementZ);
+        reasons.add(String.format(Locale.US, "رژیم بازار: %s • ADX %.1f • کیفیت داده %d/100",
+                regime.faLabel, directional.adx, dataQuality));
         reasons.add(ai.shortFa());
         List<String> cautions = buildCautions(ticker, signal, rsi, effectiveVolumeRatio,
-                reference, atr, five.get(five.size() - 1).closeTime);
+                reference, atr, candleClosedAt);
         if (ai.reliable && technicalScore != 0 && ai.vote != 0
                 && Integer.signum(technicalScore) != Integer.signum(ai.vote)) {
-            cautions.add("رأی مدل AI با جهت اندیکاتورهای تکنیکال مخالف است؛ عدم‌قطعیت تحلیل بالاتر است.");
+            cautions.add("رأی ensemble هوش مصنوعی با جهت تکنیکال مخالف است؛ سیگنال جهت‌دار مسدود یا ضعیف شده است.");
+        }
+        if (regime == MarketRegime.RANGE) {
+            cautions.add("ADX بازار را بی‌روند نشان می‌دهد؛ آستانهٔ سیگنال جهت‌دار سخت‌گیرانه‌تر شده است.");
+        } else if (regime == MarketRegime.VOLATILE) {
+            cautions.add("ATR نوسان بسیار بالا را نشان می‌دهد؛ سیگنال قوی تا بازگشت ثبات محدود شده است.");
+        }
+        if (dataQuality < 75) {
+            cautions.add("کیفیت داده برای سیگنال قوی کافی نیست؛ تعداد منبع، spread، حجم و تازگی بررسی شوند.");
+        }
+        if (signal == Signal.NEUTRAL && Math.abs(score) >= 36) {
+            cautions.add("با وجود امتیاز جهت‌دار، گیت AI/رژیم/کیفیت تأیید کامل نداد؛ خروجی عمداً «صبر» است.");
         }
 
-        long age = System.currentTimeMillis() - five.get(five.size() - 1).closeTime;
         if (age > 30L * 60L * 1000L) {
             signal = Signal.STALE;
             cautions.add("آخرین کندل بسته‌شده قدیمی است؛ تا به‌روزرسانی بعدی تصمیم نگیرید.");
@@ -137,6 +158,12 @@ public final class IndicatorEngine {
 
         int evidence = evidenceStrength(signal, score, reference, ema9, ema21, ema50,
                 macd, rsi, return15, effectiveVolumeRatio, movementZ);
+        evidence = (int) Math.round(evidence * (0.70 + dataQuality / 100.0 * 0.30));
+        int signalDirection = signal.isBuy() ? 1 : signal.isSell() ? -1 : 0;
+        if (signalDirection != 0 && ai.vote != 0) {
+            evidence += Integer.signum(ai.vote) == signalDirection ? 4 : -8;
+        }
+        evidence = (int) clamp(evidence, 25, 95);
         double zoneLow = Math.max(0, reference - atr * 0.25);
         double zoneHigh = reference + atr * 0.15;
         boolean bearish = signal.isSell() || signal == Signal.DUMP_ALERT || score < 0;
@@ -144,11 +171,112 @@ public final class IndicatorEngine {
         double objective1 = bearish ? Math.max(0, reference - 1.5 * atr) : reference + 1.5 * atr;
         double objective2 = bearish ? Math.max(0, reference - 2.5 * atr) : reference + 2.5 * atr;
 
-        return new ScanResult(ticker, signal, score, evidence, ai, rsi, ema9, ema21, ema50,
+        return new ScanResult(ticker, signal, score, technicalScore, evidence, dataQuality,
+                ai, regime, directional.adx, rsi, ema9, ema21, ema50,
                 macd, atr, return5, return15, return1h, effectiveVolumeRatio, movementZ,
                 reference, zoneLow, zoneHigh, invalidation, objective1, objective2,
-                five.get(five.size() - 1).closeTime, source, reasons, cautions,
+                candleClosedAt, source, reasons, cautions,
                 tail(close5, 32), false);
+    }
+
+    private static Signal classifySignal(int score, int technicalScore, AiAssessment ai,
+                                         MarketRegime regime, DirectionalStrength directional,
+                                         int dataQuality, boolean pump, boolean dump) {
+        if (pump) return Signal.PUMP_ALERT;
+        if (dump) return Signal.DUMP_ALERT;
+        if (dataQuality < 60) return Signal.NEUTRAL;
+
+        boolean aiBlocksBuy = ai.reliable && ai.vote < 0 && ai.confidence >= 18;
+        boolean aiBlocksSell = ai.reliable && ai.vote > 0 && ai.confidence >= 18;
+        boolean regimeBlocksBuy = regime == MarketRegime.TREND_DOWN && directional.adx >= 22;
+        boolean regimeBlocksSell = regime == MarketRegime.TREND_UP && directional.adx >= 22;
+        int threshold = regime == MarketRegime.RANGE || regime == MarketRegime.VOLATILE ? 44 : 36;
+
+        boolean aiSupportsBuy = ai.reliable && ai.vote > 0 && ai.confidence >= 25;
+        boolean aiSupportsSell = ai.reliable && ai.vote < 0 && ai.confidence >= 25;
+        boolean trendSupportsBuy = regime == MarketRegime.TREND_UP && directional.adx >= 25;
+        boolean trendSupportsSell = regime == MarketRegime.TREND_DOWN && directional.adx >= 25;
+        boolean strongRegime = regime != MarketRegime.RANGE && regime != MarketRegime.VOLATILE;
+
+        if (score >= 68 && technicalScore >= 48 && dataQuality >= 75 && strongRegime
+                && !aiBlocksBuy && !regimeBlocksBuy && (aiSupportsBuy || trendSupportsBuy)) {
+            return Signal.STRONG_BUY;
+        }
+        if (score <= -68 && technicalScore <= -48 && dataQuality >= 75 && strongRegime
+                && !aiBlocksSell && !regimeBlocksSell && (aiSupportsSell || trendSupportsSell)) {
+            return Signal.STRONG_SELL;
+        }
+        if (score >= threshold && technicalScore >= 28 && !aiBlocksBuy && !regimeBlocksBuy) {
+            return Signal.BUY;
+        }
+        if (score <= -threshold && technicalScore <= -28 && !aiBlocksSell && !regimeBlocksSell) {
+            return Signal.SELL;
+        }
+        return Signal.NEUTRAL;
+    }
+
+    private static int dataQuality(MarketTicker ticker, int candleCount, long ageMs) {
+        int quality = 100;
+        if (ticker.sourceCount <= 1) quality -= 12;
+        else if (ticker.sourceCount == 2) quality -= 5;
+        if (ticker.priceSpreadPct > 0.25) {
+            quality -= (int) Math.round(Math.min(30, (ticker.priceSpreadPct - 0.25) * 8.0));
+        }
+        if (ticker.quoteVolume24h < 500_000) quality -= 18;
+        else if (ticker.quoteVolume24h < 2_000_000) quality -= 10;
+        else if (ticker.quoteVolume24h < 5_000_000) quality -= 4;
+        if (candleCount < 180) quality -= 10;
+        else if (candleCount < 250) quality -= 5;
+        if (ageMs > 20L * 60L * 1000L) quality -= 22;
+        else if (ageMs > 12L * 60L * 1000L) quality -= 10;
+        return (int) clamp(quality, 0, 100);
+    }
+
+    private static MarketRegime marketRegime(DirectionalStrength directional, double atrPercent) {
+        if (atrPercent >= 3.5) return MarketRegime.VOLATILE;
+        if (directional.adx >= 22 && directional.plusDi > directional.minusDi + 2) {
+            return MarketRegime.TREND_UP;
+        }
+        if (directional.adx >= 22 && directional.minusDi > directional.plusDi + 2) {
+            return MarketRegime.TREND_DOWN;
+        }
+        if (directional.adx < 17) return MarketRegime.RANGE;
+        return MarketRegime.TRANSITION;
+    }
+
+    private static DirectionalStrength directionalStrength(List<Candle> candles, int period) {
+        if (candles.size() < period * 2 + 1) return new DirectionalStrength(0, 0, 0);
+        int last = candles.size() - 1;
+        double dxSum = 0;
+        int dxCount = 0;
+        DirectionalStrength latest = null;
+        for (int end = Math.max(period, last - period + 1); end <= last; end++) {
+            double trueRange = 0;
+            double plusDm = 0;
+            double minusDm = 0;
+            int start = Math.max(1, end - period + 1);
+            for (int i = start; i <= end; i++) {
+                Candle current = candles.get(i);
+                Candle previous = candles.get(i - 1);
+                trueRange += Math.max(current.high - current.low,
+                        Math.max(Math.abs(current.high - previous.close),
+                                Math.abs(current.low - previous.close)));
+                double up = current.high - previous.high;
+                double down = previous.low - current.low;
+                if (up > down && up > 0) plusDm += up;
+                if (down > up && down > 0) minusDm += down;
+            }
+            double plusDi = trueRange > 0 ? plusDm / trueRange * 100.0 : 0;
+            double minusDi = trueRange > 0 ? minusDm / trueRange * 100.0 : 0;
+            double denominator = plusDi + minusDi;
+            double dx = denominator > 0 ? Math.abs(plusDi - minusDi) / denominator * 100.0 : 0;
+            dxSum += dx;
+            dxCount++;
+            latest = new DirectionalStrength(0, plusDi, minusDi);
+        }
+        return latest == null ? new DirectionalStrength(0, 0, 0)
+                : new DirectionalStrength(dxSum / Math.max(1, dxCount),
+                        latest.plusDi, latest.minusDi);
     }
 
     /** Builds closed 15-minute candles when a provider's 15m endpoint is temporarily unavailable. */
@@ -444,5 +572,17 @@ public final class IndicatorEngine {
 
     private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private static final class DirectionalStrength {
+        final double adx;
+        final double plusDi;
+        final double minusDi;
+
+        DirectionalStrength(double adx, double plusDi, double minusDi) {
+            this.adx = Double.isFinite(adx) ? clamp(adx, 0, 100) : 0;
+            this.plusDi = Double.isFinite(plusDi) ? clamp(plusDi, 0, 100) : 0;
+            this.minusDi = Double.isFinite(minusDi) ? clamp(minusDi, 0, 100) : 0;
+        }
     }
 }

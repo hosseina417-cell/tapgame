@@ -14,7 +14,7 @@ import java.util.List;
 
 public final class OnDeviceAiAnalyzerTest {
     @Test public void learnsRepeatingRegimeWithoutUsingNetwork() {
-        List<Candle> candles = regimeCandles(210);
+        List<Candle> candles = regimeCandles(256);
         AiAssessment first = OnDeviceAiAnalyzer.analyze(candles);
         AiAssessment second = OnDeviceAiAnalyzer.analyze(candles);
 
@@ -22,10 +22,25 @@ public final class OnDeviceAiAnalyzerTest {
         assertTrue(first.reliable);
         assertTrue(first.validationSamples >= 24);
         assertTrue(first.validationAccuracy > 0.58);
-        assertTrue(first.probabilityUp < 0.5);
-        assertTrue(first.vote < 0 && first.vote >= -12);
+        assertEquals(1.0, first.probabilityUp + first.probabilityDown
+                + first.probabilityNeutral, 1e-12);
+        assertEquals(2, first.modelsUsed);
+        assertTrue(first.validationFolds >= 4);
+        assertTrue(first.horizonAgreement);
+        assertTrue(first.probabilityUp > first.probabilityDown);
+        assertTrue(first.vote > 0 && first.vote <= 12);
         assertEquals(first.probabilityUp, second.probabilityUp, 1e-12);
         assertEquals(first.vote, second.vote);
+    }
+
+    @Test public void twoValidHorizonsAbstainAtNeutralTransition() {
+        AiAssessment assessment = OnDeviceAiAnalyzer.analyze(regimeCandles(262));
+        assertTrue(assessment.trained);
+        assertTrue(assessment.reliable);
+        assertEquals(2, assessment.modelsUsed);
+        assertFalse(assessment.horizonAgreement);
+        assertEquals(0, assessment.vote);
+        assertTrue(assessment.probabilityNeutral > 0.50);
     }
 
     @Test public void refusesOneClassHistoryInsteadOfInventingConfidence() {
@@ -42,7 +57,9 @@ public final class OnDeviceAiAnalyzerTest {
         assertFalse(result.trained);
         assertFalse(result.reliable);
         assertEquals(0, result.vote);
-        assertEquals(0.5, result.probabilityUp, 0);
+        assertEquals(1.0 / 3.0, result.probabilityUp, 1e-12);
+        assertEquals(1.0 / 3.0, result.probabilityDown, 1e-12);
+        assertEquals(1.0 / 3.0, result.probabilityNeutral, 1e-12);
     }
 
     private static List<Candle> regimeCandles(int count) {
@@ -51,8 +68,10 @@ public final class OnDeviceAiAnalyzerTest {
         long start = System.currentTimeMillis() - (count + 2L) * width;
         double price = 100;
         for (int i = 0; i < count; i++) {
-            boolean rising = (i / 10) % 2 == 0;
-            double next = price * (rising ? 1.003 : 0.997);
+            int phase = i % 36;
+            double step = phase < 10 ? 0.003 : phase < 18 ? 0
+                    : phase < 28 ? -0.003 : 0;
+            double next = price * (1.0 + step);
             double volume = 1_000 * (1 + (i % 5) * 0.04);
             result.add(candle(start + i * width, width, price, next, volume));
             price = next;

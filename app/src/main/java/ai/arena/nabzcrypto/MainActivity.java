@@ -554,7 +554,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         scanButton.setAlpha(0.65f);
         scanProgress.setVisibility(View.VISIBLE);
         scanProgress.setIndeterminate(true);
-        headerStatus.setText("جمع‌آوری چهار صرافی و آماده‌سازی AI محلی…");
+        headerStatus.setText("جمع‌آوری چهار صرافی و آماده‌سازی ensemble محلی…");
         if (pageStatus != null) {
             pageStatus.setText("در حال اسکن…");
             pageStatus.setTextColor(Theme.CYAN);
@@ -669,7 +669,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
             preferences.setMarketLimit(value);
             renderCurrentTab();
         }), marginParams(0, 0, 0, 8));
-        page.addView(noteCard("نسخهٔ ۷ تا ۱۲۰ بازار را در هر دور با اندیکاتورها و مدل AI محلی تحلیل می‌کند. هر نمادی که با «＋ تحلیل» اضافه کنید، حتی خارج از فهرست پرحجم‌ها بررسی می‌شود."), marginParams(0, 0, 0, 10));
+        page.addView(noteCard("نسخهٔ ۸ تا ۱۲۰ بازار را با گیت کیفیت داده، تشخیص رژیم، اندیکاتورها و ensemble هوش مصنوعی تحلیل می‌کند. خروجی‌های کمتر اما سخت‌گیرانه‌تر هدف این نسخه است."), marginParams(0, 0, 0, 10));
 
         page.addView(section("حداقل نقدشوندگی تجمیعی ۲۴ساعته"));
         long currentVolume = Math.round(preferences.minimumVolume());
@@ -690,14 +690,15 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         switchCard.addView(auto);
         page.addView(switchCard, marginParams(0, 0, 0, 10));
 
-        page.addView(section("منابع و روش تحلیل نسخه ۷"));
+        page.addView(section("روش سیگنال نسخه ۸"));
         LinearLayout method = Theme.card(this);
-        method.addView(bodyText("• قیمت اجماعی و حجم تجمیعی Binance، KuCoin، Bybit و OKX\n"
-                + "• رتبه و ارزش بازار از API عمومی CoinGecko، در صورت دسترسی\n"
-                + "• مدل رگرسیون لجستیک زمان‌محور که جداگانه برای هر ارز روی گوشی آموزش می‌بیند\n"
-                + "• اعتبارسنجی روی بخش جدیدترِ دیده‌نشده و حذف رأی AI ضعیف یا نامطمئن\n"
-                + "• EMA ۹/۲۱/۵۰، RSI ۱۴، MACD، ATR و Median/MAD\n"
-                + "• رأی AI حداکثر ۱۲ امتیاز است و هشدار پامپ/دامپ همیشه اولویت دارد"));
+        method.addView(bodyText("• قیمت و حجم اجماعی چهار صرافی با حذف منبع پرت\n"
+                + "• تشخیص رژیم روند/رنج/نوسان با ADX و ATR\n"
+                + "• تأیید EMA و مومنتوم در تایم‌فریم‌های ۵ و ۱۵ دقیقه\n"
+                + "• دو مدل سه‌کلاسهٔ بالا/خنثی/پایین برای افق ۱۵ و ۳۰ دقیقه\n"
+                + "• دو پنجرهٔ walk-forward، purge زمانی و کالیبراسیون خروجی\n"
+                + "• مسدودکردن سیگنال هنگام مخالفت AI، رژیم یا کیفیت پایین داده\n"
+                + "• رأی AI حداکثر ۱۲ امتیاز؛ هشدار پامپ/دامپ همیشه اولویت دارد"));
         page.addView(method, marginParams(0, 0, 0, 10));
 
         page.addView(section("TradingView، CoinMarketCap و Google"));
@@ -726,7 +727,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         page.addView(clear, marginParams(0, 0, 0, 14));
 
         TextView version = Theme.text(this,
-                "نبض کریپتو ۷.۰.۰  •  تحلیل چندمنبعی + AI محلی\nسیگنال قطعی و تضمین سود وجود ندارد.",
+                "نبض کریپتو ۸.۰.۰  •  سیگنال سخت‌گیرانه + ensemble AI\nسیگنال قطعی و تضمین سود وجود ندارد.",
                 10.5f, Theme.MUTED, false);
         version.setGravity(Gravity.CENTER);
         page.addView(version);
@@ -908,8 +909,9 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         price.setPadding(0, Theme.dp(this, 12), 0, 0);
         panel.addView(price);
         TextView score = Theme.text(this,
-                String.format(Locale.US, "امتیاز ترکیبی %+d از ۱۰۰  •  قدرت شواهد %d از ۱۰۰",
-                        result.score, result.evidenceStrength),
+                String.format(Locale.US,
+                        "امتیاز نهایی %+d  •  تکنیکال %+d  •  قدرت شواهد %d/100",
+                        result.score, result.technicalScore, result.evidenceStrength),
                 12, signalColor, true);
         panel.addView(score);
 
@@ -992,17 +994,22 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         card.addView(title);
         if (result.ai.trained) {
             int up = (int) Math.round(result.ai.probabilityUp * 100.0);
+            int down = (int) Math.round(result.ai.probabilityDown * 100.0);
+            int neutral = (int) Math.round(result.ai.probabilityNeutral * 100.0);
             int validation = (int) Math.round(result.ai.validationAccuracy * 100.0);
-            card.addView(metricPair("خروجی صعود مدل", up + "٪",
-                    "اعتبار فعلی", result.ai.confidence + " از ۱۰۰"));
-            card.addView(metricPair("دقت متوازن آزمون زمانی", validation + "٪",
-                    "نمونهٔ آموزش / آزمون", result.ai.trainingSamples + " / "
-                            + result.ai.validationSamples));
+            card.addView(metricPair("خروجی بالا / پایین", up + "٪ / " + down + "٪",
+                    "خروجی خنثی", neutral + "٪"));
+            card.addView(metricPair("اعتبار فعلی", result.ai.confidence + " از ۱۰۰",
+                    "دقت متوازن walk-forward", validation + "٪"));
+            card.addView(metricPair("نمونهٔ آموزش / خارج‌نمونه",
+                    result.ai.trainingSamples + " / " + result.ai.validationSamples,
+                    "مدل / پنجرهٔ آزمون", result.ai.modelsUsed + " / "
+                            + result.ai.validationFolds));
         }
         TextView explanation = bodyText(result.ai.explanationFa());
         explanation.setTextColor(Theme.TEXT);
         card.addView(explanation);
-        TextView note = bodyText("مدل برای افق تقریبی ۱۵ دقیقه روی همان گوشی آموزش می‌بیند. درصد خروجی، احتمال سود یا تضمین جهت بازار نیست.");
+        TextView note = bodyText("ensemble سه‌کلاسه برای افق‌های تقریبی ۱۵ و ۳۰ دقیقه روی گوشی آموزش می‌بیند. درصدها احتمال سود یا تضمین جهت بازار نیستند.");
         note.setTextSize(10.5f);
         note.setTextColor(Theme.AMBER);
         card.addView(note);
@@ -1020,6 +1027,10 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
                 "نسبت حجم", String.format(Locale.US, "×%.2f", result.volumeRatio)));
         grid.addView(metricPair("ناهنجاری حرکت", String.format(Locale.US, "%+.1fσ", result.movementZScore),
                 "حجم تجمیعی ۲۴ساعت", Formatters.volume(result.ticker.quoteVolume24h)));
+        grid.addView(metricPair("رژیم بازار", result.regime.faLabel,
+                "ADX ۱۴", String.format(Locale.US, "%.1f", result.adx14)));
+        grid.addView(metricPair("کیفیت داده", result.dataQuality + " از ۱۰۰",
+                "رأی محدود AI", String.format(Locale.US, "%+d", result.ai.vote)));
         grid.addView(metricPair("منابع معتبر قیمت", String.valueOf(result.ticker.sourceCount),
                 "اختلاف بین منابع", String.format(Locale.US, "%.2f%%", result.ticker.priceSpreadPct)));
         String rank = result.ticker.marketCapRank > 0 ? "#" + result.ticker.marketCapRank : "—";

@@ -78,7 +78,8 @@ public final class MarketListAdapter extends BaseAdapter {
         int color = SignalColors.color(result.signal);
         holder.symbol.setText(result.ticker.baseAsset);
         String rank = result.ticker.marketCapRank > 0 ? "  •  #" + result.ticker.marketCapRank : "";
-        holder.quote.setText("/USDT  •  " + result.ticker.sourceCount + " منبع" + rank);
+        holder.quote.setText("/USDT  •  " + result.ticker.sourceCount + " منبع" + rank
+                + "  •  Q" + result.dataQuality);
         holder.price.setText("$" + Formatters.price(result.ticker.lastPrice));
         holder.change.setText("۲۴ساعت  " + Formatters.signedPercent(result.ticker.change24hPct));
         holder.change.setTextColor(result.ticker.change24hPct >= 0 ? Theme.GREEN : Theme.RED);
@@ -88,9 +89,9 @@ public final class MarketListAdapter extends BaseAdapter {
         holder.signal.setBackground(Theme.rounded(Theme.withAlpha(color, 24),
                 Theme.dp(context, 10), Theme.dp(context, 1), Theme.withAlpha(color, 90)));
         holder.metrics.setText(String.format(Locale.US,
-                "۵دقیقه %+.2f%%   •   ۱۵دقیقه %+.2f%%   •   RSI %.1f   •   حجم ×%.1f   •   %s",
-                result.return5mPct, result.return15mPct, result.rsi14, result.volumeRatio,
-                Formatters.volume(result.ticker.quoteVolume24h)));
+                "۵دقیقه %+.2f%%   •   ۱۵دقیقه %+.2f%%   •   RSI %.1f   •   ADX %.0f   •   حجم ×%.1f   •   %s",
+                result.return5mPct, result.return15mPct, result.rsi14, result.adx14,
+                result.volumeRatio, Formatters.volume(result.ticker.quoteVolume24h)));
         String reason = result.reasons.isEmpty() ? result.signal.faDescription : result.reasons.get(0);
         holder.reason.setText(result.ai.shortFa() + "\n" + reason
                 + (result.fromCache ? "  •  ذخیره‌شده" : ""));

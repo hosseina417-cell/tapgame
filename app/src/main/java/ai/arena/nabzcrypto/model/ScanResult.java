@@ -9,8 +9,12 @@ public final class ScanResult {
     public final MarketTicker ticker;
     public final Signal signal;
     public final int score;
+    public final int technicalScore;
     public final int evidenceStrength;
+    public final int dataQuality;
     public final AiAssessment ai;
+    public final MarketRegime regime;
+    public final double adx14;
     public final double rsi14;
     public final double ema9;
     public final double ema21;
@@ -35,8 +39,10 @@ public final class ScanResult {
     public final double[] sparkline;
     public final boolean fromCache;
 
-    public ScanResult(MarketTicker ticker, Signal signal, int score, int evidenceStrength,
-                      AiAssessment ai, double rsi14, double ema9, double ema21, double ema50,
+    public ScanResult(MarketTicker ticker, Signal signal, int score, int technicalScore,
+                      int evidenceStrength, int dataQuality, AiAssessment ai,
+                      MarketRegime regime, double adx14,
+                      double rsi14, double ema9, double ema21, double ema50,
                       double macdHistogram, double atr14,
                       double return5mPct, double return15mPct, double return1hPct,
                       double volumeRatio, double movementZScore, double referencePrice,
@@ -47,8 +53,12 @@ public final class ScanResult {
         this.ticker = ticker;
         this.signal = signal;
         this.score = score;
+        this.technicalScore = technicalScore;
         this.evidenceStrength = evidenceStrength;
+        this.dataQuality = Math.max(0, Math.min(100, dataQuality));
         this.ai = ai == null ? AiAssessment.unavailable() : ai;
+        this.regime = regime == null ? MarketRegime.TRANSITION : regime;
+        this.adx14 = Double.isFinite(adx14) ? Math.max(0, Math.min(100, adx14)) : 0;
         this.rsi14 = rsi14;
         this.ema9 = ema9;
         this.ema21 = ema21;
@@ -75,7 +85,8 @@ public final class ScanResult {
     }
 
     public ScanResult asCached() {
-        return new ScanResult(ticker, signal, score, evidenceStrength, ai, rsi14, ema9, ema21,
+        return new ScanResult(ticker, signal, score, technicalScore, evidenceStrength,
+                dataQuality, ai, regime, adx14, rsi14, ema9, ema21,
                 ema50, macdHistogram, atr14, return5mPct, return15mPct, return1hPct,
                 volumeRatio, movementZScore, referencePrice, zoneLow, zoneHigh,
                 invalidation, objective1, objective2, candleClosedAt, source,
