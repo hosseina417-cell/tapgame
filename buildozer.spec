@@ -1,32 +1,32 @@
 [app]
-
-# ====== مشخصات برنامه ======
-title = آربیتراژ پرو
-package.name = arbitragepro
-package.domain = ir.arbitrage
-
+title = نبض کریپتو
+package.name = nabzcrypto
+package.domain = ai.arena
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,ttf,txt
-source.exclude_dirs = docs, bin, p4a-recipes, .github
-
+source.include_exts = py,png
+source.exclude_dirs = app,docs,gradle,releases,build-logs,.github,.git
 version = 5.0.0
-
-# ====== نیازمندی‌ها ======
-# urllib + certifi به‌جای requests تا زنجیرهٔ وابستگی کوتاه و بیلد پایدار بماند
-requirements = python3,kivy==2.3.0,certifi,arabic_reshaper==3.0.0,python-bidi==0.4.2,six
-
+requirements = python3
 orientation = portrait
 fullscreen = 0
+icon.filename = assets/nabzcrypto-icon.png
 
-# ====== اندروید ======
-android.permissions = INTERNET,POST_NOTIFICATIONS
-android.api = 33
-android.minapi = 21
-android.archs = arm64-v8a, armeabi-v7a
+# The p4a shell is used only by the repository's pre-existing CI workflow.
+# The visible application is the native Java Activity below; Python is never launched.
+android.entrypoint = ai.arena.nabzcrypto.MainActivity
+android.activity_class_name = ai.arena.nabzcrypto.MainActivity
+android.add_src = app/src/main/java
+android.add_assets = app/src/main/assets/Vazirmatn-Regular.ttf:Vazirmatn-Regular.ttf, app/src/main/assets/Vazirmatn-Bold.ttf:Vazirmatn-Bold.ttf
+android.extra_manifest_application_arguments = ci/application_attributes.xml
+android.add_compile_options = "sourceCompatibility = 1.8", "targetCompatibility = 1.8"
+android.permissions = INTERNET,ACCESS_NETWORK_STATE
+android.api = 35
+android.minapi = 24
+android.archs = arm64-v8a,armeabi-v7a
 android.accept_sdk_license = True
-
-# recipe محلی libffi برای رفع خطای LT_SYS_SYMBOL_USCORE در CI
-p4a.local_recipes = ./p4a-recipes
+android.allow_backup = False
+p4a.bootstrap = sdl2
+p4a.hook = ci/p4a_hook.py
 
 [buildozer]
 log_level = 2

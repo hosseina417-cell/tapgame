@@ -1,5 +1,9 @@
-.buildozer/
-__pycache__/
-*.pyc
-.kivy/
-arb_store.json
+.gradle/
+.idea/
+local.properties
+**/build/
+*.iml
+build-log.txt
+build-logs/
+.DS_Store
+captures/

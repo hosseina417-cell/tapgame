@@ -1,0 +1,49 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ai.arena.nabzcrypto'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'ai.arena.nabzcrypto'
+        minSdk 24
+        targetSdk 35
+        versionCode 50000
+        versionName '5.0.0'
+
+        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ''
+            versionNameSuffix ''
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
+    lint {
+        abortOnError true
+        checkReleaseBuilds true
+        disable 'TypographyFractions', 'TypographyQuotes'
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
