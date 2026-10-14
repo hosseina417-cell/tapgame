@@ -16,6 +16,7 @@ public final class ExternalLinks {
         String chartSymbol = exchange + ":" + result.ticker.baseAsset + "USDT";
         Uri uri = Uri.parse("https://www.tradingview.com/chart/").buildUpon()
                 .appendQueryParameter("symbol", chartSymbol)
+                .appendQueryParameter("interval", "15")
                 .build();
         Intent appIntent = browsable(uri);
         appIntent.setPackage("com.tradingview.tradingviewapp");

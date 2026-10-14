@@ -2,6 +2,8 @@ package ai.arena.nabzcrypto;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
@@ -41,9 +43,10 @@ import ai.arena.nabzcrypto.model.Signal;
 import ai.arena.nabzcrypto.ui.ExternalLinks;
 import ai.arena.nabzcrypto.ui.Formatters;
 import ai.arena.nabzcrypto.ui.MarketListAdapter;
+import ai.arena.nabzcrypto.ui.PineScriptBuilder;
 import ai.arena.nabzcrypto.ui.SignalColors;
-import ai.arena.nabzcrypto.ui.SparklineView;
 import ai.arena.nabzcrypto.ui.Theme;
+import ai.arena.nabzcrypto.ui.TradePlanChartView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -703,7 +706,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
 
         page.addView(section("TradingView، CoinMarketCap و Google"));
         LinearLayout externalSources = Theme.card(this);
-        externalSources.addView(bodyText("لمس هر کارت، همان نماد را در TradingView باز می‌کند. در جزئیات نیز لینک CoinMarketCap، CoinGecko و جست‌وجوی Google وجود دارد. CoinMarketCap به کلید API پولی/اختصاصی نیاز دارد و Google و TradingView فید عمومی مجاز برای بازتوزیع ندارند؛ بنابراین برنامه آن‌ها را اسکرپ نمی‌کند و فقط صفحهٔ رسمی را باز می‌کند."));
+        externalSources.addView(bodyText("لمس هر کارت، همان نماد را در تایم‌فریم ۱۵دقیقهٔ TradingView باز می‌کند. جزئیات هر ارز نقشهٔ خودکار ENTRY/STOP/TP و خروجی قابل‌کپی Pine دارد؛ به‌دلیل محدودیت امنیتی TradingView، افزودن خطوط به اپ رسمی نیازمند جای‌گذاری در Pine Editor است. لینک CoinMarketCap، CoinGecko و Google نیز بدون اسکرپ صفحهٔ رسمی را باز می‌کند."));
         page.addView(externalSources, marginParams(0, 0, 0, 10));
 
         page.addView(section("حریم خصوصی و ریسک"));
@@ -727,7 +730,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         page.addView(clear, marginParams(0, 0, 0, 14));
 
         TextView version = Theme.text(this,
-                "نبض کریپتو ۸.۰.۰  •  سیگنال سخت‌گیرانه + ensemble AI\nسیگنال قطعی و تضمین سود وجود ندارد.",
+                "نبض کریپتو ۸.۱.۰  •  نقشهٔ ورود/خروج + Pine + ensemble AI\nسیگنال قطعی و تضمین سود وجود ندارد.",
                 10.5f, Theme.MUTED, false);
         version.setGravity(Gravity.CENTER);
         page.addView(version);
@@ -915,12 +918,21 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
                 12, signalColor, true);
         panel.addView(score);
 
-        SparklineView sparkline = new SparklineView(this);
-        sparkline.setData(result.sparkline, signalColor);
-        LinearLayout.LayoutParams sparkParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Theme.dp(this, 78));
-        sparkParams.setMargins(0, Theme.dp(this, 8), 0, Theme.dp(this, 8));
-        panel.addView(sparkline, sparkParams);
+        boolean directionalPlan = result.signal.isBuy() || result.signal.isSell();
+        panel.addView(detailSection(directionalPlan
+                ? "نقشهٔ خودکار ورود و خروج" : "نقشهٔ پایش؛ بدون سیگنال ورود"));
+        TradePlanChartView tradeMap = new TradePlanChartView(this);
+        tradeMap.setPlan(result, signalColor);
+        LinearLayout.LayoutParams mapParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Theme.dp(this, 238));
+        mapParams.setMargins(0, Theme.dp(this, 3), 0, Theme.dp(this, 5));
+        panel.addView(tradeMap, mapParams);
+        String zoneLabel = directionalPlan ? "ENTRY ناحیهٔ بررسی ورود است"
+                : "WATCH فقط ناحیهٔ پایش است و ورود پیشنهاد نمی‌شود";
+        TextView mapNote = bullet(zoneLabel
+                + "؛ STOP سطح ابطال و TP1/TP2 اهداف آماری‌اند. نمودار از ۳۲ کندل بسته‌شدهٔ ۵دقیقه‌ای ساخته می‌شود و سفارش خودکار نیست.", Theme.MUTED);
+        mapNote.setTextSize(10.5f);
+        panel.addView(mapNote);
 
         panel.addView(detailSection("تصویر بازار"));
         panel.addView(metricGrid(result));
@@ -949,11 +961,42 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
             for (String caution : result.cautions) panel.addView(bullet("⚠ " + caution, Theme.AMBER));
         }
 
-        panel.addView(detailSection("نمودار و منابع بیرونی"));
-        TextView tradingView = Theme.button(this, "بازکردن نمودار زنده در TradingView  ↗",
-                Theme.CYAN, Theme.BG);
-        tradingView.setOnClickListener(v -> showLinkResult(ExternalLinks.openTradingView(this, result)));
+        panel.addView(detailSection("TradingView و خروجی Pine"));
+        TextView tradingView = Theme.button(this,
+                "کپی Pine و بازکردن TradingView  ↗", Theme.CYAN, Theme.BG);
+        tradingView.setOnClickListener(v -> {
+            boolean copied = copyToClipboard("NabzCrypto Pine • " + result.ticker.displaySymbol(),
+                    PineScriptBuilder.build(result));
+            if (copied) toast("اسکریپت Pine کپی شد؛ در Pine Editor جای‌گذاری و Add to chart کنید.");
+            showLinkResult(ExternalLinks.openTradingView(this, result));
+        });
         panel.addView(tradingView, marginParams(0, 2, 0, 7));
+
+        LinearLayout planActions = new LinearLayout(this);
+        planActions.setOrientation(LinearLayout.HORIZONTAL);
+        planActions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        TextView copyPine = Theme.button(this, "کپی Pine", Theme.SURFACE_2, Theme.TEXT);
+        copyPine.setOnClickListener(v -> {
+            if (copyToClipboard("NabzCrypto Pine • " + result.ticker.displaySymbol(),
+                    PineScriptBuilder.build(result))) {
+                toast("اسکریپت Pine کپی شد");
+            }
+        });
+        TextView copyLevels = Theme.button(this, "کپی سطوح", Theme.SURFACE_2, Theme.TEXT);
+        copyLevels.setOnClickListener(v -> {
+            if (copyToClipboard("NabzCrypto levels • " + result.ticker.displaySymbol(),
+                    PineScriptBuilder.summary(result))) {
+                toast("سطوح ورود، ابطال و اهداف کپی شدند");
+            }
+        });
+        planActions.addView(copyPine, weightedMarginParams());
+        planActions.addView(copyLevels, weightedMarginParams());
+        panel.addView(planActions, marginParams(0, 0, 0, 6));
+        TextView pineNote = bullet("تریدینگ‌ویو به برنامه‌های دیگر اجازهٔ تزریق خودکار خط از طریق لینک را نمی‌دهد. برای دیدن همین خطوط در خود TradingView، متن کپی‌شده را در Pine Editor نسخهٔ وب/دسکتاپ جای‌گذاری و Add to chart کنید؛ اپ موبایل ممکن است Pine Editor نداشته باشد. خروجی ثابت است و پس از اسکن جدید باید دوباره ساخته شود.", Theme.AMBER);
+        pineNote.setTextSize(10.5f);
+        panel.addView(pineNote);
+
+        panel.addView(detailSection("منابع بیرونی"));
         LinearLayout sourceLinks = new LinearLayout(this);
         sourceLinks.setOrientation(LinearLayout.HORIZONTAL);
         sourceLinks.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
@@ -1153,6 +1196,25 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         if (pageStatus != null) {
             pageStatus.setText("خطا در به‌روزرسانی");
             pageStatus.setTextColor(Theme.RED);
+        }
+    }
+
+    private boolean copyToClipboard(String label, String text) {
+        if (text == null || text.trim().isEmpty()) {
+            toast("متنی برای کپی وجود ندارد");
+            return false;
+        }
+        try {
+            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard == null) {
+                toast("حافظهٔ کلیپ‌بورد در دسترس نیست");
+                return false;
+            }
+            clipboard.setPrimaryClip(ClipData.newPlainText(label, text));
+            return true;
+        } catch (RuntimeException ignored) {
+            toast("کپی‌کردن در این دستگاه ممکن نشد");
+            return false;
         }
     }
 
