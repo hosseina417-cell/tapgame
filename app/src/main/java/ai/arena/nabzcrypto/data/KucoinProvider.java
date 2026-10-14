@@ -16,6 +16,10 @@ public final class KucoinProvider implements MarketProvider {
         return "KuCoin Spot";
     }
 
+    @Override public String tradingViewExchange() {
+        return "KUCOIN";
+    }
+
     @Override public List<MarketTicker> fetchTickers() throws ApiException {
         Object raw = HttpJson.get(BASE + "/api/v1/market/allTickers");
         if (!(raw instanceof JSONObject)) throw new ApiException("پاسخ تیکر کوکوین نامعتبر است");
@@ -31,7 +35,7 @@ public final class KucoinProvider implements MarketProvider {
         for (int i = 0; i < rows.length(); i++) {
             JSONObject item = rows.optJSONObject(i);
             if (item == null) continue;
-            String apiSymbol = item.optString("symbol", "").toUpperCase();
+            String apiSymbol = item.optString("symbol", "").toUpperCase(java.util.Locale.US);
             if (!apiSymbol.endsWith("-USDT") || apiSymbol.length() <= 5) continue;
             String base = apiSymbol.substring(0, apiSymbol.length() - 5);
             double fractionalChange = CandleNormalizer.number(item.optString("changeRate"));

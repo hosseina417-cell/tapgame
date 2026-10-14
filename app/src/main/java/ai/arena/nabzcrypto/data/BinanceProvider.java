@@ -23,6 +23,10 @@ public final class BinanceProvider implements MarketProvider {
         return "Binance Spot";
     }
 
+    @Override public String tradingViewExchange() {
+        return "BINANCE";
+    }
+
     @Override public List<MarketTicker> fetchTickers() throws ApiException {
         ApiException last = null;
         for (String base : orderedBases()) {
@@ -78,7 +82,7 @@ public final class BinanceProvider implements MarketProvider {
         for (int i = 0; i < array.length(); i++) {
             JSONObject item = array.optJSONObject(i);
             if (item == null) continue;
-            String symbol = item.optString("symbol", "").toUpperCase();
+            String symbol = item.optString("symbol", "").toUpperCase(java.util.Locale.US);
             if (!symbol.endsWith("USDT") || symbol.length() <= 4) continue;
             String base = symbol.substring(0, symbol.length() - 4);
             MarketTicker ticker = new MarketTicker(

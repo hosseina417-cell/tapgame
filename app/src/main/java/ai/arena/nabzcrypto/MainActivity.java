@@ -38,6 +38,7 @@ import ai.arena.nabzcrypto.data.MarketRepository;
 import ai.arena.nabzcrypto.data.ResultCache;
 import ai.arena.nabzcrypto.model.ScanResult;
 import ai.arena.nabzcrypto.model.Signal;
+import ai.arena.nabzcrypto.ui.ExternalLinks;
 import ai.arena.nabzcrypto.ui.Formatters;
 import ai.arena.nabzcrypto.ui.MarketListAdapter;
 import ai.arena.nabzcrypto.ui.SignalColors;
@@ -53,7 +54,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
     private static final int TAB_MOVEMENTS = 1;
     private static final int TAB_FAVORITES = 2;
     private static final int TAB_SETTINGS = 3;
-    private static final long AUTO_REFRESH_MS = 3L * 60L * 1000L;
+    private static final long AUTO_REFRESH_MS = 5L * 60L * 1000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final List<ScanResult> results = new ArrayList<>();
@@ -79,6 +80,8 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
     private String activeFilter = "ALL";
     private String query = "";
     private String currentSource = "";
+    private String requestedSymbol = "";
+    private boolean requestedNeedsScan;
     private boolean scanUiActive;
     private boolean resumed;
 
@@ -347,13 +350,25 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
     }
 
     private View buildSearch() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         EditText search = new EditText(this);
-        search.setHint("جست‌وجوی نام ارز؛ مثل BTC یا SOL");
+        search.setHint("نماد ارز؛ مثل BTC، XMR یا ARB");
         search.setHintTextColor(Theme.MUTED);
         search.setTextColor(Theme.TEXT);
         search.setTextSize(13);
         search.setSingleLine(true);
+        search.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
         search.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
+        search.setOnEditorActionListener((view, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                analyzeTypedSymbol();
+                return true;
+            }
+            return false;
+        });
         search.setTypeface(Theme.regular(this));
         search.setText(query);
         search.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG_RTL);
@@ -368,7 +383,38 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
             }
             @Override public void afterTextChanged(Editable s) {}
         });
-        return search;
+        row.addView(search, new LinearLayout.LayoutParams(0, Theme.dp(this, 46), 1));
+        TextView add = Theme.button(this, "＋ تحلیل", Theme.SURFACE_2, Theme.CYAN);
+        add.setOnClickListener(v -> analyzeTypedSymbol());
+        LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, Theme.dp(this, 46));
+        addParams.setMargins(Theme.dp(this, 7), 0, 0, 0);
+        row.addView(add, addParams);
+        return row;
+    }
+
+    private void analyzeTypedSymbol() {
+        String base = query == null ? "" : query.toUpperCase(Locale.US).trim();
+        base = base.replace("/", "").replace("-", "").replace("_", "").replace(" ", "");
+        if (base.endsWith("USDT") && base.length() > 4) base = base.substring(0, base.length() - 4);
+        if (!base.matches("[A-Z0-9]{2,16}")) {
+            toast("نماد معتبر وارد کنید؛ برای مثال XMR");
+            return;
+        }
+        String symbol = base + "USDT";
+        for (ScanResult result : results) {
+            if (symbol.equals(result.ticker.symbol)) {
+                onOpen(result);
+                return;
+            }
+        }
+        requestedSymbol = symbol;
+        preferences.addFavorite(symbol);
+        requestedNeedsScan = scanUiActive || repository.isScanning();
+        toast(base + (requestedNeedsScan
+                ? " اضافه شد و پس از دور فعلی تحلیل می‌شود"
+                : " به اسکن گسترده و منتخب‌ها اضافه شد"));
+        if (!requestedNeedsScan) startScan(true);
     }
 
     private View buildFilters() {
@@ -422,7 +468,8 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
     private void refreshVisibleList() {
         if (listAdapter == null) return;
         List<ScanResult> visible = new ArrayList<>();
-        String normalizedQuery = query.toUpperCase(Locale.US).replace("/", "").trim();
+        String normalizedQuery = query.toUpperCase(Locale.US)
+                .replace("/", "").replace("-", "").replace("_", "").trim();
         for (ScanResult result : results) {
             if (currentTab == TAB_MOVEMENTS && !isMovementCandidate(result)) continue;
             if (currentTab == TAB_FAVORITES && !preferences.isFavorite(result.ticker.symbol)) continue;
@@ -482,6 +529,9 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         if (results.isEmpty()) return "هنوز داده‌ای نداریم. دکمهٔ «اسکن تازه» را بزنید.";
         if (currentTab == TAB_MOVEMENTS) return "حرکت غیرعادی معناداری در بازارهای اسکن‌شده دیده نشد.";
         if (currentTab == TAB_FAVORITES) return "هنوز بازاری را ستاره‌دار نکرده‌اید.";
+        if (currentTab == TAB_SCANNER && query != null && !query.trim().isEmpty()) {
+            return "در نتایج فعلی نیست؛ «＋ تحلیل» را بزنید تا از میان همهٔ بازارهای چهار صرافی جست‌وجو شود.";
+        }
         return "نتیجه‌ای با این فیلتر پیدا نشد.";
     }
 
@@ -504,7 +554,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         scanButton.setAlpha(0.65f);
         scanProgress.setVisibility(View.VISIBLE);
         scanProgress.setIndeterminate(true);
-        headerStatus.setText("در حال انتخاب سریع‌ترین منبع عمومی…");
+        headerStatus.setText("در حال جمع‌آوری Binance، KuCoin، Bybit، OKX و CoinGecko…");
         if (pageStatus != null) {
             pageStatus.setText("در حال اسکن…");
             pageStatus.setTextColor(Theme.CYAN);
@@ -538,6 +588,24 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
                 cache.save(results);
                 finishScanUi();
                 headerStatus.setText(source + " • " + results.size() + " بازار • اکنون");
+                if (!requestedSymbol.isEmpty() && requestedNeedsScan) {
+                    requestedNeedsScan = false;
+                    handler.postDelayed(() -> startScan(true), 250);
+                } else if (!requestedSymbol.isEmpty()) {
+                    boolean found = false;
+                    for (ScanResult result : results) {
+                        if (requestedSymbol.equals(result.ticker.symbol)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found && preferences.isFavorite(requestedSymbol)) {
+                        preferences.toggleFavorite(requestedSymbol);
+                    }
+                    toast(found ? requestedSymbol.substring(0, requestedSymbol.length() - 4) + " تحلیل شد"
+                            : "این بازار در چهار صرافی پشتیبانی‌شده پیدا نشد");
+                    requestedSymbol = "";
+                }
                 if (failedMarkets > 0) {
                     toast(failedMarkets + " بازار به‌دلیل دادهٔ ناکافی رد شد");
                 }
@@ -546,6 +614,8 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
 
             @Override public void onError(String message) {
                 scanUiActive = false;
+                requestedSymbol = "";
+                requestedNeedsScan = false;
                 finishScanUi();
                 headerStatus.setText("خطا • دادهٔ قبلی حفظ شد");
                 showTransientError(message);
@@ -593,23 +663,23 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         safety.addView(bodyText("نبض کریپتو فقط داده‌های عمومی را می‌خواند؛ حساب، کلید API و دسترسی معامله نمی‌خواهد. امتیازها احتمال موفقیت نیستند و هیچ سفارش مالی اجرا نمی‌شود."));
         page.addView(safety, marginParams(0, 0, 0, 10));
 
-        page.addView(section("دامنهٔ اسکن"));
-        page.addView(optionRow(new int[]{20, 35, 50}, preferences.marketLimit(), value -> {
+        page.addView(section("دامنهٔ اسکن گسترده"));
+        page.addView(optionRow(new int[]{40, 80, 120}, preferences.marketLimit(), value -> {
             preferences.setMarketLimit(value);
             renderCurrentTab();
         }), marginParams(0, 0, 0, 8));
-        page.addView(noteCard("تعداد بیشتر، زمان و مصرف شبکه را افزایش می‌دهد. بازارهای منتخب همیشه به دامنه اضافه می‌شوند."), marginParams(0, 0, 0, 10));
+        page.addView(noteCard("نسخهٔ ۶ تا ۱۲۰ بازار را در هر دور تحلیل می‌کند. هر نمادی که با «＋ تحلیل» اضافه کنید، حتی خارج از فهرست پرحجم‌ها بررسی می‌شود."), marginParams(0, 0, 0, 10));
 
-        page.addView(section("حداقل نقدشوندگی ۲۴ساعته"));
+        page.addView(section("حداقل نقدشوندگی تجمیعی ۲۴ساعته"));
         long currentVolume = Math.round(preferences.minimumVolume());
-        page.addView(volumeOptionRow(new long[]{2_000_000L, 5_000_000L, 10_000_000L},
+        page.addView(volumeOptionRow(new long[]{500_000L, 2_000_000L, 5_000_000L},
                 currentVolume), marginParams(0, 0, 0, 10));
 
         page.addView(section("به‌روزرسانی"));
         LinearLayout switchCard = Theme.card(this);
         switchCard.setOrientation(LinearLayout.HORIZONTAL);
         switchCard.setGravity(Gravity.CENTER_VERTICAL);
-        TextView switchLabel = Theme.text(this, "اسکن خودکار هر ۳ دقیقه\nفقط وقتی برنامه باز است", 13, Theme.TEXT, true);
+        TextView switchLabel = Theme.text(this, "اسکن خودکار هر ۵ دقیقه\nفقط وقتی برنامه باز است", 13, Theme.TEXT, true);
         switchCard.addView(switchLabel, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         Switch auto = new Switch(this);
@@ -619,15 +689,20 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         switchCard.addView(auto);
         page.addView(switchCard, marginParams(0, 0, 0, 10));
 
-        page.addView(section("روش تحلیل نسخه ۵"));
+        page.addView(section("منابع و روش تحلیل نسخه ۶"));
         LinearLayout method = Theme.card(this);
-        method.addView(bodyText("• کندل بسته‌شدهٔ ۵ و ۱۵ دقیقه\n"
-                + "• EMA ۹/۲۱/۵۰، RSI ۱۴، MACD و ATR\n"
-                + "• نسبت حجم به میانهٔ ۲۴ کندل قبلی\n"
-                + "• تشخیص ناهنجاری مقاوم با Median/MAD\n"
-                + "• جلوگیری از سیگنال خرید هنگام جهش پامپی\n"
-                + "• منبع جایگزین خودکار میان Binance و KuCoin"));
+        method.addView(bodyText("• قیمت اجماعی و حجم تجمیعی Binance، KuCoin، Bybit و OKX\n"
+                + "• رتبه و ارزش بازار از API عمومی CoinGecko، در صورت دسترسی\n"
+                + "• انتخاب خودکار عمیق‌ترین صرافی برای کندل بسته‌شدهٔ ۵ و ۱۵ دقیقه\n"
+                + "• EMA ۹/۲۱/۵۰، RSI ۱۴، MACD، ATR و Median/MAD\n"
+                + "• حذف قیمت پرت و هشدار اختلاف قیمت بین منابع\n"
+                + "• جلوگیری از سیگنال خرید هنگام جهش پامپی"));
         page.addView(method, marginParams(0, 0, 0, 10));
+
+        page.addView(section("TradingView، CoinMarketCap و Google"));
+        LinearLayout externalSources = Theme.card(this);
+        externalSources.addView(bodyText("لمس هر کارت، همان نماد را در TradingView باز می‌کند. در جزئیات نیز لینک CoinMarketCap، CoinGecko و جست‌وجوی Google وجود دارد. CoinMarketCap به کلید API پولی/اختصاصی نیاز دارد و Google و TradingView فید عمومی مجاز برای بازتوزیع ندارند؛ بنابراین برنامه آن‌ها را اسکرپ نمی‌کند و فقط صفحهٔ رسمی را باز می‌کند."));
+        page.addView(externalSources, marginParams(0, 0, 0, 10));
 
         page.addView(section("حریم خصوصی و ریسک"));
         LinearLayout privacy = Theme.card(this);
@@ -650,7 +725,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         page.addView(clear, marginParams(0, 0, 0, 14));
 
         TextView version = Theme.text(this,
-                "نبض کریپتو ۵.۰.۰  •  ابزار آموزشی متن‌باز\nسیگنال قطعی و تضمین سود وجود ندارد.",
+                "نبض کریپتو ۶.۰.۰  •  ابزار آموزشی چندمنبعی\nسیگنال قطعی و تضمین سود وجود ندارد.",
                 10.5f, Theme.MUTED, false);
         version.setGravity(Gravity.CENTER);
         page.addView(version);
@@ -700,7 +775,9 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         for (long value : values) {
             boolean active = value == selected;
-            TextView option = Theme.button(this, "$" + (value / 1_000_000L) + "M",
+            String volumeLabel = value >= 1_000_000L
+                    ? "$" + (value / 1_000_000L) + "M" : "$" + (value / 1_000L) + "K";
+            TextView option = Theme.button(this, volumeLabel,
                     active ? Theme.CYAN : Theme.SURFACE, active ? Theme.BG : Theme.MUTED);
             option.setOnClickListener(v -> {
                 preferences.setMinimumVolume(value);
@@ -730,8 +807,8 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
                 + "• امتیاز شواهد، احتمال برد یا تضمین سود نیست.\n"
                 + "• هشدار پامپ/دامپ فقط حرکت غیرعادی را نشان می‌دهد و دست‌کاری را اثبات نمی‌کند.\n"
                 + "• بازار کریپتو ممکن است تمام سرمایه را در معرض زیان قرار دهد.\n"
-                + "• قیمت و نقدشوندگی را پیش از هر تصمیم در صرافی خودتان بررسی کنید.\n\n"
-                + "برنامه معامله نمی‌کند، کلید API نمی‌گیرد و اطلاعات شخصی ارسال نمی‌کند.");
+                + "• قیمت اجماعی نیز ممکن است تأخیر یا اختلاف منبع داشته باشد؛ پیش از تصمیم دفتر سفارش را بررسی کنید.\n\n"
+                + "برنامه از فیدهای عمومی چهار صرافی و CoinGecko استفاده می‌کند، معامله نمی‌کند، کلید API نمی‌گیرد و اطلاعات شخصی ارسال نمی‌کند.");
         message.setTextColor(Theme.TEXT);
         panel.addView(message);
         panel.addView(Theme.spacer(this, 16));
@@ -761,6 +838,12 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
     }
 
     @Override public void onOpen(ScanResult result) {
+        if (!ExternalLinks.openTradingView(this, result)) {
+            toast("برنامه یا مرورگری برای بازکردن TradingView پیدا نشد");
+        }
+    }
+
+    @Override public void onDetails(ScanResult result) {
         showDetail(result);
     }
 
@@ -860,6 +943,32 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
             panel.addView(detailSection("موارد احتیاط"));
             for (String caution : result.cautions) panel.addView(bullet("⚠ " + caution, Theme.AMBER));
         }
+
+        panel.addView(detailSection("نمودار و منابع بیرونی"));
+        TextView tradingView = Theme.button(this, "بازکردن نمودار زنده در TradingView  ↗",
+                Theme.CYAN, Theme.BG);
+        tradingView.setOnClickListener(v -> showLinkResult(ExternalLinks.openTradingView(this, result)));
+        panel.addView(tradingView, marginParams(0, 2, 0, 7));
+        LinearLayout sourceLinks = new LinearLayout(this);
+        sourceLinks.setOrientation(LinearLayout.HORIZONTAL);
+        sourceLinks.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        TextView cmc = Theme.button(this, "CoinMarketCap", Theme.SURFACE_2, Theme.TEXT);
+        cmc.setOnClickListener(v -> showLinkResult(
+                ExternalLinks.openCoinMarketCap(this, result.ticker.baseAsset)));
+        TextView gecko = Theme.button(this, "CoinGecko", Theme.SURFACE_2, Theme.TEXT);
+        gecko.setOnClickListener(v -> showLinkResult(
+                ExternalLinks.openCoinGecko(this, result.ticker.baseAsset)));
+        TextView google = Theme.button(this, "Google", Theme.SURFACE_2, Theme.TEXT);
+        google.setOnClickListener(v -> showLinkResult(
+                ExternalLinks.openGoogle(this, result.ticker.baseAsset)));
+        cmc.setTextSize(10);
+        gecko.setTextSize(10);
+        google.setTextSize(10);
+        sourceLinks.addView(cmc, externalButtonParams());
+        sourceLinks.addView(gecko, externalButtonParams());
+        sourceLinks.addView(google, externalButtonParams());
+        panel.addView(sourceLinks);
+
         panel.addView(detailSection("یادآوری"));
         panel.addView(bullet("تحلیل بر پایهٔ کندل بسته‌شده است. پیش از هر تصمیم، قیمت زنده و دفتر سفارش صرافی خود را کنترل کنید.", Theme.MUTED));
 
@@ -880,7 +989,13 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         grid.addView(metricPair("RSI ۱۴", String.format(Locale.US, "%.1f", result.rsi14),
                 "نسبت حجم", String.format(Locale.US, "×%.2f", result.volumeRatio)));
         grid.addView(metricPair("ناهنجاری حرکت", String.format(Locale.US, "%+.1fσ", result.movementZScore),
-                "حجم ۲۴ساعت", Formatters.volume(result.ticker.quoteVolume24h)));
+                "حجم تجمیعی ۲۴ساعت", Formatters.volume(result.ticker.quoteVolume24h)));
+        grid.addView(metricPair("منابع معتبر قیمت", String.valueOf(result.ticker.sourceCount),
+                "اختلاف بین منابع", String.format(Locale.US, "%.2f%%", result.ticker.priceSpreadPct)));
+        String rank = result.ticker.marketCapRank > 0 ? "#" + result.ticker.marketCapRank : "—";
+        String marketCap = result.ticker.marketCapUsd > 0
+                ? Formatters.volume(result.ticker.marketCapUsd) : "—";
+        grid.addView(metricPair("رتبهٔ CoinGecko", rank, "ارزش بازار", marketCap));
         return grid;
     }
 
@@ -912,6 +1027,13 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         params.setMargins(Theme.dp(this, 3), Theme.dp(this, 3),
                 Theme.dp(this, 3), Theme.dp(this, 3));
+        return params;
+    }
+
+    private LinearLayout.LayoutParams externalButtonParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        params.setMargins(Theme.dp(this, 3), 0, Theme.dp(this, 3), 0);
         return params;
     }
 
@@ -991,6 +1113,10 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
             pageStatus.setText("خطا در به‌روزرسانی");
             pageStatus.setTextColor(Theme.RED);
         }
+    }
+
+    private void showLinkResult(boolean opened) {
+        if (!opened) toast("مرورگری برای بازکردن این پیوند پیدا نشد");
     }
 
     private void toast(String message) {

@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletionService;
@@ -27,7 +28,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Coordinates provider failover and a bounded, rate-limit-friendly candle scan. */
+/** Coordinates four public exchange feeds, robust price consensus and bounded candle scans. */
 public final class MarketRepository {
     public interface Callback {
         void onStarted();
@@ -38,10 +39,11 @@ public final class MarketRepository {
     }
 
     private static final int CANDLE_WORKERS = 5;
+    private static final long SOURCE_DISCOVERY_SECONDS = 20;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService coordinator = Executors.newSingleThreadExecutor();
     private final List<MarketProvider> providers = Arrays.asList(
-            new BinanceProvider(), new KucoinProvider());
+            new BinanceProvider(), new KucoinProvider(), new BybitProvider(), new OkxProvider());
     private final AtomicBoolean scanning = new AtomicBoolean(false);
 
     public boolean isScanning() {
@@ -61,20 +63,23 @@ public final class MarketRepository {
     private void runScan(ScanConfig config, Set<String> favorites, Callback callback) {
         ExecutorService workers = null;
         try {
-            SourceSnapshot snapshot = fastestSource();
-            List<MarketTicker> selected = selectMarkets(snapshot.tickers, config, favorites);
+            SourceBundle bundle = discoverSources();
+            List<MarketCandidate> universe = aggregate(bundle);
+            List<MarketCandidate> selected = selectMarkets(universe, config, favorites);
             if (selected.isEmpty()) throw new ApiException("بازار واجد شرایطی پیدا نشد");
-            post(() -> callback.onSourceSelected(snapshot.provider.name(), selected.size()));
+            String sourceLabel = sourceLabel(bundle);
+            post(() -> callback.onSourceSelected(sourceLabel, selected.size()));
 
             workers = Executors.newFixedThreadPool(CANDLE_WORKERS);
             CompletionService<ScanResult> completion = new ExecutorCompletionService<>(workers);
-            for (MarketTicker ticker : selected) {
-                completion.submit(() -> analyze(snapshot.provider, ticker));
+            for (MarketCandidate candidate : selected) {
+                completion.submit(() -> analyze(candidate));
             }
 
-            List<ScanResult> results = new ArrayList<>();
+            List<ScanResult> analyzed = new ArrayList<>();
             int failed = 0;
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(155);
+            long seconds = Math.max(180L, selected.size() * 3L);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Math.min(420L, seconds));
             for (int completed = 1; completed <= selected.size(); completed++) {
                 long remaining = deadline - System.nanoTime();
                 if (remaining <= 0) {
@@ -89,7 +94,7 @@ public final class MarketRepository {
                 ScanResult result = null;
                 try {
                     result = future.get();
-                    if (result != null) results.add(result);
+                    if (result != null) analyzed.add(result);
                     else failed++;
                 } catch (ExecutionException e) {
                     failed++;
@@ -99,13 +104,13 @@ public final class MarketRepository {
                 post(() -> callback.onProgress(doneForUi, selected.size(), resultForUi));
             }
 
-            sortResults(results);
-            if (results.isEmpty()) {
-                throw new ApiException("کندل کافی دریافت نشد؛ منبع بازار یا اینترنت را بررسی کنید");
+            sortResults(analyzed);
+            if (analyzed.isEmpty()) {
+                throw new ApiException("کندل کافی دریافت نشد؛ منابع بازار یا اینترنت را بررسی کنید");
             }
-            final List<ScanResult> immutable = Collections.unmodifiableList(new ArrayList<>(results));
+            final List<ScanResult> immutable = Collections.unmodifiableList(new ArrayList<>(analyzed));
             final int failedFinal = failed;
-            post(() -> callback.onCompleted(immutable, snapshot.provider.name(), failedFinal));
+            post(() -> callback.onCompleted(immutable, sourceLabel, failedFinal));
         } catch (ApiException e) {
             String message = friendly(e.getMessage());
             post(() -> callback.onError(message));
@@ -113,82 +118,166 @@ public final class MarketRepository {
             Thread.currentThread().interrupt();
             post(() -> callback.onError("اسکن متوقف شد"));
         } catch (RuntimeException e) {
-            post(() -> callback.onError("خطای غیرمنتظره در تحلیل بازار"));
+            post(() -> callback.onError("خطای غیرمنتظره در تجمیع و تحلیل بازار"));
         } finally {
             if (workers != null) workers.shutdownNow();
             scanning.set(false);
         }
     }
 
-    private SourceSnapshot fastestSource() throws ApiException, InterruptedException {
-        ExecutorService discovery = Executors.newFixedThreadPool(providers.size());
+    private SourceBundle discoverSources() throws ApiException, InterruptedException {
+        ExecutorService discovery = Executors.newFixedThreadPool(providers.size() + 1);
         CompletionService<SourceSnapshot> completion = new ExecutorCompletionService<>(discovery);
-        List<Future<SourceSnapshot>> futures = new ArrayList<>();
+        List<Future<SourceSnapshot>> providerFutures = new ArrayList<>();
         for (MarketProvider provider : providers) {
-            futures.add(completion.submit(() -> new SourceSnapshot(provider, provider.fetchTickers())));
+            providerFutures.add(completion.submit(
+                    () -> new SourceSnapshot(provider, provider.fetchTickers())));
         }
+        Future<Map<String, CoinMetadata>> metadataFuture = discovery.submit(
+                () -> new CoinGeckoMetadataProvider().fetch());
+        List<SourceSnapshot> snapshots = new ArrayList<>();
         List<String> errors = new ArrayList<>();
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(32);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(SOURCE_DISCOVERY_SECONDS);
         try {
             for (int i = 0; i < providers.size(); i++) {
                 long remaining = deadline - System.nanoTime();
                 if (remaining <= 0) break;
-                Future<SourceSnapshot> future = completion.poll(remaining, TimeUnit.NANOSECONDS);
+                long wait = snapshots.size() >= 2
+                        ? Math.min(remaining, TimeUnit.SECONDS.toNanos(8)) : remaining;
+                Future<SourceSnapshot> future = completion.poll(wait, TimeUnit.NANOSECONDS);
                 if (future == null) break;
                 try {
                     SourceSnapshot snapshot = future.get();
-                    if (snapshot.tickers.size() >= 10) return snapshot;
+                    if (snapshot.tickers.size() >= 10) snapshots.add(snapshot);
                 } catch (ExecutionException e) {
                     Throwable cause = e.getCause();
                     if (cause != null && cause.getMessage() != null) errors.add(cause.getMessage());
                 }
             }
+            if (snapshots.isEmpty()) {
+                String detail = errors.isEmpty() ? "مهلت اتصال تمام شد" : friendly(errors.get(0));
+                throw new ApiException("هیچ صرافی عمومی در دسترس نیست: " + detail);
+            }
+            Map<String, CoinMetadata> metadata = Collections.emptyMap();
+            try {
+                long remaining = Math.max(1, deadline - System.nanoTime());
+                metadata = metadataFuture.get(Math.min(remaining, TimeUnit.SECONDS.toNanos(2)),
+                        TimeUnit.NANOSECONDS);
+            } catch (Exception ignored) {
+                // CoinGecko is enrichment only; exchange scanning must continue without it.
+            }
+            return new SourceBundle(snapshots, metadata);
         } finally {
-            for (Future<SourceSnapshot> future : futures) future.cancel(true);
+            for (Future<SourceSnapshot> future : providerFutures) future.cancel(true);
+            metadataFuture.cancel(true);
             discovery.shutdownNow();
         }
-        String detail = errors.isEmpty() ? "مهلت اتصال تمام شد" : friendly(errors.get(0));
-        throw new ApiException("هیچ منبع عمومی در دسترس نیست: " + detail);
     }
 
-    private ScanResult analyze(MarketProvider provider, MarketTicker ticker) throws ApiException {
-        List<Candle> five = provider.fetchCandles(ticker, 5, 180);
-        if (five.size() < 55) throw new ApiException("کندل ۵دقیقه کافی نیست");
-        List<Candle> fifteen;
-        try {
-            fifteen = provider.fetchCandles(ticker, 15, 90);
-        } catch (ApiException e) {
-            fifteen = IndicatorEngine.aggregateToFifteenMinutes(five);
+    private static List<MarketCandidate> aggregate(SourceBundle bundle) {
+        Map<String, List<ProviderQuote>> grouped = new HashMap<>();
+        for (SourceSnapshot snapshot : bundle.snapshots) {
+            for (MarketTicker ticker : snapshot.tickers) {
+                if (!MarketFilters.eligible(ticker, 0)) continue;
+                grouped.computeIfAbsent(ticker.symbol, ignored -> new ArrayList<>())
+                        .add(new ProviderQuote(snapshot.provider, ticker));
+            }
         }
-        if (fifteen.size() < 55) {
-            // A second aggregation path also covers structurally empty provider responses.
-            fifteen = IndicatorEngine.aggregateToFifteenMinutes(five);
+
+        List<MarketCandidate> result = new ArrayList<>();
+        for (Map.Entry<String, List<ProviderQuote>> entry : grouped.entrySet()) {
+            List<ProviderQuote> quotes = entry.getValue();
+            double[] allPrices = new double[quotes.size()];
+            for (int i = 0; i < quotes.size(); i++) allPrices[i] = quotes.get(i).ticker.lastPrice;
+            double roughMedian = median(allPrices);
+            List<ProviderQuote> sane = new ArrayList<>();
+            for (ProviderQuote quote : quotes) {
+                double deviation = Math.abs(quote.ticker.lastPrice / roughMedian - 1.0);
+                if (deviation <= 0.08) sane.add(quote);
+            }
+            if (sane.isEmpty()) continue;
+            sane.sort((a, b) -> Double.compare(b.ticker.quoteVolume24h, a.ticker.quoteVolume24h));
+
+            double[] prices = new double[sane.size()];
+            double[] changes = new double[sane.size()];
+            double totalVolume = 0;
+            double minPrice = Double.MAX_VALUE;
+            double maxPrice = 0;
+            for (int i = 0; i < sane.size(); i++) {
+                MarketTicker ticker = sane.get(i).ticker;
+                prices[i] = ticker.lastPrice;
+                changes[i] = ticker.change24hPct;
+                totalVolume += ticker.quoteVolume24h;
+                minPrice = Math.min(minPrice, ticker.lastPrice);
+                maxPrice = Math.max(maxPrice, ticker.lastPrice);
+            }
+            double consensusPrice = median(prices);
+            double spread = consensusPrice > 0
+                    ? (maxPrice - minPrice) / consensusPrice * 100.0 : 0;
+            ProviderQuote primary = sane.get(0);
+            CoinMetadata metadata = bundle.metadata.get(primary.ticker.baseAsset.toUpperCase(Locale.US));
+            int rank = metadata == null ? 0 : metadata.marketCapRank;
+            double marketCap = metadata == null ? 0 : metadata.marketCapUsd;
+            MarketTicker consensus = new MarketTicker(primary.ticker.symbol,
+                    primary.ticker.apiSymbol, primary.ticker.baseAsset, "USDT",
+                    consensusPrice, median(changes), totalVolume, System.currentTimeMillis(),
+                    sane.size(), spread, rank, marketCap);
+            result.add(new MarketCandidate(consensus, sane));
         }
-        try {
-            return IndicatorEngine.analyze(ticker, five, fifteen, provider.name());
-        } catch (IllegalArgumentException e) {
-            throw new ApiException("دادهٔ کافی برای تحلیل " + ticker.baseAsset + " وجود ندارد");
-        }
+        return result;
     }
 
-    private static List<MarketTicker> selectMarkets(List<MarketTicker> all, ScanConfig config,
-                                                     Set<String> favorites) {
-        List<MarketTicker> sorted = new ArrayList<>();
-        Map<String, MarketTicker> bySymbol = new HashMap<>();
-        for (MarketTicker ticker : all) {
-            bySymbol.put(ticker.symbol, ticker);
-            if (MarketFilters.eligible(ticker, config.minimumQuoteVolume)) sorted.add(ticker);
+    private ScanResult analyze(MarketCandidate candidate) throws ApiException {
+        ApiException lastError = null;
+        int attempts = Math.min(3, candidate.alternatives.size());
+        for (int i = 0; i < attempts; i++) {
+            ProviderQuote quote = candidate.alternatives.get(i);
+            try {
+                List<Candle> five = quote.provider.fetchCandles(quote.ticker, 5, 180);
+                if (five.size() < 55) throw new ApiException("کندل ۵دقیقه کافی نیست");
+                List<Candle> fifteen;
+                try {
+                    fifteen = quote.provider.fetchCandles(quote.ticker, 15, 90);
+                } catch (ApiException e) {
+                    fifteen = IndicatorEngine.aggregateToFifteenMinutes(five);
+                }
+                if (fifteen.size() < 55) fifteen = IndicatorEngine.aggregateToFifteenMinutes(five);
+                String source = quote.provider.name() + " • اجماع "
+                        + candidate.ticker.sourceCount + " منبع";
+                return IndicatorEngine.analyze(candidate.ticker, five, fifteen, source);
+            } catch (ApiException e) {
+                lastError = e;
+            } catch (IllegalArgumentException e) {
+                lastError = new ApiException("دادهٔ کافی برای " + candidate.ticker.baseAsset + " نیست");
+            }
         }
-        sorted.sort((a, b) -> Double.compare(b.quoteVolume24h, a.quoteVolume24h));
-        LinkedHashMap<String, MarketTicker> chosen = new LinkedHashMap<>();
-        for (MarketTicker ticker : sorted) {
+        throw lastError == null ? new ApiException("تحلیل بازار ممکن نشد") : lastError;
+    }
+
+    private static List<MarketCandidate> selectMarkets(List<MarketCandidate> all,
+                                                        ScanConfig config,
+                                                        Set<String> favorites) {
+        List<MarketCandidate> sorted = new ArrayList<>();
+        Map<String, MarketCandidate> bySymbol = new HashMap<>();
+        for (MarketCandidate candidate : all) {
+            bySymbol.put(candidate.ticker.symbol, candidate);
+            if (MarketFilters.eligible(candidate.ticker, config.minimumQuoteVolume)) {
+                sorted.add(candidate);
+            }
+        }
+        sorted.sort((a, b) -> Double.compare(b.ticker.quoteVolume24h, a.ticker.quoteVolume24h));
+        LinkedHashMap<String, MarketCandidate> chosen = new LinkedHashMap<>();
+        for (MarketCandidate candidate : sorted) {
             if (chosen.size() >= config.marketLimit) break;
-            chosen.put(ticker.symbol, ticker);
+            chosen.put(candidate.ticker.symbol, candidate);
         }
         if (favorites != null) {
-            for (String symbol : favorites) {
-                MarketTicker ticker = bySymbol.get(symbol);
-                if (MarketFilters.eligible(ticker, 0)) chosen.put(ticker.symbol, ticker);
+            for (String rawSymbol : favorites) {
+                String symbol = rawSymbol == null ? "" : rawSymbol.toUpperCase(Locale.US);
+                MarketCandidate candidate = bySymbol.get(symbol);
+                if (candidate != null && MarketFilters.eligible(candidate.ticker, 0)) {
+                    chosen.put(symbol, candidate);
+                }
             }
         }
         return new ArrayList<>(chosen.values());
@@ -212,6 +301,21 @@ public final class MarketRepository {
         return 1;
     }
 
+    private static double median(double[] values) {
+        if (values.length == 0) return 0;
+        double[] sorted = values.clone();
+        Arrays.sort(sorted);
+        int middle = sorted.length / 2;
+        return sorted.length % 2 == 0
+                ? (sorted[middle - 1] + sorted[middle]) / 2.0 : sorted[middle];
+    }
+
+    private static String sourceLabel(SourceBundle bundle) {
+        String label = bundle.snapshots.size() + " صرافی عمومی";
+        if (!bundle.metadata.isEmpty()) label += " + CoinGecko";
+        return label;
+    }
+
     private void post(Runnable runnable) {
         main.post(runnable);
     }
@@ -222,6 +326,26 @@ public final class MarketRepository {
         return cleaned.length() > 180 ? cleaned.substring(0, 180) : cleaned;
     }
 
+    private static final class ProviderQuote {
+        final MarketProvider provider;
+        final MarketTicker ticker;
+
+        ProviderQuote(MarketProvider provider, MarketTicker ticker) {
+            this.provider = provider;
+            this.ticker = ticker;
+        }
+    }
+
+    private static final class MarketCandidate {
+        final MarketTicker ticker;
+        final List<ProviderQuote> alternatives;
+
+        MarketCandidate(MarketTicker ticker, List<ProviderQuote> alternatives) {
+            this.ticker = ticker;
+            this.alternatives = alternatives;
+        }
+    }
+
     private static final class SourceSnapshot {
         final MarketProvider provider;
         final List<MarketTicker> tickers;
@@ -229,6 +353,16 @@ public final class MarketRepository {
         SourceSnapshot(MarketProvider provider, List<MarketTicker> tickers) {
             this.provider = provider;
             this.tickers = tickers;
+        }
+    }
+
+    private static final class SourceBundle {
+        final List<SourceSnapshot> snapshots;
+        final Map<String, CoinMetadata> metadata;
+
+        SourceBundle(List<SourceSnapshot> snapshots, Map<String, CoinMetadata> metadata) {
+            this.snapshots = snapshots;
+            this.metadata = metadata == null ? Collections.emptyMap() : metadata;
         }
     }
 }

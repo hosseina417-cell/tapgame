@@ -316,6 +316,13 @@ public final class IndicatorEngine {
         if (rsi <= 25) cautions.add("RSI بسیار پایین است، اما اشباع فروش به‌تنهایی علامت برگشت نیست.");
         if (volumeRatio < 0.65) cautions.add("حجم اخیر کم است و اعتبار شکست قیمت پایین‌تر می‌آید.");
         if (Math.abs(ticker.change24hPct) >= 18) cautions.add("نوسان ۲۴ساعته بسیار بالاست؛ اندازهٔ موقعیت را کاهش دهید.");
+        if (ticker.sourceCount <= 1) {
+            cautions.add("این نماد فعلاً فقط از یک صرافی قیمت معتبر دارد؛ اجماع بین‌منبعی ممکن نیست.");
+        } else if (ticker.priceSpreadPct >= 1.5) {
+            cautions.add(String.format(Locale.US,
+                    "اختلاف قیمت میان منابع %.2f%% است؛ پیش از اقدام دفتر سفارش را بررسی کنید.",
+                    ticker.priceSpreadPct));
+        }
         double priceGap = Math.abs(ticker.lastPrice - reference) / reference * 100.0;
         double atrPct = atr / reference * 100.0;
         if (priceGap > Math.max(3.0, atrPct * 2.5)) {

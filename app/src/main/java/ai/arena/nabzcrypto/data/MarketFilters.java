@@ -15,7 +15,7 @@ final class MarketFilters {
 
     static boolean eligible(MarketTicker ticker, double minimumVolume) {
         if (ticker == null || !ticker.isValid() || ticker.quoteVolume24h < minimumVolume) return false;
-        String base = ticker.baseAsset.toUpperCase();
+        String base = ticker.baseAsset.toUpperCase(java.util.Locale.US);
         if (STABLE_OR_FIAT.contains(base)) return false;
         if (base.length() > 4 && (base.endsWith("UP") || base.endsWith("DOWN")
                 || base.endsWith("BULL") || base.endsWith("BEAR"))) return false;

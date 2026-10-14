@@ -7,6 +7,7 @@ import java.util.List;
 
 public interface MarketProvider {
     String name();
+    String tradingViewExchange();
     List<MarketTicker> fetchTickers() throws ApiException;
     List<Candle> fetchCandles(MarketTicker ticker, int intervalMinutes, int limit)
             throws ApiException;

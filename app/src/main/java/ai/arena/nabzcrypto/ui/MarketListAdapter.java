@@ -18,7 +18,9 @@ import java.util.Locale;
 
 public final class MarketListAdapter extends BaseAdapter {
     public interface Listener {
+        /** Selecting a market opens its live TradingView symbol. */
         void onOpen(ScanResult result);
+        void onDetails(ScanResult result);
         void onFavoriteChanged(ScanResult result, boolean isFavorite);
     }
 
@@ -75,7 +77,8 @@ public final class MarketListAdapter extends BaseAdapter {
         ScanResult result = getItem(position);
         int color = SignalColors.color(result.signal);
         holder.symbol.setText(result.ticker.baseAsset);
-        holder.quote.setText("/USDT  •  " + Formatters.volume(result.ticker.quoteVolume24h));
+        String rank = result.ticker.marketCapRank > 0 ? "  •  #" + result.ticker.marketCapRank : "";
+        holder.quote.setText("/USDT  •  " + result.ticker.sourceCount + " منبع" + rank);
         holder.price.setText("$" + Formatters.price(result.ticker.lastPrice));
         holder.change.setText("۲۴ساعت  " + Formatters.signedPercent(result.ticker.change24hPct));
         holder.change.setTextColor(result.ticker.change24hPct >= 0 ? Theme.GREEN : Theme.RED);
@@ -85,8 +88,9 @@ public final class MarketListAdapter extends BaseAdapter {
         holder.signal.setBackground(Theme.rounded(Theme.withAlpha(color, 24),
                 Theme.dp(context, 10), Theme.dp(context, 1), Theme.withAlpha(color, 90)));
         holder.metrics.setText(String.format(Locale.US,
-                "۵دقیقه %+.2f%%   •   ۱۵دقیقه %+.2f%%   •   RSI %.1f   •   حجم ×%.1f",
-                result.return5mPct, result.return15mPct, result.rsi14, result.volumeRatio));
+                "۵دقیقه %+.2f%%   •   ۱۵دقیقه %+.2f%%   •   RSI %.1f   •   حجم ×%.1f   •   %s",
+                result.return5mPct, result.return15mPct, result.rsi14, result.volumeRatio,
+                Formatters.volume(result.ticker.quoteVolume24h)));
         String reason = result.reasons.isEmpty() ? result.signal.faDescription : result.reasons.get(0);
         holder.reason.setText(reason + (result.fromCache ? "  •  ذخیره‌شده" : ""));
         holder.favorite.setText(preferences.isFavorite(result.ticker.symbol) ? "★" : "☆");
@@ -94,8 +98,9 @@ public final class MarketListAdapter extends BaseAdapter {
                 ? Theme.AMBER : Theme.MUTED);
         holder.sparkline.setData(result.sparkline, color);
         holder.card.setContentDescription(result.ticker.displaySymbol() + "، "
-                + result.signal.faLabel + "، امتیاز " + result.score);
+                + result.signal.faLabel + "، لمس برای نمودار تریدینگ ویو");
         holder.card.setOnClickListener(v -> listener.onOpen(result));
+        holder.details.setOnClickListener(v -> listener.onDetails(result));
         holder.favorite.setOnClickListener(v -> {
             boolean active = preferences.toggleFavorite(result.ticker.symbol);
             holder.favorite.setText(active ? "★" : "☆");
@@ -167,10 +172,24 @@ public final class MarketListAdapter extends BaseAdapter {
         card.addView(holder.metrics, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        LinearLayout bottom = new LinearLayout(context);
+        bottom.setOrientation(LinearLayout.HORIZONTAL);
+        bottom.setGravity(Gravity.CENTER_VERTICAL);
+        bottom.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         holder.reason = Theme.text(context, "", 11, Theme.TEXT, false);
         holder.reason.setMaxLines(2);
         holder.reason.setTextColor(Theme.withAlpha(Theme.TEXT, 205));
-        card.addView(holder.reason, new LinearLayout.LayoutParams(
+        bottom.addView(holder.reason, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        holder.details = Theme.text(context, "جزئیات", 10.5f, Theme.CYAN, true);
+        holder.details.setGravity(Gravity.CENTER);
+        holder.details.setPadding(Theme.dp(context, 10), Theme.dp(context, 6),
+                Theme.dp(context, 10), Theme.dp(context, 6));
+        holder.details.setBackground(Theme.rounded(Theme.withAlpha(Theme.CYAN, 18),
+                Theme.dp(context, 10), Theme.dp(context, 1), Theme.withAlpha(Theme.CYAN, 70)));
+        bottom.addView(holder.details, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        card.addView(bottom, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return holder;
     }
@@ -185,6 +204,7 @@ public final class MarketListAdapter extends BaseAdapter {
         TextView signal;
         TextView metrics;
         TextView reason;
+        TextView details;
         SparklineView sparkline;
     }
 }

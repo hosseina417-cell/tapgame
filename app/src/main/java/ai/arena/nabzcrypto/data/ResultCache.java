@@ -35,10 +35,10 @@ public final class ResultCache {
     public void save(List<ScanResult> results) {
         try {
             JSONArray rows = new JSONArray();
-            int count = Math.min(70, results.size());
+            int count = Math.min(140, results.size());
             for (int i = 0; i < count; i++) rows.put(encode(results.get(i)));
             JSONObject root = new JSONObject();
-            root.put("version", 1);
+            root.put("version", 2);
             root.put("savedAt", System.currentTimeMillis());
             root.put("results", rows);
             preferences.edit()
@@ -58,7 +58,8 @@ public final class ResultCache {
         List<ScanResult> results = new ArrayList<>();
         try {
             JSONObject root = new JSONObject(payload);
-            if (root.optInt("version") != 1) return Collections.emptyList();
+            int version = root.optInt("version");
+            if (version != 1 && version != 2) return Collections.emptyList();
             JSONArray rows = root.optJSONArray("results");
             if (rows == null) return Collections.emptyList();
             for (int i = 0; i < rows.length(); i++) {
@@ -83,6 +84,10 @@ public final class ResultCache {
             row.put("change24", result.ticker.change24hPct);
             row.put("volume24", result.ticker.quoteVolume24h);
             row.put("received", result.ticker.receivedAt);
+            row.put("sourceCount", result.ticker.sourceCount);
+            row.put("spread", result.ticker.priceSpreadPct);
+            row.put("marketCapRank", result.ticker.marketCapRank);
+            row.put("marketCap", result.ticker.marketCapUsd);
             row.put("signal", result.signal.name());
             row.put("score", result.score);
             row.put("strength", result.evidenceStrength);
@@ -123,7 +128,9 @@ public final class ResultCache {
             MarketTicker ticker = new MarketTicker(symbol, row.optString("apiSymbol", symbol),
                     row.getString("base"), "USDT", row.getDouble("price"),
                     row.getDouble("change24"), row.getDouble("volume24"),
-                    row.optLong("received", 0));
+                    row.optLong("received", 0), row.optInt("sourceCount", 1),
+                    row.optDouble("spread", 0), row.optInt("marketCapRank", 0),
+                    row.optDouble("marketCap", 0));
             if (!ticker.isValid()) return null;
             Signal signal = Signal.valueOf(row.getString("signal"));
             JSONArray sparkJson = row.optJSONArray("spark");
