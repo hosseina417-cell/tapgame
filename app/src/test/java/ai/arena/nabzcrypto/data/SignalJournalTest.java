@@ -1,6 +1,7 @@
 package ai.arena.nabzcrypto.data;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import ai.arena.nabzcrypto.model.AiAssessment;
@@ -34,7 +35,7 @@ public final class SignalJournalTest {
         assertEquals(100, journal.records().get(0).entryPrice, 1e-9);
         assertTrue(journal.activeSymbols().contains("BTCUSDT"));
 
-        journal.observe(result("BTCUSDT", Signal.BUY, t0 + STEP, 101),
+        journal.observe(result("BTCUSDT", Signal.BUY, t0 + STEP, 100),
                 Collections.emptyList());
         SignalRecord confirmed = journal.records().get(0);
         assertEquals(SignalState.CONFIRMED, confirmed.state);
@@ -54,7 +55,7 @@ public final class SignalJournalTest {
         assertEquals(0.20, finished.estimatedFeePct, 1e-9);
         assertEquals(0.20, finished.estimatedSlippagePct, 1e-9);
         assertEquals(-0.40, finished.netReturnPct, 1e-9);
-        assertEquals(-0.04, finished.outcomeR, 1e-9);
+        assertEquals(-0.40 / 10.40, finished.outcomeR, 1e-9);
         assertTrue(!journal.activeSymbols().contains("BTCUSDT"));
 
         journal.observe(result("BTCUSDT", Signal.BUY, t0 + 4 * STEP, 101),
@@ -74,18 +75,108 @@ public final class SignalJournalTest {
         long t0 = System.currentTimeMillis() - 50L * 60L * 1000L;
         journal.observe(result("ETHUSDT", Signal.STRONG_BUY, t0, 100),
                 Collections.emptyList());
-        journal.observe(result("ETHUSDT", Signal.STRONG_BUY, t0 + STEP, 105),
-                Collections.singletonList(candle(t0, 100, 125, 89, 105)));
+        journal.observe(result("ETHUSDT", Signal.STRONG_BUY, t0 + STEP, 100),
+                Collections.emptyList());
+        assertEquals(SignalState.CONFIRMED, journal.records().get(0).state);
+        journal.observe(result("ETHUSDT", Signal.STRONG_BUY, t0 + 2 * STEP, 105),
+                Collections.singletonList(candle(t0 + STEP, 100, 125, 89, 105)));
         assertEquals(SignalState.INVALIDATED, journal.records().get(0).state);
-        assertTrue(journal.records().get(0).outcomeR < 0);
+        assertEquals(-1.0, journal.records().get(0).outcomeR, 1e-9);
 
-        journal.observe(result("ETHUSDT", Signal.SELL, t0 + 2 * STEP, 99),
+        journal.observe(result("ETHUSDT", Signal.SELL, t0 + 3 * STEP, 99),
                 Collections.emptyList());
         assertEquals(2, journal.records().size());
         assertEquals(-1, journal.records().get(0).direction);
-        journal.observe(result("ETHUSDT", Signal.SELL, t0 + 3 * STEP, 98),
+        journal.observe(result("ETHUSDT", Signal.SELL, t0 + 4 * STEP, 99),
                 Collections.emptyList());
         assertEquals(2, journal.records().size());
+        assertEquals(SignalState.CONFIRMED, journal.records().get(0).state);
+    }
+
+    @Test public void unconfirmedCandidateCannotBecomeALoss() {
+        SignalJournal journal = new SignalJournal();
+        long t0 = System.currentTimeMillis() - 60L * 60L * 1000L;
+        journal.observe(result("XRPUSDT", Signal.BUY, t0, 100), Collections.emptyList());
+        journal.observe(result("XRPUSDT", Signal.NEUTRAL, t0 + 7 * STEP, 89),
+                Collections.singletonList(candle(t0, 100, 101, 88, 89)));
+        SignalRecord record = journal.records().get(0);
+        assertEquals(SignalState.EXPIRED, record.state);
+        assertTrue(!record.entered());
+        assertEquals(0.0, record.netReturnPct, 1e-9);
+        assertEquals(0, journal.stats().completedSignals);
+    }
+
+    @Test public void confirmationRejectsChasingAndFailedTimingGate() {
+        SignalJournal journal = new SignalJournal();
+        long t0 = System.currentTimeMillis() - 40L * 60L * 1000L;
+        journal.observe(result("ADAUSDT", Signal.BUY, t0, 100), Collections.emptyList());
+
+        // Initial risk is 10; a regular candidate allows at most 35% drift.
+        journal.observe(result("ADAUSDT", Signal.BUY, t0 + STEP, 104),
+                Collections.emptyList());
+        assertEquals(SignalState.PENDING, journal.records().get(0).state);
+
+        journal.observe(resultWithTiming("ADAUSDT", Signal.BUY, t0 + 2 * STEP, 100, false),
+                Collections.emptyList());
+        assertEquals(SignalState.PENDING, journal.records().get(0).state);
+
+        journal.observe(resultWithCosts("ADAUSDT", Signal.BUY, t0 + 3 * STEP, 100,
+                        0.80, 0.20), Collections.emptyList());
+        SignalRecord entered = journal.records().get(0);
+        assertEquals(SignalState.CONFIRMED, entered.state);
+        assertEquals(100, entered.entryPrice, 1e-9);
+        assertEquals(0.80, entered.estimatedCostPct, 1e-9);
+        assertTrue(entered.entered());
+    }
+
+    @Test public void scanBudgetFlagStillEvaluatesButDoesNotReplace() {
+        SignalJournal journal = new SignalJournal();
+        long t0 = System.currentTimeMillis() - 40L * 60L * 1000L;
+        assertTrue(journal.observe(result("AUSDT", Signal.BUY, t0, 100),
+                Collections.emptyList(), true));
+        assertFalse(journal.observe(result("BUSDT", Signal.BUY, t0, 100),
+                Collections.emptyList(), false));
+        assertEquals(1, journal.records().size());
+
+        // Lifecycle updates are not blocked by the new-candidate budget.
+        journal.observe(result("AUSDT", Signal.BUY, t0 + STEP, 100),
+                Collections.emptyList(), false);
+        assertEquals(SignalState.CONFIRMED, journal.records().get(0).state);
+
+        // The opposite transition closes the old entry, but cannot arm a replacement.
+        assertFalse(journal.observe(result("AUSDT", Signal.SELL, t0 + 2 * STEP, 99),
+                Collections.emptyList(), false));
+        assertEquals(1, journal.records().size());
+        assertEquals(SignalState.INVALIDATED, journal.records().get(0).state);
+
+        // Because the blocked replacement was never armed, it may compete for the next
+        // scan's budget without waiting for a neutral tick or same-direction cooldown.
+        assertTrue(journal.observe(result("AUSDT", Signal.SELL, t0 + 3 * STEP, 99),
+                Collections.emptyList(), true));
+        assertEquals(2, journal.records().size());
+        assertEquals(SignalState.PENDING, journal.records().get(0).state);
+        assertEquals(-1, journal.records().get(0).direction);
+    }
+
+    @Test public void losingDirectionActivatesCircuitBreaker() {
+        SignalJournal journal = new SignalJournal();
+        long t0 = System.currentTimeMillis() - 3L * 60L * 60L * 1000L;
+        for (int i = 0; i < 12; i++) {
+            String symbol = "T" + i + "USDT";
+            long issued = t0 + i * 1000L;
+            journal.observe(result(symbol, Signal.STRONG_BUY, issued, 100),
+                    Collections.emptyList());
+            journal.observe(result(symbol, Signal.STRONG_BUY, issued + STEP, 100),
+                    Collections.emptyList());
+            journal.observe(result(symbol, Signal.STRONG_BUY, issued + 2 * STEP, 90),
+                    Collections.singletonList(candle(issued + STEP, 100, 101, 89, 90)));
+        }
+        long now = t0 + 20 * STEP;
+        assertTrue(journal.directionPaused(1, now));
+        boolean created = journal.observe(result("PAUSEUSDT", Signal.BUY, now, 100),
+                Collections.emptyList());
+        assertTrue(!created);
+        assertEquals(12, journal.records().size());
     }
 
     @Test public void targetTwoUsesHalfAtEachTarget() {
@@ -93,8 +184,10 @@ public final class SignalJournalTest {
         long t0 = System.currentTimeMillis() - 40L * 60L * 1000L;
         journal.observe(result("SOLUSDT", Signal.STRONG_BUY, t0, 100),
                 Collections.emptyList());
-        journal.observe(result("SOLUSDT", Signal.STRONG_BUY, t0 + STEP, 120),
-                Collections.singletonList(candle(t0, 100, 121, 99, 120)));
+        journal.observe(result("SOLUSDT", Signal.STRONG_BUY, t0 + STEP, 100),
+                Collections.emptyList());
+        journal.observe(result("SOLUSDT", Signal.STRONG_BUY, t0 + 2 * STEP, 120),
+                Collections.singletonList(candle(t0 + STEP, 100, 121, 99, 120)));
         SignalRecord record = journal.records().get(0);
         assertEquals(SignalState.TARGET_2_HIT, record.state);
         assertEquals(115, record.exitPrice, 1e-9);
@@ -102,14 +195,33 @@ public final class SignalJournalTest {
     }
 
     private static ScanResult result(String symbol, Signal signal, long time, double price) {
+        return resultWithTiming(symbol, signal, time, price, true);
+    }
+
+    private static ScanResult resultWithTiming(String symbol, Signal signal, long time,
+                                                double price, boolean timingPassed) {
+        return resultWithDiagnostics(symbol, signal, time, price, timingPassed, 0.40, 0.10);
+    }
+
+    private static ScanResult resultWithCosts(String symbol, Signal signal, long time,
+                                               double price, double roundTripCost,
+                                               double oneWaySlippage) {
+        return resultWithDiagnostics(symbol, signal, time, price, true,
+                roundTripCost, oneWaySlippage);
+    }
+
+    private static ScanResult resultWithDiagnostics(String symbol, Signal signal, long time,
+                                                      double price, boolean timingPassed,
+                                                      double roundTripCost,
+                                                      double oneWaySlippage) {
         String base = symbol.substring(0, symbol.length() - 4);
         MarketTicker ticker = new MarketTicker(symbol, symbol, base, "USDT", price,
                 1, 50_000_000, time, 3, 0.03, 1, 1_000_000_000);
         OrderBookMetrics book = new OrderBookMetrics(true, 0.03,
-                100_000, 100_000, 0, 0.10);
+                100_000, 100_000, 0, oneWaySlippage);
         SignalDiagnostics diagnostics = new SignalDiagnostics(50, 50, 30, true,
-                book, 1.5, 2.5, 0.40, 100, true, true, 7,
-                true, true, true, true, true);
+                book, 1.5, 2.5, roundTripCost, 100, true, true, 7,
+                true, true, true, true, timingPassed, timingPassed);
         return new ScanResult(ticker, signal, signal.isBuy() ? 70 : -70,
                 signal.isBuy() ? 60 : -60, 80, 90, AiAssessment.unavailable(),
                 signal.isBuy() ? MarketRegime.TREND_UP : MarketRegime.TREND_DOWN,

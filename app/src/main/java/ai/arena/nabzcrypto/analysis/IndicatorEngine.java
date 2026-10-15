@@ -119,7 +119,8 @@ public final class IndicatorEngine {
         else if (rsi >= 45 && rsi <= 48) score -= 4;
         else if (rsi >= 30 && rsi < 45) score -= 10;
         else if (rsi > 75) score -= 9;
-        else if (rsi < 25) score -= 7;
+        // Oversold is an anti-chase vote, not another reason to short at the low.
+        else if (rsi < 25) score += 9;
 
         score += (int) Math.round(clamp(return15 * 3.0, -12, 12));
         score += (int) Math.round(clamp(return1h * 1.4, -10, 10));
@@ -182,6 +183,12 @@ public final class IndicatorEngine {
         boolean liquidityStrong = book.available && book.spreadPct <= 0.35
                 && book.minimumDepthUsd() >= 50_000 && book.estimatedSlippagePct <= 0.30;
         int intendedDirection = score > 0 ? 1 : score < 0 ? -1 : 0;
+        double extensionAtr = (reference - ema21) / Math.max(1e-12, atr);
+        boolean chasingBuy = intendedDirection > 0 && ((rsi >= 63 && return15 > 0)
+                || extensionAtr >= 1.20 || return15 >= 1.80);
+        boolean chasingSell = intendedDirection < 0 && ((rsi <= 37 && return15 < 0)
+                || extensionAtr <= -1.20 || return15 <= -1.80);
+        boolean entryTimingPassed = !chasingBuy && !chasingSell;
         boolean higherAligned = higherTimeframeAligned(intendedDirection,
                 oneHourTrend, fourHourTrend, benchmarkTrend,
                 oneHour.size() >= 40, fourHour.size() >= 40);
@@ -196,7 +203,7 @@ public final class IndicatorEngine {
         boolean regimeStrong = regime != MarketRegime.RANGE && regime != MarketRegime.VOLATILE;
         boolean strongEligible = qualityStrong && technicalStrong && regimeStrong
                 && independentConfirmation && higherAligned && liquidityStrong
-                && riskRewardPassed && !ai.driftDetected;
+                && riskRewardPassed && entryTimingPassed && !ai.driftDetected;
         int historyDays = historyDays(five);
         double riskSetting = Double.isFinite(riskPerTradePct)
                 ? clamp(riskPerTradePct, 0.1, 5.0) : 1.0;
@@ -207,7 +214,7 @@ public final class IndicatorEngine {
                 benchmarkTrend, higherAligned, book, rawRiskReward1, rawRiskReward2,
                 roundTripCost, positionPer1000, riskRewardPassed, liquidityPassed,
                 historyDays, qualityStrong, technicalStrong, regimeStrong,
-                independentConfirmation, strongEligible);
+                independentConfirmation, entryTimingPassed, strongEligible);
 
         Signal signal = classifySignal(score, technicalScore, ai, regime, directional,
                 dataQuality, diagnostics, pump, dump);
@@ -248,6 +255,9 @@ public final class IndicatorEngine {
         } else if (!book.available) {
             cautions.add("دفتر سفارش در این اسکن در دسترس نبود؛ برچسب قوی صادر نمی‌شود.");
         }
+        if (!entryTimingPassed) {
+            cautions.add("قیمت از EMA/ATR بیش از حد دور یا RSI کشیده است؛ برای جلوگیری از تعقیب حرکت، ورود به «صبر» تبدیل شد.");
+        }
         if (ai.driftDetected) {
             cautions.add("دقت پنجرهٔ اخیر AI افت کرده است؛ رأی مدل تا بازیابی کیفیت غیرفعال شد.");
         }
@@ -285,7 +295,9 @@ public final class IndicatorEngine {
         if (pump) return Signal.PUMP_ALERT;
         if (dump) return Signal.DUMP_ALERT;
         if (dataQuality < 60 || !diagnostics.riskRewardPassed
-                || !diagnostics.liquidityPassed) return Signal.NEUTRAL;
+                || !diagnostics.liquidityPassed || !diagnostics.entryTimingPassed) {
+            return Signal.NEUTRAL;
+        }
 
         boolean aiBlocksBuy = ai.reliable && ai.vote < 0 && ai.confidence >= 18;
         boolean aiBlocksSell = ai.reliable && ai.vote > 0 && ai.confidence >= 18;

@@ -21,7 +21,7 @@ import java.util.List;
 
 /** A small local cache so the UI is useful before the first network response. */
 public final class ResultCache {
-    private static final String FILE = "nabz_scan_cache_v5";
+    private static final String FILE = "nabz_scan_cache_v6";
     private static final long MAX_AGE_MS = 24L * 60L * 60L * 1000L;
     private final SharedPreferences preferences;
 
@@ -43,7 +43,7 @@ public final class ResultCache {
             int count = Math.min(140, results.size());
             for (int i = 0; i < count; i++) rows.put(encode(results.get(i)));
             JSONObject root = new JSONObject();
-            root.put("version", 5);
+            root.put("version", 6);
             root.put("savedAt", System.currentTimeMillis());
             root.put("results", rows);
             preferences.edit()
@@ -64,7 +64,7 @@ public final class ResultCache {
         try {
             JSONObject root = new JSONObject(payload);
             int version = root.optInt("version");
-            if (version != 5) return Collections.emptyList();
+            if (version != 6) return Collections.emptyList();
             JSONArray rows = root.optJSONArray("results");
             if (rows == null) return Collections.emptyList();
             for (int i = 0; i < rows.length(); i++) {
@@ -137,6 +137,7 @@ public final class ResultCache {
             row.put("technicalStrong", result.diagnostics.technicalStrong);
             row.put("regimeStrong", result.diagnostics.regimeStrong);
             row.put("independentConfirmation", result.diagnostics.independentConfirmation);
+            row.put("entryTimingPassed", result.diagnostics.entryTimingPassed);
             row.put("strongEligible", result.diagnostics.strongEligible);
             row.put("rsi", result.rsi14);
             row.put("ema9", result.ema9);
@@ -220,6 +221,7 @@ public final class ResultCache {
                     row.optInt("historyDays", 0), row.optBoolean("qualityStrong", false),
                     row.optBoolean("technicalStrong", false), row.optBoolean("regimeStrong", false),
                     row.optBoolean("independentConfirmation", false),
+                    row.optBoolean("entryTimingPassed", false),
                     row.optBoolean("strongEligible", false));
             TradeChartData chartData = readChart(row.optJSONArray("chart"));
             int combinedScore = row.getInt("score");

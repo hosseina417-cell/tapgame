@@ -18,6 +18,7 @@ public final class SignalDiagnostics {
     public final boolean technicalStrong;
     public final boolean regimeStrong;
     public final boolean independentConfirmation;
+    public final boolean entryTimingPassed;
     public final boolean strongEligible;
 
     public SignalDiagnostics(int oneHourTrend, int fourHourTrend, int benchmarkTrend,
@@ -28,6 +29,22 @@ public final class SignalDiagnostics {
                              int historyDays, boolean qualityStrong,
                              boolean technicalStrong, boolean regimeStrong,
                              boolean independentConfirmation, boolean strongEligible) {
+        this(oneHourTrend, fourHourTrend, benchmarkTrend, higherTimeframeAligned,
+                orderBook, riskReward1, riskReward2, estimatedRoundTripCostPct,
+                positionSizePer1000, riskRewardPassed, liquidityPassed, historyDays,
+                qualityStrong, technicalStrong, regimeStrong, independentConfirmation,
+                true, strongEligible);
+    }
+
+    public SignalDiagnostics(int oneHourTrend, int fourHourTrend, int benchmarkTrend,
+                             boolean higherTimeframeAligned, OrderBookMetrics orderBook,
+                             double riskReward1, double riskReward2,
+                             double estimatedRoundTripCostPct, double positionSizePer1000,
+                             boolean riskRewardPassed, boolean liquidityPassed,
+                             int historyDays, boolean qualityStrong,
+                             boolean technicalStrong, boolean regimeStrong,
+                             boolean independentConfirmation, boolean entryTimingPassed,
+                             boolean strongEligible) {
         this.oneHourTrend = clampTrend(oneHourTrend);
         this.fourHourTrend = clampTrend(fourHourTrend);
         this.benchmarkTrend = clampTrend(benchmarkTrend);
@@ -44,13 +61,14 @@ public final class SignalDiagnostics {
         this.technicalStrong = technicalStrong;
         this.regimeStrong = regimeStrong;
         this.independentConfirmation = independentConfirmation;
+        this.entryTimingPassed = entryTimingPassed;
         this.strongEligible = strongEligible;
     }
 
     public static SignalDiagnostics unavailable() {
         return new SignalDiagnostics(0, 0, 0, false, OrderBookMetrics.unavailable(),
                 0, 0, 0.20, 0, false, true, 0,
-                false, false, false, false, false);
+                false, false, false, false, false, false);
     }
 
     private static int clampTrend(int value) {

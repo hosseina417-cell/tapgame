@@ -691,18 +691,27 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
 
         PerformanceStats stats = signalJournal.stats();
         LinearLayout summary = Theme.card(this);
-        summary.addView(Theme.text(this, "دفتر کاغذی و چرخهٔ سیگنال", 16, Theme.TEXT, true));
-        summary.addView(metricPair("کل سیگنال‌ها", String.valueOf(stats.totalSignals),
-                "فعال", String.valueOf(stats.activeSignals)));
-        summary.addView(metricPair("نتیجهٔ نهایی", String.valueOf(stats.completedSignals),
+        summary.addView(Theme.text(this, "دفتر کاغذی و چرخهٔ تأیید", 16, Theme.TEXT, true));
+        summary.addView(metricPair("کل کاندیداها", String.valueOf(stats.totalSignals),
+                "فعال / در انتظار", String.valueOf(stats.activeSignals)));
+        summary.addView(metricPair("ورودهای نهایی‌شده", String.valueOf(stats.completedSignals),
                 "نتیجهٔ مثبت پس از هزینه", String.format(Locale.US, "%.1f%%", stats.positiveRatePct)));
         summary.addView(metricPair("میانگین R خالص", String.format(Locale.US, "%+.2fR", stats.averageR),
                 "میانگین بازده خالص", String.format(Locale.US, "%+.2f%%", stats.averageNetReturnPct)));
-        TextView sampleWarning = bodyText(stats.completedSignals < 20
-                ? "برای قضاوت آماری هنوز نمونه کافی نیست؛ حداقل ۲۰ نتیجه و ترجیحاً چند رژیم بازار لازم است."
+        TextView sampleWarning = bodyText(stats.completedSignals < 100
+                ? "هنوز نمونهٔ مستقل کافی نیست؛ کاندیدای بدون ورود از آمار حذف می‌شود و برای قضاوت حداقل ۱۰۰ ورود نهایی‌شده در چند رژیم لازم است."
                 : "این آمار خارج از معاملهٔ واقعی و بر پایهٔ OHLC است؛ تضمین تکرار در آینده نیست.");
         sampleWarning.setTextColor(Theme.AMBER);
         summary.addView(sampleWarning);
+        boolean buyPaused = signalJournal.directionPaused(1, System.currentTimeMillis());
+        boolean sellPaused = signalJournal.directionPaused(-1, System.currentTimeMillis());
+        if (buyPaused || sellPaused) {
+            TextView breaker = bodyText("محافظ افت عملکرد فعال است: صدور کاندیدای "
+                    + (buyPaused && sellPaused ? "صعودی و نزولی" : buyPaused ? "صعودی" : "نزولی")
+                    + " تا ۶ ساعت متوقف شده است.");
+            breaker.setTextColor(Theme.RED);
+            summary.addView(breaker);
+        }
         page.addView(summary, marginParams(0, 0, 0, 10));
 
         page.addView(section("عملکرد بر اساس جهت"));
@@ -746,7 +755,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         page.addView(section("آخرین چرخه‌ها"));
         List<SignalRecord> records = signalJournal.records();
         if (records.isEmpty()) {
-            page.addView(noteCard("پس از صدور خرید/فروش، وضعیت در اسکن‌های بعدی به تأیید، هدف، ابطال یا انقضا تغییر می‌کند."),
+            page.addView(noteCard("ابتدا فقط کاندید ثبت می‌شود؛ ورود کاغذی پس از اسکن مجدد، کنترل فاصلهٔ قیمت و عبور دوباره از گیت‌ها ثبت خواهد شد."),
                     marginParams(0, 0, 0, 10));
         } else {
             int count = Math.min(30, records.size());
@@ -757,9 +766,10 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
 
         LinearLayout methodology = Theme.card(this);
         methodology.addView(Theme.text(this, "روش محاسبه", 13, Theme.CYAN, true));
-        methodology.addView(bodyText("• کارمزد رفت‌وبرگشت و لغزش برآوردی دفتر سفارش از نتیجه کم می‌شود.\n"
-                + "• اگر STOP و هدف در یک کندل لمس شوند، برای جلوگیری از خوش‌بینی STOP مقدم فرض می‌شود.\n"
-                + "• هدف ۱ سپس ابطال، با خروج فرضی نصف در TP1 و نصف در STOP محاسبه می‌شود.\n"
+        methodology.addView(bodyText("• صدور اولیه فقط کاندید است؛ تا اسکن بعدی و تأیید قیمت، هیچ ورود paper در آمار ثبت نمی‌شود.\n"
+                + "• حداکثر ۸ کاندید برتر هر اسکن پذیرفته می‌شود و جهت زیان‌ده با ۱۲ نتیجه، ۶ ساعت متوقف می‌شود.\n"
+                + "• کارمزد رفت‌وبرگشت و لغزش از نتیجه کم می‌شود و R بر ریسک خالص محاسبه می‌شود.\n"
+                + "• اگر STOP و هدف در یک کندل لمس شوند، STOP مقدم است؛ خروج TP1 به‌صورت نصف موقعیت محاسبه می‌شود.\n"
                 + "• این دفتر paper tracking است و هیچ سفارش واقعی اجرا نمی‌کند."));
         page.addView(methodology, marginParams(0, 4, 0, 10));
 
@@ -785,17 +795,23 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
     private View signalRecordCard(SignalRecord record) {
         LinearLayout card = Theme.card(this);
         int color = record.active() ? Theme.AMBER
+                : !record.entered() ? Theme.MUTED
                 : record.outcomeR > 0 ? Theme.GREEN : record.outcomeR < 0 ? Theme.RED : Theme.MUTED;
         TextView title = Theme.text(this, record.baseAsset + "/USDT • "
                 + record.directionFa() + " • " + record.state.faLabel, 13, color, true);
         card.addView(title);
-        card.addView(metricPair("قیمت دقیق صدور", Formatters.compactPrice(record.entryPrice),
-                "سطح ابطال", Formatters.compactPrice(record.invalidation)));
-        card.addView(metricPair("TP1 / TP2", Formatters.compactPrice(record.target1)
-                        + " / " + Formatters.compactPrice(record.target2),
-                "کارمزد / لغزش", String.format(Locale.US, "%.2f%% / %.2f%%",
-                        record.estimatedFeePct, record.estimatedSlippagePct)));
-        String outcome = record.active() ? "در حال ارزیابی"
+        card.addView(metricPair("قیمت صدور کاندید", Formatters.compactPrice(record.issuedPrice),
+                "ورود پس از تأیید", record.entered()
+                        ? Formatters.compactPrice(record.entryPrice) : "هنوز ندارد"));
+        card.addView(metricPair("سطح ابطال", Formatters.compactPrice(record.invalidation),
+                "TP1 / TP2", Formatters.compactPrice(record.target1)
+                        + " / " + Formatters.compactPrice(record.target2)));
+        card.addView(metricPair("کارمزد / لغزش", String.format(Locale.US, "%.2f%% / %.2f%%",
+                        record.estimatedFeePct, record.estimatedSlippagePct),
+                "نوع رکورد", record.entered() ? "ورود کاغذی" : "فقط کاندید"));
+        String outcome = !record.entered()
+                ? (record.active() ? "کاندید؛ هنوز ورود ثبت نشده" : "بدون ورود؛ خارج از آمار")
+                : record.active() ? "ورود تأییدشده؛ در حال ارزیابی"
                 : String.format(Locale.US, "%+.2f%% • %+.2fR",
                         record.netReturnPct, record.outcomeR);
         card.addView(levelRow("نتیجهٔ خالص", outcome, color));
@@ -907,7 +923,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         page.addView(noteCard("ردیف اول کارمزد هر سمت معامله و ردیف دوم ریسک فرضی هر سیگنال است. اندازهٔ موقعیت فقط به‌صورت نمونه برای هر ۱۰۰۰ دلار نمایش داده می‌شود و سفارش نیست."),
                 marginParams(0, 0, 0, 10));
 
-        page.addView(section("روش سیگنال نسخه ۹"));
+        page.addView(section("روش سیگنال نسخه ۹.۱"));
         LinearLayout method = Theme.card(this);
         method.addView(bodyText("• قیمت و حجم اجماعی چهار صرافی با حذف منبع پرت\n"
                 + "• روند ۱ساعته، ۴ساعته و زمینهٔ BTC/ETH روی ۷ تا ۳۰ روز\n"
@@ -945,7 +961,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
         page.addView(clear, marginParams(0, 0, 0, 14));
 
         TextView version = Theme.text(this,
-                "نبض کریپتو ۹.۰.۱  •  چرخهٔ سیگنال + چندتایم‌فریم + عمق بازار\nسیگنال قطعی و تضمین سود وجود ندارد.",
+                "نبض کریپتو ۹.۱.۰  •  ورود تأییدشده + ضد تعقیب + محافظ افت\nسیگنال قطعی و تضمین سود وجود ندارد.",
                 10.5f, Theme.MUTED, false);
         version.setGravity(Gravity.CENTER);
         page.addView(version);
@@ -1293,6 +1309,7 @@ public final class MainActivity extends Activity implements MarketListAdapter.Li
                 result.diagnostics.higherTimeframeAligned));
         card.addView(checkRow("عمق و لغزش مناسب دفتر سفارش", bookStrong));
         card.addView(checkRow("نسبت سود‌به‌ریسک پس از هزینه", result.diagnostics.riskRewardPassed));
+        card.addView(checkRow("ورود بدون تعقیب RSI/ATR کشیده", result.diagnostics.entryTimingPassed));
         card.addView(checkRow("بدون افت کیفیت AI", !result.ai.driftDetected));
         TextView verdict = bodyText(result.diagnostics.strongEligible
                 ? "همهٔ گیت‌های مستقل برچسب قوی آماده‌اند؛ آستانهٔ امتیاز و جهت نیز باید پاس شود."

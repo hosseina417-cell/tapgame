@@ -25,12 +25,14 @@ import java.util.Map;
 
 /** Local paper journal with conservative candle-order assumptions and cost-adjusted outcomes. */
 public final class SignalJournal {
-    private static final String FILE = "signal_journal_v1";
+    private static final String FILE = "signal_journal_v2";
     private static final String KEY = "records";
     private static final String KEY_OBSERVED = "observed_directions";
     private static final long EXPIRY_MS = 12L * 60L * 60L * 1000L;
     private static final long PENDING_TIMEOUT_MS = 30L * 60L * 1000L;
     private static final long REENTRY_COOLDOWN_MS = 3L * 60L * 60L * 1000L;
+    private static final long CIRCUIT_BREAKER_MS = 6L * 60L * 60L * 1000L;
+    private static final int CIRCUIT_SAMPLE = 12;
     private static final int MAX_RECORDS = 500;
 
     private final SharedPreferences preferences;
@@ -49,27 +51,42 @@ public final class SignalJournal {
         preferences = null;
     }
 
-    public synchronized void observe(ScanResult result, List<Candle> candles) {
-        if (result == null || result.ticker == null) return;
+    public synchronized boolean observe(ScanResult result, List<Candle> candles) {
+        return observe(result, candles, true);
+    }
+
+    /** Updates every active lifecycle, while allowNew lets the repository cap correlated entries. */
+    public synchronized boolean observe(ScanResult result, List<Candle> candles,
+                                        boolean allowNew) {
+        if (result == null || result.ticker == null) return false;
         String symbol = result.ticker.symbol;
         int direction = signalDirection(result);
         int previousDirection = observedDirections.containsKey(symbol)
                 ? observedDirections.get(symbol) : 0;
-        if (previousDirection != direction) {
-            observedDirections.put(symbol, direction);
-            dirty = true;
-        }
-
         SignalRecord active = activeFor(symbol);
         boolean oppositeTransition = direction != 0 && previousDirection == -direction;
+
         if (active != null) {
+            setObservedDirection(symbol, direction);
             evaluate(active, candles, result.referencePrice, result.candleClosedAt);
             if (active.active()) {
-                if (direction == active.direction
-                        && result.candleClosedAt > active.issuedAt
-                        && active.state == SignalState.PENDING) {
-                    transition(active, SignalState.CONFIRMED, result.candleClosedAt,
-                            "سیگنال " + active.baseAsset + " با اسکن بعدی تأیید شد");
+                if (active.state == SignalState.PENDING) {
+                    if (direction == -active.direction) {
+                        oppositeTransition = true;
+                        cancelCandidate(active, SignalState.INVALIDATED,
+                                result.candleClosedAt,
+                                "کاندید " + active.baseAsset
+                                        + " پیش از ورود با تغییر جهت لغو شد");
+                    } else if (result.candleClosedAt - active.issuedAt >= PENDING_TIMEOUT_MS) {
+                        cancelCandidate(active, SignalState.EXPIRED,
+                                result.candleClosedAt,
+                                "کاندید " + active.baseAsset
+                                        + " بدون ورود معتبر منقضی شد");
+                    } else if (direction == active.direction
+                            && result.candleClosedAt > active.issuedAt
+                            && confirmationAccepted(active, result)) {
+                        confirm(active, result);
+                    }
                 } else if (direction == -active.direction) {
                     oppositeTransition = true;
                     boolean afterTarget1 = active.state == SignalState.TARGET_1_HIT;
@@ -79,51 +96,123 @@ public final class SignalJournal {
                                     ? (active.target1 + result.referencePrice) / 2.0
                                     : result.referencePrice,
                             result.candleClosedAt,
-                            "جهت سیگنال " + active.baseAsset + " تغییر کرد و تحلیل قبلی باطل شد");
-                } else if (active.state == SignalState.PENDING
-                        && result.candleClosedAt - active.issuedAt >= PENDING_TIMEOUT_MS) {
-                    finish(active, SignalState.EXPIRED, result.referencePrice,
-                            result.candleClosedAt,
-                            "سیگنال " + active.baseAsset + " بدون تأیید منقضی شد");
+                            "جهت سیگنال " + active.baseAsset
+                                    + " تغییر کرد و معاملهٔ کاغذی بسته شد");
                 }
             }
         }
 
-        if (direction == 0 || activeFor(symbol) != null) return;
-        // A direction must disappear or flip before it can be issued again. This survives
-        // restarts through observedDirections and prevents repeated alerts on every scan.
-        if (!oppositeTransition && previousDirection == direction) return;
+        if (direction == 0) {
+            setObservedDirection(symbol, 0);
+            return false;
+        }
+        if (activeFor(symbol) != null) return false;
+        // Directional results outside the per-scan quality budget remain analysis only; they
+        // are not armed, so a later top-ranked result can still become a candidate. An active
+        // opposite transition was observed above for lifecycle closure, so explicitly disarm it.
+        if (!allowNew) {
+            if (oppositeTransition) setObservedDirection(symbol, 0);
+            return false;
+        }
+        if (!oppositeTransition && previousDirection == direction) return false;
         SignalRecord latest = latestFor(symbol);
         if (!oppositeTransition && latest != null && latest.state.terminal
-                && result.candleClosedAt - latest.closedAt < REENTRY_COOLDOWN_MS) return;
+                && latest.direction == direction
+                && result.candleClosedAt - latest.closedAt < REENTRY_COOLDOWN_MS) return false;
+        if (directionPaused(direction, result.candleClosedAt)) {
+            setObservedDirection(symbol, 0);
+            return false;
+        }
+        setObservedDirection(symbol, direction);
         create(result, direction);
+        return true;
+    }
+
+    private void setObservedDirection(String symbol, int direction) {
+        Integer previous = observedDirections.get(symbol);
+        if (previous == null || previous != direction) {
+            observedDirections.put(symbol, direction);
+            dirty = true;
+        }
+    }
+
+    private boolean confirmationAccepted(SignalRecord record, ScanResult result) {
+        if (!result.diagnostics.riskRewardPassed || !result.diagnostics.liquidityPassed
+                || !result.diagnostics.entryTimingPassed) return false;
+        double initialRisk = Math.abs(record.issuedPrice - record.invalidation);
+        if (!(initialRisk > 0) || !(result.referencePrice > 0)) return false;
+        double maximumDrift = initialRisk * (record.strong ? 0.50 : 0.35);
+        if (Math.abs(result.referencePrice - record.issuedPrice) > maximumDrift) return false;
+        return record.direction > 0
+                ? result.referencePrice > result.invalidation
+                    && result.referencePrice < result.objective1
+                : result.referencePrice < result.invalidation
+                    && result.referencePrice > result.objective1;
+    }
+
+    private void confirm(SignalRecord record, ScanResult result) {
+        record.entryPrice = result.referencePrice;
+        record.invalidation = result.invalidation;
+        record.target1 = result.objective1;
+        record.target2 = result.objective2;
+        record.regime = result.regime;
+        record.score = result.score;
+        record.dataQuality = result.dataQuality;
+        applyEstimatedCosts(record, result);
+        transition(record, SignalState.CONFIRMED, result.candleClosedAt,
+                "ورود کاغذی " + record.baseAsset
+                        + " پس از اسکن مجدد و کنترل تعقیب قیمت تأیید شد");
+    }
+
+    private void cancelCandidate(SignalRecord record, SignalState state, long at,
+                                 String message) {
+        record.state = state;
+        record.closedAt = Math.max(record.issuedAt, at);
+        record.lastEvaluatedAt = Math.max(record.lastEvaluatedAt, at);
+        record.exitPrice = 0;
+        record.netReturnPct = 0;
+        record.outcomeR = 0;
+        dirty = true;
+        events.add(new SignalEvent(record.id, record.symbol, state, message, at));
     }
 
     private void create(ScanResult result, int direction) {
         boolean strong = result.signal.name().startsWith("STRONG_");
-        // Paper outcomes are anchored to the exact market price at issuance, not to an
-        // idealized fill somewhere inside the displayed entry zone.
-        double entry = result.referencePrice;
-        SignalState initial = strong ? SignalState.CONFIRMED : SignalState.PENDING;
+        double issuedPrice = result.referencePrice;
         String id = result.ticker.symbol + "-" + result.candleClosedAt;
-        double slippage = result.diagnostics.orderBook.available
-                ? Math.min(2.0, result.diagnostics.orderBook.estimatedSlippagePct * 2.0)
-                : 0.10;
-        double fee = Math.max(0,
-                result.diagnostics.estimatedRoundTripCostPct - slippage);
+        double slippage = estimatedSlippage(result);
+        double fee = estimatedFee(result, slippage);
         SignalRecord created = new SignalRecord(id, result.ticker.symbol,
                 result.ticker.baseAsset, direction, strong, result.candleClosedAt,
-                result.candleClosedAt, 0, entry, result.invalidation,
+                result.candleClosedAt, 0, issuedPrice, result.invalidation,
                 result.objective1, result.objective2, result.regime,
                 result.score, result.dataQuality, fee, slippage,
-                initial, 0, 0, 0, 0);
+                SignalState.PENDING, 0, 0, 0, 0);
         records.add(0, created);
         trim();
         dirty = true;
         events.add(new SignalEvent(created.id, created.symbol, created.state,
-                (strong ? "سیگنال قوی جدید " : "سیگنال جدید در انتظار تأیید ")
-                        + created.baseAsset + " • " + created.directionFa(),
+                (strong ? "کاندید قوی جدید " : "کاندید جدید ")
+                        + created.baseAsset + " • " + created.directionFa()
+                        + " • ورود فقط پس از تأیید اسکن بعدی",
                 created.issuedAt));
+    }
+
+    private static void applyEstimatedCosts(SignalRecord record, ScanResult result) {
+        double slippage = estimatedSlippage(result);
+        record.estimatedSlippagePct = slippage;
+        record.estimatedFeePct = estimatedFee(result, slippage);
+        record.estimatedCostPct = record.estimatedFeePct + record.estimatedSlippagePct;
+    }
+
+    private static double estimatedSlippage(ScanResult result) {
+        return result.diagnostics.orderBook.available
+                ? Math.min(2.0, result.diagnostics.orderBook.estimatedSlippagePct * 2.0)
+                : 0.10;
+    }
+
+    private static double estimatedFee(ScanResult result, double slippage) {
+        return Math.max(0, result.diagnostics.estimatedRoundTripCostPct - slippage);
     }
 
     public synchronized void flush() {
@@ -158,6 +247,32 @@ public final class SignalJournal {
         java.util.Set<String> symbols = new java.util.HashSet<>();
         for (SignalRecord record : records) if (record.active()) symbols.add(record.symbol);
         return symbols;
+    }
+
+    public synchronized boolean hasActive(String symbol) {
+        return symbol != null && activeFor(symbol) != null;
+    }
+
+    /** Pauses a losing direction for six hours after at least 12 entered outcomes. */
+    public synchronized boolean directionPaused(int direction, long now) {
+        int completed = 0;
+        int positive = 0;
+        double sumR = 0;
+        long latestClose = 0;
+        for (SignalRecord record : records) {
+            if (record.direction != (direction >= 0 ? 1 : -1)
+                    || record.active() || !record.entered()) continue;
+            completed++;
+            if (record.outcomeR > 0) positive++;
+            sumR += record.outcomeR;
+            latestClose = Math.max(latestClose, record.closedAt);
+            if (completed >= 20) break;
+        }
+        if (completed < CIRCUIT_SAMPLE) return false;
+        double averageR = sumR / completed;
+        double positiveRate = positive * 100.0 / completed;
+        return averageR <= -0.25 && positiveRate < 30
+                && Math.max(0, now - latestClose) < CIRCUIT_BREAKER_MS;
     }
 
     public synchronized List<SignalRecord> records() {
@@ -222,6 +337,15 @@ public final class SignalJournal {
     private void evaluate(SignalRecord record, List<Candle> candles,
                           double currentPrice, long evaluatedAt) {
         if (!record.active()) return;
+        // Pending means no entry. Price touching a hypothetical STOP/TP before confirmation
+        // is not a trade outcome and must never pollute win rate or R statistics.
+        if (record.state == SignalState.PENDING) {
+            if (evaluatedAt > record.lastEvaluatedAt) {
+                record.lastEvaluatedAt = evaluatedAt;
+                dirty = true;
+            }
+            return;
+        }
         List<Candle> ordered = new ArrayList<>();
         if (candles != null) {
             for (Candle candle : candles) {
@@ -262,7 +386,7 @@ public final class SignalJournal {
                         "هدف ۱ سیگنال " + record.baseAsset + " لمس شد");
             }
             record.lastEvaluatedAt = Math.max(record.lastEvaluatedAt, candle.closeTime);
-            if (candle.closeTime - record.issuedAt >= EXPIRY_MS && record.active()) {
+            if (candle.closeTime - record.confirmedAt >= EXPIRY_MS && record.active()) {
                 boolean afterTarget1 = record.state == SignalState.TARGET_1_HIT;
                 finish(record, afterTarget1
                                 ? SignalState.EXPIRED_AFTER_TP1 : SignalState.EXPIRED,
@@ -272,7 +396,7 @@ public final class SignalJournal {
             }
         }
         record.lastEvaluatedAt = Math.max(record.lastEvaluatedAt, evaluatedAt);
-        if (record.active() && evaluatedAt - record.issuedAt >= EXPIRY_MS) {
+        if (record.active() && evaluatedAt - record.confirmedAt >= EXPIRY_MS) {
             boolean afterTarget1 = record.state == SignalState.TARGET_1_HIT;
             finish(record, afterTarget1
                             ? SignalState.EXPIRED_AFTER_TP1 : SignalState.EXPIRED,
@@ -295,15 +419,20 @@ public final class SignalJournal {
 
     private void finish(SignalRecord record, SignalState state, double exitPrice,
                         long at, String message) {
+        if (!record.entered()) {
+            cancelCandidate(record, state, at, message);
+            return;
+        }
         record.state = state;
-        record.closedAt = Math.max(record.issuedAt, at);
+        record.closedAt = Math.max(record.confirmedAt, at);
         record.lastEvaluatedAt = Math.max(record.lastEvaluatedAt, at);
         record.exitPrice = Double.isFinite(exitPrice) && exitPrice > 0 ? exitPrice : record.entryPrice;
         double gross = record.direction * (record.exitPrice / record.entryPrice - 1.0) * 100.0;
         record.netReturnPct = gross - record.estimatedCostPct;
         double riskPct = Math.abs(record.entryPrice - record.invalidation)
                 / Math.max(1e-12, record.entryPrice) * 100.0;
-        record.outcomeR = riskPct > 0 ? record.netReturnPct / riskPct : 0;
+        double netRiskPct = riskPct + record.estimatedCostPct;
+        record.outcomeR = netRiskPct > 0 ? record.netReturnPct / netRiskPct : 0;
         dirty = true;
         events.add(new SignalEvent(record.id, record.symbol, state, message, at));
     }
@@ -340,6 +469,8 @@ public final class SignalJournal {
                 active++;
                 continue;
             }
+            // Cancelled/expired candidates never entered and are lifecycle events, not trades.
+            if (!record.entered()) continue;
             completed++;
             if (record.outcomeR > 0) positive++;
             if (record.state == SignalState.INVALIDATED
@@ -392,6 +523,7 @@ public final class SignalJournal {
             row.put("confirmed", record.confirmedAt);
             row.put("evaluated", record.lastEvaluatedAt);
             row.put("closed", record.closedAt);
+            row.put("issuedPrice", record.issuedPrice);
             row.put("entry", record.entryPrice);
             row.put("stop", record.invalidation);
             row.put("target1", record.target1);
@@ -423,6 +555,7 @@ public final class SignalJournal {
                     row.optString("base"), row.optInt("direction", 1),
                     row.optBoolean("strong"), row.optLong("issued"),
                     row.optLong("evaluated"), row.optLong("closed"),
+                    row.optDouble("issuedPrice", row.getDouble("entry")),
                     row.getDouble("entry"), row.getDouble("stop"),
                     row.getDouble("target1"), row.getDouble("target2"),
                     MarketRegime.valueOf(row.optString("regime", "TRANSITION")),

@@ -42,6 +42,7 @@ public final class MarketRepository {
     }
 
     private static final int CANDLE_WORKERS = 5;
+    private static final int MAX_NEW_CANDIDATES_PER_SCAN = 8;
     private static final long SOURCE_DISCOVERY_SECONDS = 20;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService coordinator = Executors.newSingleThreadExecutor();
@@ -86,13 +87,14 @@ public final class MarketRepository {
             post(() -> callback.onSourceSelected(sourceLabel, selected.size()));
 
             workers = Executors.newFixedThreadPool(CANDLE_WORKERS);
-            CompletionService<ScanResult> completion = new ExecutorCompletionService<>(workers);
+            CompletionService<AnalyzedMarket> completion = new ExecutorCompletionService<>(workers);
             for (MarketCandidate candidate : selected) {
                 boolean favorite = favorites != null && favorites.contains(candidate.ticker.symbol);
                 completion.submit(() -> analyze(candidate, config, benchmarkTrend, favorite));
             }
 
             List<ScanResult> analyzed = new ArrayList<>();
+            Map<String, List<Candle>> journalWindows = new HashMap<>();
             int failed = 0;
             long seconds = Math.max(210L, selected.size() * 5L);
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Math.min(420L, seconds));
@@ -102,16 +104,21 @@ public final class MarketRepository {
                     failed += selected.size() - completed + 1;
                     break;
                 }
-                Future<ScanResult> future = completion.poll(remaining, TimeUnit.NANOSECONDS);
+                Future<AnalyzedMarket> future = completion.poll(remaining, TimeUnit.NANOSECONDS);
                 if (future == null) {
                     failed += selected.size() - completed + 1;
                     break;
                 }
                 ScanResult result = null;
                 try {
-                    result = future.get();
-                    if (result != null) analyzed.add(result);
-                    else failed++;
+                    AnalyzedMarket outcome = future.get();
+                    if (outcome != null && outcome.result != null) {
+                        result = outcome.result;
+                        analyzed.add(result);
+                        journalWindows.put(result.ticker.symbol, outcome.journalCandles);
+                    } else {
+                        failed++;
+                    }
                 } catch (ExecutionException e) {
                     failed++;
                 }
@@ -121,7 +128,18 @@ public final class MarketRepository {
             }
 
             sortResults(analyzed);
-            if (journal != null) journal.flush();
+            if (journal != null) {
+                int newBudget = MAX_NEW_CANDIDATES_PER_SCAN;
+                for (ScanResult result : analyzed) {
+                    // Lifecycle evaluation always runs. The flag only controls whether a
+                    // terminal/opposite transition may arm a fresh candidate, and every new
+                    // candidate (including a replacement) consumes the same scan budget.
+                    boolean created = journal.observe(result,
+                            journalWindows.get(result.ticker.symbol), newBudget > 0);
+                    if (created && newBudget > 0) newBudget--;
+                }
+                journal.flush();
+            }
             if (analyzed.isEmpty()) {
                 throw new ApiException("کندل کافی دریافت نشد؛ منابع بازار یا اینترنت را بررسی کنید");
             }
@@ -245,8 +263,8 @@ public final class MarketRepository {
         return result;
     }
 
-    private ScanResult analyze(MarketCandidate candidate, ScanConfig config,
-                               int benchmarkTrend, boolean favorite) throws ApiException {
+    private AnalyzedMarket analyze(MarketCandidate candidate, ScanConfig config,
+                                   int benchmarkTrend, boolean favorite) throws ApiException {
         ApiException lastError = null;
         int attempts = Math.min(3, candidate.alternatives.size());
         for (int i = 0; i < attempts; i++) {
@@ -277,8 +295,7 @@ public final class MarketRepository {
                 ScanResult result = IndicatorEngine.analyze(candidate.ticker, five, fifteen,
                         oneHour, fourHour, benchmarkTrend, orderBook,
                         config.feePerSidePct, config.riskPerTradePct, source);
-                if (journal != null) journal.observe(result, five);
-                return result;
+                return new AnalyzedMarket(result, journalTail(five));
             } catch (ApiException e) {
                 lastError = e;
             } catch (IllegalArgumentException e) {
@@ -295,6 +312,12 @@ public final class MarketRepository {
         } catch (ApiException ignored) {
             return new ArrayList<>();
         }
+    }
+
+    private static List<Candle> journalTail(List<Candle> candles) {
+        if (candles == null || candles.isEmpty()) return new ArrayList<>();
+        int start = Math.max(0, candles.size() - 200);
+        return new ArrayList<>(candles.subList(start, candles.size()));
     }
 
     private static int benchmarkTrend(List<MarketCandidate> universe) {
@@ -387,6 +410,17 @@ public final class MarketRepository {
         if (message == null || message.trim().isEmpty()) return "خطای اتصال به بازار";
         String cleaned = message.replace('\n', ' ').trim();
         return cleaned.length() > 180 ? cleaned.substring(0, 180) : cleaned;
+    }
+
+    private static final class AnalyzedMarket {
+        final ScanResult result;
+        final List<Candle> journalCandles;
+
+        AnalyzedMarket(ScanResult result, List<Candle> journalCandles) {
+            this.result = result;
+            this.journalCandles = journalCandles == null
+                    ? Collections.emptyList() : journalCandles;
+        }
     }
 
     private static final class ProviderQuote {

@@ -10,8 +10,8 @@ android {
         applicationId 'ai.arena.nabzcrypto'
         minSdk 24
         targetSdk 35
-        versionCode 90001
-        versionName '9.0.1'
+        versionCode 90100
+        versionName '9.1.0'
 
         testInstrumentationRunner 'android.test.InstrumentationTestRunner'
     }

@@ -47,27 +47,39 @@ public final class IndicatorEngineTest {
         assertTrue(Math.abs(result.score) < 20);
     }
 
-    @Test public void alignedUptrendProducesBuyAssessment() {
+    @Test public void overextendedUptrendIsNotChased() {
         Fixture fixture = fixture(50, 0.0009, 1.0);
         ScanResult result = IndicatorEngine.analyze(fixture.ticker, fixture.five,
                 fixture.fifteen, "test");
-        assertTrue(result.signal.isBuy());
+        assertEquals(Signal.NEUTRAL, result.signal);
         assertEquals(MarketRegime.TREND_UP, result.regime);
         assertTrue(result.adx14 >= 22);
         assertTrue(result.dataQuality >= 75);
         assertTrue(result.score >= 36);
+        assertFalse(result.diagnostics.entryTimingPassed);
         assertTrue(result.objective1 > result.referencePrice);
         assertTrue(result.invalidation < result.referencePrice);
     }
 
-    @Test public void alignedDowntrendProducesSellAssessment() {
+    @Test public void oversoldDowntrendIsNotChased() {
         Fixture fixture = fixture(200, -0.0009, 1.0);
         ScanResult result = IndicatorEngine.analyze(fixture.ticker, fixture.five,
                 fixture.fifteen, "test");
-        assertTrue(result.signal.isSell());
+        assertEquals(Signal.NEUTRAL, result.signal);
         assertTrue(result.score <= -32);
+        assertFalse(result.diagnostics.entryTimingPassed);
         assertTrue(result.objective1 < result.referencePrice);
         assertTrue(result.invalidation > result.referencePrice);
+    }
+
+    @Test public void pullbackInUptrendCanStillProduceBuyAssessment() {
+        Fixture fixture = pullbackFixture();
+        ScanResult result = IndicatorEngine.analyze(fixture.ticker, fixture.five,
+                fixture.fifteen, "test");
+        assertTrue(result.signal.isBuy());
+        assertEquals(MarketRegime.TREND_UP, result.regime);
+        assertTrue(result.diagnostics.entryTimingPassed);
+        assertTrue(result.diagnostics.riskRewardPassed);
     }
 
     @Test public void lowQualityFeedAbstainsFromDirectionalSignal() {
@@ -123,7 +135,7 @@ public final class IndicatorEngineTest {
     }
 
     @Test public void liquidityIsAGateAndNeverAddsToScore() {
-        Fixture fixture = fixture(50, 0.0009, 1.0);
+        Fixture fixture = pullbackFixture();
         List<Candle> one = trendCandles(90, 60, 100, 0.0015);
         List<Candle> four = trendCandles(90, 240, 100, 0.0020);
         OrderBookMetrics liquid = new OrderBookMetrics(true, 0.05,
@@ -192,6 +204,30 @@ public final class IndicatorEngineTest {
             price = next;
         }
         return candles;
+    }
+
+    private static Fixture pullbackFixture() {
+        long width = 5L * 60L * 1000L;
+        long fifteenWidth = 15L * 60L * 1000L;
+        long end = System.currentTimeMillis() / fifteenWidth * fifteenWidth;
+        long start = end - 240L * width;
+        List<Candle> five = new ArrayList<>();
+        double price = 100;
+        for (int i = 0; i < 240; i++) {
+            // Persistent uptrend with recurring consolidation and a fresh nine-candle
+            // pullback: bullish context remains, but this is no longer a chase entry.
+            double step = i >= 231 ? -0.0006 : (i % 5 == 4 ? -0.0003 : 0.0005);
+            double next = price * (1 + step);
+            double high = Math.max(price, next) * 1.003;
+            double low = Math.min(price, next) * 0.997;
+            five.add(new Candle(start + i * width, start + (i + 1) * width - 1,
+                    price, high, low, next, 1_000, next * 1_000));
+            price = next;
+        }
+        List<Candle> fifteen = IndicatorEngine.aggregateToFifteenMinutes(five);
+        MarketTicker ticker = new MarketTicker("TESTUSDT", "TESTUSDT", "TEST", "USDT",
+                price, 1, 50_000_000, System.currentTimeMillis());
+        return new Fixture(ticker, five, fifteen);
     }
 
     private static Fixture fixture(double initial, double fiveStep, double volumeMultiplier) {
