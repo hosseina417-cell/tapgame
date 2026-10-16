@@ -1,18 +1,14 @@
 # -*- coding: utf-8 -*-
-"""
-⚡ آربیتراژ پرو — نسخه ۵.۰
-اپ اندرویدی پایش و معاملهٔ آربیتراژ بین صرافی‌های ایرانی
-(نوبیتکس، والکس، بیت‌پین، رمزینکس)
-
-اجرای دسکتاپ برای تست:  python main.py
-"""
+"""V2Ray Config Finder & Generator — اندروید"""
 import os
 import sys
 import time
+import threading
 
 from kivy.app import App
 from kivy.clock import Clock, mainthread
 from kivy.core.text import LabelBase
+from kivy.core.window import Window
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -20,16 +16,15 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
-from kivy.uix.switch import Switch
+from kivy.uix.spinner import Spinner
 from kivy.uix.textinput import TextInput
+from kivy.uix.togglebutton import ToggleButton
 from kivy.utils import get_color_from_hex as hexc
 
-import exchanges
+import core
+import search
 import store
-import trader
-from monitor import MONITOR
 
-# ---------- فونت فارسی + شکل‌دهی ----------
 FONT = "Roboto"
 _here = os.path.dirname(os.path.abspath(__file__))
 _font_path = os.path.join(_here, "assets", "Vazirmatn-Regular.ttf")
@@ -42,11 +37,8 @@ if os.path.exists(_font_path):
 try:
     import arabic_reshaper
     from bidi.algorithm import get_display
-
     _reshaper = arabic_reshaper.ArabicReshaper()
-
     def fa(text):
-        """شکل‌دهی و راست‌به‌چپ‌سازی متن فارسی برای کیوی"""
         try:
             return get_display(_reshaper.reshape(str(text)))
         except Exception:
@@ -55,40 +47,22 @@ except Exception:
     def fa(text):
         return str(text)
 
-# ---------- پالت ----------
-BG = hexc("#0D1117")
-CARD = hexc("#161B22")
-GREEN = hexc("#3FB950")
-RED = hexc("#F85149")
-YELLOW = hexc("#F0B429")
+# Palette
+BG = hexc("#0B1020")
+CARD = hexc("#151B2E")
+CARD2 = hexc("#1E2640")
+GREEN = hexc("#22C55E")
+RED = hexc("#EF4444")
+YELLOW = hexc("#F59E0B")
+BLUE = hexc("#3B82F6")
 FG = hexc("#E6EDF3")
 DIM = hexc("#8B949E")
+ACCENT = hexc("#6366F1")
 
-
-def fmt(v):
-    try:
-        return "{:,.0f}".format(float(v))
-    except Exception:
-        return str(v)
-
-
-class Card(BoxLayout):
-    def __init__(self, **kw):
-        kw.setdefault("orientation", "vertical")
-        kw.setdefault("size_hint_y", None)
-        kw.setdefault("padding", [dp(12), dp(8)])
-        kw.setdefault("spacing", dp(2))
-        super(Card, self).__init__(**kw)
-        from kivy.graphics import Color, RoundedRectangle
-        with self.canvas.before:
-            Color(rgba=CARD)
-            self._bgrect = RoundedRectangle(radius=[dp(8)])
-        self.bind(pos=self._sync, size=self._sync)
-        self.bind(minimum_height=self.setter("height"))
-
-    def _sync(self, *a):
-        self._bgrect.pos = self.pos
-        self._bgrect.size = self.size
+try:
+    Window.clearcolor = BG
+except Exception:
+    pass
 
 
 def flabel(text, color=FG, size=14, bold=False, halign="right", h=None):
@@ -100,403 +74,822 @@ def flabel(text, color=FG, size=14, bold=False, halign="right", h=None):
     return lb
 
 
-def fbutton(text, bgcolor, on_press, fg_black=True, h=44):
-    b = Button(text=fa(text), font_name=FONT, bold=True, font_size=dp(14),
-               background_normal="", background_color=bgcolor,
-               color=(0, 0, 0, 1) if fg_black else FG,
-               size_hint_y=None, height=dp(h))
-    b.bind(on_release=lambda *a: on_press())
-    return b
+class Card(BoxLayout):
+    def __init__(self, **kw):
+        kw.setdefault("orientation", "vertical")
+        kw.setdefault("size_hint_y", None)
+        kw.setdefault("padding", [dp(12), dp(8)])
+        kw.setdefault("spacing", dp(4))
+        super().__init__(**kw)
+        from kivy.graphics import Color, RoundedRectangle
+        with self.canvas.before:
+            Color(rgba=CARD)
+            self._bg = RoundedRectangle(radius=[dp(10)])
+        self.bind(pos=self._sync, size=self._sync)
+        self.bind(minimum_height=self.setter("height"))
+
+    def _sync(self, *a):
+        self._bg.pos = self.pos
+        self._bg.size = self.size
 
 
-class ArbitrageApp(App):
-    title = "آربیتراژ پرو"
+class Btn(Button):
+    def __init__(self, **kw):
+        kw.setdefault("font_name", FONT)
+        kw.setdefault("font_size", dp(14))
+        kw.setdefault("size_hint_y", None)
+        kw.setdefault("height", dp(44))
+        super().__init__(**kw)
+        self.bind(text=lambda s, t: setattr(s, "text", fa(t)))
 
-    def build(self):
+
+class Pill(ToggleButton):
+    def __init__(self, **kw):
+        kw.setdefault("font_name", FONT)
+        kw.setdefault("font_size", dp(12))
+        kw.setdefault("size_hint", (None, None))
+        kw.setdefault("height", dp(32))
+        kw.setdefault("width", dp(80))
+        super().__init__(**kw)
+        self.bind(text=lambda s, t: setattr(s, "text", fa(t)))
+
+
+def toast(msg):
+    try:
+        App.get_running_app().show_toast(msg)
+    except Exception:
+        pass
+
+
+class ToastPopup(Popup):
+    def __init__(self, msg, **kw):
+        super().__init__(title="", size_hint=(0.7, None), height=dp(60), auto_dismiss=True, **kw)
+        self.content = flabel(msg, color=FG, size=13)
+        Clock.schedule_once(lambda dt: self.dismiss(), 2.0)
+
+
+class BaseScreen(BoxLayout):
+    def __init__(self, app, **kw):
+        super().__init__(orientation="vertical", **kw)
+        self.app = app
+
+
+# ---------- Generator Screen ----------
+class GeneratorScreen(BaseScreen):
+    def __init__(self, app, **kw):
+        super().__init__(app, **kw)
+        self.build_ui()
+
+    def build_ui(self):
+        self.clear_widgets()
+        scroll = ScrollView()
+        box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(8), padding=dp(8))
+        box.bind(minimum_height=box.setter("height"))
+
+        box.add_widget(flabel("تولید کانفیگ V2Ray", color=FG, size=18, bold=True))
+
+        # protocol
+        row = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6))
+        row.add_widget(flabel("پروتکل:", size=13, h=dp(40)))
+        self.proto = Spinner(text="vmess", values=core.PROTOCOLS, size_hint=(0.6, None), height=dp(40), font_name=FONT)
+        self.proto.bind(text=self._on_proto)
+        Clock.schedule_once(lambda dt: self._toggle_fields(self.proto.text), 0)
+        row.add_widget(self.proto)
+        box.add_widget(row)
+
+        # fields
+        self.fields = {}
+        self.field_rows = {}
+        def add_field(key, label, default="", password=False):
+            r = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+            r.add_widget(flabel(label, size=12, h=dp(44)))
+            ti = TextInput(text=str(default), password=password, multiline=False, font_name=FONT, size_hint=(0.65, None), height=dp(40))
+            r.add_widget(ti)
+            self.fields[key] = ti
+            self.field_rows[key] = r
+            box.add_widget(r)
+
+        add_field("remark", "نام (remark)", "MyConfig")
+        add_field("address", "آدرس سرور", "example.com")
+        add_field("port", "پورت", "443")
+        add_field("uuid", "UUID / ID", core.new_uuid())
+        add_field("password", "رمز (trojan/ss)", "password")
+        add_field("alter_id", "AlterID", "0")
+        add_field("security", "امنیت (vmess)", "auto")
+        add_field("network", "شبکه", "tcp")
+        add_field("tls", "TLS", "tls")
+        add_field("sni", "SNI", "")
+        add_field("host", "Host", "")
+        add_field("path", "Path", "/")
+        add_field("flow", "Flow (vless)", "xtls-rprx-vision")
+        add_field("method", "Method (ss)", "aes-256-gcm")
+        add_field("public_key", "Public Key (reality)", "")
+        add_field("short_id", "Short ID", "")
+        add_field("service_name", "Service Name (grpc)", "")
+        add_field("fingerprint", "Fingerprint", "chrome")
+        add_field("alpn", "ALPN", "h2,http/1.1")
+
+        # buttons
+        btnrow = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(6))
+        b1 = Btn(text="تولید لینک", background_color=ACCENT)
+        b1.bind(on_press=self.generate)
+        b2 = Btn(text="UUID جدید", background_color=CARD2)
+        b2.bind(on_press=lambda x: self._set("uuid", core.new_uuid()))
+        btnrow.add_widget(b1)
+        btnrow.add_widget(b2)
+        box.add_widget(btnrow)
+
+        self.result = TextInput(text="", readonly=True, font_name=FONT, size_hint_y=None, height=dp(80), multiline=True)
+        box.add_widget(flabel("نتیجه (لینک):", size=12))
+        box.add_widget(self.result)
+
+        btnrow2 = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(6))
+        bimport = Btn(text="وارد کردن", background_color=CARD2)
+        bimport.bind(on_press=self.import_clipboard)
+        bcopy = Btn(text="کپی", background_color=GREEN)
+        bcopy.bind(on_press=self.copy_link)
+        bjson = Btn(text="JSON کلاینت", background_color=BLUE)
+        bjson.bind(on_press=self.show_json)
+        bsave = Btn(text="ذخیره", background_color=YELLOW)
+        bsave.bind(on_press=self.save_config)
+        btnrow2.add_widget(bimport)
+        btnrow2.add_widget(bcopy)
+        btnrow2.add_widget(bjson)
+        btnrow2.add_widget(bsave)
+        box.add_widget(btnrow2)
+
+        scroll.add_widget(box)
+        self.add_widget(scroll)
+
+    def _on_proto(self, spinner, text):
+        self._toggle_fields(text)
+
+    def _toggle_fields(self, proto):
+        # which fields relevant per protocol
+        common = {"remark","address","port","network","tls","sni","host","path","fingerprint","alpn"}
+        vmess_extra = {"uuid","alter_id","security"}
+        vless_extra = {"uuid","flow","public_key","short_id","service_name","header_type"}
+        trojan_extra = {"password","flow","service_name"}
+        ss_extra = {"password","method"}
+        if proto == "vmess":
+            show = common | vmess_extra
+        elif proto == "vless":
+            show = common | vless_extra
+        elif proto == "trojan":
+            show = common | trojan_extra
+        else:
+            show = common | ss_extra
+        # always show uuid for vless/vmess; password for trojan/ss already
+        for key, row in self.field_rows.items():
+            if key in show:
+                row.height = dp(44)
+                row.opacity = 1
+                row.disabled = False
+            else:
+                row.height = 0
+                row.opacity = 0
+                row.disabled = True
+
+    def _get(self, key):
+        return self.fields[key].text.strip()
+
+    def _set(self, key, val):
+        self.fields[key].text = str(val)
+
+    def _collect(self):
+        p = {
+            "protocol": self.proto.text,
+            "remark": self._get("remark"),
+            "address": self._get("address"),
+            "port": int(self._get("port") or 0),
+            "uuid": self._get("uuid"),
+            "password": self._get("password"),
+            "alter_id": int(self._get("alter_id") or 0),
+            "security": self._get("security") or "auto",
+            "network": self._get("network") or "tcp",
+            "tls": self._get("tls") or "none",
+            "sni": self._get("sni"),
+            "host": self._get("host"),
+            "path": self._get("path") or "/",
+            "flow": self._get("flow"),
+            "method": self._get("method") or "aes-256-gcm",
+            "public_key": self._get("public_key"),
+            "short_id": self._get("short_id"),
+            "service_name": self._get("service_name"),
+            "fingerprint": self._get("fingerprint"),
+            "alpn": self._get("alpn"),
+            "header_type": "none",
+        }
+        return p
+
+    def generate(self, *a):
         try:
-            from kivy.core.window import Window
-            if Window is not None:
-                Window.clearcolor = BG
+            p = self._collect()
+            errs = core.validate_config(p)
+            if errs:
+                toast("خطا: " + ", ".join(errs))
+                return
+            link = core.generate_link(p)
+            self.result.text = link
+            toast("تولید شد")
+        except Exception as e:
+            toast("خطا: " + str(e))
+
+    def copy_link(self, *a):
+        txt = self.result.text.strip()
+        if not txt:
+            toast("چیزی برای کپی نیست")
+            return
+        try:
+            from kivy.core.clipboard import Clipboard
+            Clipboard.copy(txt)
+            toast("کپی شد")
+        except Exception as e:
+            toast("کپی ناموفق: " + str(e))
+
+    def import_clipboard(self, *a):
+        try:
+            from kivy.core.clipboard import Clipboard
+            txt = Clipboard.paste()
+        except Exception as e:
+            toast("کلیپ‌بورد در دسترس نیست")
+            return
+        txt = (txt or "").strip()
+        if not txt:
+            toast("کلیپ‌بورد خالی است")
+            return
+        # try parse as link
+        try:
+            if "://" in txt:
+                cfg = core.parse_link(txt.split()[0])
+                # fill fields
+                for k, v in cfg.items():
+                    if k in self.fields:
+                        self.fields[k].text = str(v) if v is not None else ""
+                if cfg.get("protocol"):
+                    self.proto.text = cfg["protocol"]
+                self.result.text = txt.split()[0]
+                toast("وارد شد")
+                return
         except Exception:
             pass
+        toast("لینک معتبر نیست")
 
-        self.tab_index = 0
-        root = BoxLayout(orientation="vertical", padding=[dp(10), dp(8)], spacing=dp(6))
+    def show_json(self, *a):
+        try:
+            p = self._collect()
+            j = core.build_client_json(p)
+            pop = Popup(title=fa("JSON کلاینت"), content=ScrollView(), size_hint=(0.95, 0.85))
+            ti = TextInput(text=j, readonly=True, font_name="Roboto", font_size=dp(10))
+            pop.content.add_widget(ti)
+            pop.open()
+        except Exception as e:
+            toast("خطا: " + str(e))
 
-        root.add_widget(flabel("⚡ آربیتراژ پرو — صرافی‌های ایران",
-                               color=FG, size=17, bold=True, halign="center", h=30))
-        self.status_lb = flabel("...", color=DIM, size=11, halign="center", h=22)
-        root.add_widget(self.status_lb)
+    def save_config(self, *a):
+        txt = self.result.text.strip()
+        if not txt:
+            toast("ابتدا تولید کنید")
+            return
+        try:
+            cfg = core.parse_link(txt)
+            cfgs = store.load_configs()
+            cfgs = [c for c in cfgs if c.get("link") != txt]
+            cfgs.insert(0, {"link": txt, "cfg": cfg, "saved_at": time.time(), "status": "unknown"})
+            store.save_configs(cfgs)
+            toast("ذخیره شد")
+            self.app.refresh_saved()
+        except Exception as e:
+            toast("خطا: " + str(e))
 
-        # برگه‌ها
-        tabs = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(4))
-        self.tab_buttons = []
-        for i, name in enumerate(["تنظیمات", "تاریخچه", "قیمت‌ها", "فرصت‌ها"]):
-            idx = 3 - i  # چیدمان راست‌به‌چپ
-            b = Button(text=fa(name), font_name=FONT, font_size=dp(13),
-                       background_normal="", background_color=CARD, color=DIM)
-            b.bind(on_release=lambda w, ix=idx: self.switch_tab(ix))
-            self.tab_buttons.append((idx, b))
-            tabs.add_widget(b)
-        root.add_widget(tabs)
+
+# ---------- Search Screen ----------
+class SearchScreen(BaseScreen):
+    def __init__(self, app, **kw):
+        super().__init__(app, **kw)
+        self.results = []
+        self.build_ui()
+
+    def build_ui(self):
+        self.clear_widgets()
+        box = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(6))
+
+        box.add_widget(flabel("جستجوی کانفیگ فعال", color=FG, size=18, bold=True))
+
+        # query
+        qrow = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+        self.query = TextInput(text="", hint_text=fa("عبارت جستجو یا لینک..."), multiline=False, font_name=FONT, size_hint=(0.7, None), height=dp(40))
+        qrow.add_widget(self.query)
+        bsearch = Btn(text="جستجو", size_hint=(0.3, None), height=dp(40), background_color=ACCENT)
+        bsearch.bind(on_press=self.do_search)
+        qrow.add_widget(bsearch)
+        box.add_widget(qrow)
+
+        # channels
+        crow = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+        crow.add_widget(flabel("کانال‌ها:", size=12, h=dp(44)))
+        self.channels = TextInput(text="", hint_text=fa("v2rayngvpn,V2rayNG (با کاما)"), multiline=False, font_name=FONT, size_hint=(0.7, None), height=dp(40))
+        crow.add_widget(self.channels)
+        box.add_widget(crow)
+
+        # toggles
+        trow = BoxLayout(size_hint_y=None, height=dp(36), spacing=dp(6))
+        self.tg = ToggleButton(text="تلگرام", state="down", font_name=FONT, size_hint=(0.33, None), height=dp(32))
+        self.ddg = ToggleButton(text="DuckDuckGo", state="down", font_name=FONT, size_hint=(0.33, None), height=dp(32))
+        self.ggl = ToggleButton(text="Google", state="down", font_name=FONT, size_hint=(0.33, None), height=dp(32))
+        for t in (self.tg, self.ddg, self.ggl):
+            trow.add_widget(t)
+        box.add_widget(trow)
+
+        self.status = flabel("آماده", size=12, color=DIM)
+        box.add_widget(self.status)
+
+        frow = BoxLayout(size_hint_y=None, height=dp(32), spacing=dp(6))
+        self.filter_active = ToggleButton(text="فقط فعال", state="normal", font_name=FONT, size_hint=(0.33, None), height=dp(30))
+        self.filter_active.bind(state=lambda *a: self.render())
+        frow.add_widget(self.filter_active)
+        frow.add_widget(Label())  # spacer
+        box.add_widget(frow)
+
+        # results list
+        self.scroll = ScrollView()
+        self.listbox = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(6))
+        self.listbox.bind(minimum_height=self.listbox.setter("height"))
+        self.scroll.add_widget(self.listbox)
+        box.add_widget(self.scroll)
+
+        # bottom actions
+        arow = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+        bcheck = Btn(text="بررسی فعال", background_color=GREEN)
+        bcheck.bind(on_press=self.check_all)
+        bsave = Btn(text="ذخیرهٔ همه", background_color=YELLOW)
+        bsave.bind(on_press=self.save_all)
+        arow.add_widget(bcheck)
+        arow.add_widget(bsave)
+        box.add_widget(arow)
+
+        self.add_widget(box)
+
+    def do_search(self, *a):
+        q = self.query.text.strip()
+        chans = [c.strip() for c in self.channels.text.split(",") if c.strip()]
+        if not chans:
+            s = store.load_settings()
+            if s.get("channels"):
+                chans = [c.strip() for c in s["channels"].split(",") if c.strip()]
+        self.status.text = fa("در حال جستجو...")
+        self.listbox.clear_widgets()
+        self.results = []
+
+        def worker():
+            try:
+                res = search.search_all(
+                    q,
+                    channels=chans if chans else None,
+                    use_google=self.ggl.state == "down",
+                    use_ddg=self.ddg.state == "down",
+                )
+                # if telegram disabled, skip channels
+                if self.tg.state != "down":
+                    res = [r for r in res if not r["source"].startswith("telegram")]
+                Clock.schedule_once(lambda dt: self._on_results(res), 0)
+            except Exception as e:
+                Clock.schedule_once(lambda dt: self._on_error(str(e)), 0)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_results(self, res):
+        self.results = res
+        self.status.text = fa("یافت شد: {} کانفیگ".format(len(res)))
+        self.render()
+
+    def _on_error(self, e):
+        self.status.text = fa("خطا: " + e)
+
+    def render(self):
+        self.listbox.clear_widgets()
+        items = self.results
+        if self.filter_active.state == "down":
+            items = [r for r in items if r.get("status") == "active"]
+        for i, r in enumerate(items):
+            card = Card()
+            card.add_widget(flabel(r["link"][:90], size=11, color=FG))
+            card.add_widget(flabel("منبع: " + r["source"], size=10, color=DIM))
+            st = r.get("status", "unknown")
+            color = GREEN if st == "active" else (RED if st == "dead" else DIM)
+            card.add_widget(flabel("وضعیت: " + st, size=10, color=color))
+            brow = BoxLayout(size_hint_y=None, height=dp(36), spacing=dp(4))
+            b1 = Btn(text="کپی", size_hint=(0.33, None), height=dp(32), background_color=CARD2)
+            b1.bind(on_press=lambda x, link=r["link"]: self.copy(link))
+            b2 = Btn(text="ذخیره", size_hint=(0.33, None), height=dp(32), background_color=CARD2)
+            b2.bind(on_press=lambda x, link=r["link"]: self.save_one(link))
+            b3 = Btn(text="بررسی", size_hint=(0.33, None), height=dp(32), background_color=CARD2)
+            b3.bind(on_press=lambda x, link=r["link"]: self.check_by_link(link))
+            brow.add_widget(b1)
+            brow.add_widget(b2)
+            brow.add_widget(b3)
+            card.add_widget(brow)
+            self.listbox.add_widget(card)
+
+    def copy(self, link):
+        try:
+            from kivy.core.clipboard import Clipboard
+            Clipboard.copy(link)
+            toast("کپی شد")
+        except Exception as e:
+            toast(str(e))
+
+    def save_one(self, link):
+        try:
+            cfg = core.parse_link(link)
+            cfgs = store.load_configs()
+            cfgs = [c for c in cfgs if c.get("link") != link]
+            cfgs.insert(0, {"link": link, "cfg": cfg, "saved_at": time.time(), "status": "unknown"})
+            store.save_configs(cfgs)
+            toast("ذخیره شد")
+            self.app.refresh_saved()
+        except Exception as e:
+            toast("خطا: " + str(e))
+
+    def save_all(self, *a):
+        n = 0
+        cfgs = store.load_configs()
+        existing = {c.get("link") for c in cfgs}
+        new_items = []
+        for r in self.results:
+            try:
+                cfg = core.parse_link(r["link"])
+                if r["link"] in existing:
+                    # update status
+                    for c in cfgs:
+                        if c.get("link") == r["link"]:
+                            c["status"] = r.get("status", c.get("status"))
+                    continue
+                new_items.append({"link": r["link"], "cfg": cfg, "saved_at": time.time(), "status": r.get("status", "unknown")})
+                n += 1
+            except Exception:
+                pass
+        cfgs = new_items + cfgs
+        store.save_configs(cfgs)
+        toast("{} ذخیره شد".format(n))
+        self.app.refresh_saved()
+
+    def check_by_link(self, link):
+        for i, r in enumerate(self.results):
+            if r['link'] == link:
+                self.check_one(i)
+                return
+
+    def check_one(self, idx):
+        if idx >= len(self.results):
+            return
+        r = self.results[idx]
+        try:
+            cfg = core.parse_link(r["link"])
+        except Exception as e:
+            toast("خطا: " + str(e))
+            return
+        self.status.text = fa("در حال بررسی...")
+
+        def worker():
+            ok, ms, err = core.check_active(cfg)
+            r["status"] = "active" if ok else "dead"
+            r["latency"] = ms
+            r["error"] = err
+            Clock.schedule_once(lambda dt: self._after_check(), 0)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _after_check(self):
+        self.render()
+        self.status.text = fa("بررسی انجام شد")
+
+    def check_all(self, *a):
+        self.status.text = fa("در حال بررسی همه...")
+
+        def worker():
+            for r in self.results:
+                try:
+                    cfg = core.parse_link(r["link"])
+                    ok, ms, err = core.check_active(cfg)
+                    r["status"] = "active" if ok else "dead"
+                    r["latency"] = ms
+                except Exception:
+                    r["status"] = "dead"
+            Clock.schedule_once(lambda dt: self._after_check_all(), 0)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _after_check_all(self):
+        self.render()
+        act = sum(1 for r in self.results if r.get("status") == "active")
+        self.status.text = fa("فعال: {} / {}".format(act, len(self.results)))
+
+
+# ---------- Saved Screen ----------
+class SavedScreen(BaseScreen):
+    def __init__(self, app, **kw):
+        super().__init__(app, **kw)
+        self.build_ui()
+
+    def build_ui(self):
+        self.clear_widgets()
+        box = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(6))
+        box.add_widget(flabel("کانفیگ‌های ذخیره‌شده", color=FG, size=18, bold=True))
+
+        arow = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+        bcheck = Btn(text="بررسی همه", background_color=GREEN)
+        bcheck.bind(on_press=self.check_all)
+        bclear = Btn(text="پاک کردن همه", background_color=RED)
+        bclear.bind(on_press=self.clear_all)
+        arow.add_widget(bcheck)
+        arow.add_widget(bclear)
+        box.add_widget(arow)
 
         self.scroll = ScrollView()
-        self.body = BoxLayout(orientation="vertical", size_hint_y=None,
-                              spacing=dp(8), padding=[0, dp(4)])
-        self.body.bind(minimum_height=self.body.setter("height"))
-        self.scroll.add_widget(self.body)
-        root.add_widget(self.scroll)
-
-        MONITOR.on_alert = self._notify_opportunity
-        Clock.schedule_interval(lambda dt: self.refresh(), 5)
-        self.switch_tab(0)
-        return root
-
-    # ---------- عمومی ----------
-    def switch_tab(self, idx):
-        self.tab_index = idx
-        for i, b in self.tab_buttons:
-            b.color = YELLOW if i == idx else DIM
-            b.bold = i == idx
+        self.listbox = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(6))
+        self.listbox.bind(minimum_height=self.listbox.setter("height"))
+        self.scroll.add_widget(self.listbox)
+        box.add_widget(self.scroll)
+        self.add_widget(box)
         self.refresh()
 
     def refresh(self):
-        age = "—"
-        if MONITOR.last_cycle:
-            age = "%d ثانیه پیش" % int(time.time() - MONITOR.last_cycle)
-        mode = "🎓 تمرینی" if store.is_paper() else "🔴 واقعی"
-        self.status_lb.text = fa("%s | %s | به‌روزرسانی: %s" % (mode, MONITOR.status, age))
+        self.listbox.clear_widgets()
+        cfgs = store.load_configs()
+        def keyf(it):
+            st = it.get("status", "unknown")
+            rank = 0 if st == "active" else (1 if st == "unknown" else 2)
+            lat = it.get("latency")
+            lat = lat if lat is not None else 999999
+            return (rank, lat)
+        cfgs = sorted(cfgs, key=keyf)
+        for i, item in enumerate(cfgs):
+            card = Card()
+            link = item.get("link", "")
+            cfg = item.get("cfg", {})
+            card.add_widget(flabel((cfg.get("remark") or "") + "  " + cfg.get("protocol", "").upper(), size=13, bold=True, color=FG))
+            card.add_widget(flabel("{}:{}".format(cfg.get("address"), cfg.get("port")), size=11, color=DIM))
+            st = item.get("status", "unknown")
+            color = GREEN if st == "active" else (RED if st == "dead" else DIM)
+            lat = item.get("latency")
+            txt = "وضعیت: " + st
+            if lat is not None:
+                txt += "  ({} ms)".format(lat)
+            card.add_widget(flabel(txt, size=10, color=color))
+            brow = BoxLayout(size_hint_y=None, height=dp(36), spacing=dp(4))
+            b1 = Btn(text="کپی", size_hint=(0.2, None), height=dp(32), background_color=CARD2)
+            b1.bind(on_press=lambda x, l=link: self.copy(l))
+            b2 = Btn(text="JSON", size_hint=(0.2, None), height=dp(32), background_color=CARD2)
+            b2.bind(on_press=lambda x, c=cfg: self.show_json(c))
+            b3 = Btn(text="بررسی", size_hint=(0.2, None), height=dp(32), background_color=CARD2)
+            b3.bind(on_press=lambda x, l=link: self.check_link(l))
+            bedit = Btn(text="ویرایش", size_hint=(0.2, None), height=dp(32), background_color=CARD2)
+            bedit.bind(on_press=lambda x, c=cfg, l=link: self.edit(c, l))
+            b4 = Btn(text="حذف", size_hint=(0.2, None), height=dp(32), background_color=RED)
+            b4.bind(on_press=lambda x, l=link: self.delete_link(l))
+            brow.add_widget(bedit)
+            for b in (b1, b2, b3, b4):
+                brow.add_widget(b)
+            card.add_widget(brow)
+            self.listbox.add_widget(card)
 
-        self.body.clear_widgets()
-        [self.render_opps, self.render_prices,
-         self.render_history, self.render_settings][self.tab_index]()
+    def copy(self, link):
+        try:
+            from kivy.core.clipboard import Clipboard
+            Clipboard.copy(link)
+            toast("کپی شد")
+        except Exception as e:
+            toast(str(e))
 
-    def note(self, text, color=DIM):
-        c = Card()
-        c.add_widget(flabel(text, color=color, size=13))
-        self.body.add_widget(c)
-
-    def row(self, parent, right_text, left_text, rc=DIM, lc=FG, bold=False):
-        r = BoxLayout(size_hint_y=None, height=dp(24))
-        l = flabel(left_text, color=lc, size=13, bold=bold, halign="left")
-        rr = flabel(right_text, color=rc, size=13, bold=bold, halign="right")
-        l.size_hint_y = 1
-        rr.size_hint_y = 1
-        r.add_widget(l)
-        r.add_widget(rr)
-        parent.add_widget(r)
-
-    # ---------- برگه: فرصت‌ها ----------
-    def render_opps(self):
-        if MONITOR.running:
-            self.body.add_widget(fbutton("⛔ توقف پایش (Kill Switch)", RED, self.toggle_monitor))
-        else:
-            self.body.add_widget(fbutton("▶️ شروع پایش بازار", GREEN, self.toggle_monitor))
-
-        if MONITOR.errors:
-            msg = "⚠️ خطای اتصال:\n" + "\n".join(
-                "• %s: %s" % (getattr(exchanges.by_name(k), "fa_name", k), v)
-                for k, v in MONITOR.errors.items())
-            self.note(msg, RED)
-
-        with MONITOR.lock:
-            opps = list(MONITOR.opportunities)
-
-        if not opps:
-            if MONITOR.running:
-                self.note("هنوز فرصت سودده‌ای پیدا نشده.\nموتور هر ۱۰ ثانیه ۴ صرافی و ۵ ارز را بررسی می‌کند.")
-            else:
-                self.note("برای شروع، دکمهٔ «شروع پایش بازار» را بزنید.\n\n"
-                          "نکته: برنامه در حالت تمرینی شروع می‌شود و هیچ پول واقعی جابه‌جا نمی‌کند.")
-            return
-
-        for o in opps:
-            c = Card()
-            buy_fa = exchanges.by_name(o.buy_ex).fa_name
-            sell_fa = exchanges.by_name(o.sell_ex).fa_name
-            self.row(c, "💎 " + o.symbol, "+%.2f٪ خالص" % o.net_pct, FG, GREEN, bold=True)
-            self.row(c, "خرید از %s" % buy_fa, fmt(o.buy_vwap) + " ت")
-            self.row(c, "فروش در %s" % sell_fa, fmt(o.sell_vwap) + " ت")
-            self.row(c, "سود تخمینی", fmt(o.net_profit) + " تومان", DIM, YELLOW)
-            c.add_widget(fbutton("اجرای این معامله", YELLOW,
-                                 lambda o=o: self.confirm_trade(o), h=40))
-            self.body.add_widget(c)
-
-    def toggle_monitor(self):
-        if MONITOR.running:
-            MONITOR.stop()
-        else:
-            MONITOR.start()
-        Clock.schedule_once(lambda dt: self.refresh(), 0.5)
-
-    def confirm_trade(self, o):
-        paper = store.is_paper()
-        buy_fa = exchanges.by_name(o.buy_ex).fa_name
-        sell_fa = exchanges.by_name(o.sell_ex).fa_name
-        msg = ("ارز: %s\nخرید از: %s\nفروش در: %s\nمقدار: %.6f\n"
-               "سود خالص تخمینی: %s تومان\n\n%s") % (
-            o.symbol, buy_fa, sell_fa, o.amount, fmt(o.net_profit),
-            "این معامله فقط شبیه‌سازی است." if paper
-            else "⚠️ این معامله با پول واقعی انجام می‌شود!")
-
-        box = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
-        box.add_widget(flabel(msg, size=13))
-        btns = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
-        pop = Popup(title=fa("معاملهٔ تمرینی" if paper else "معاملهٔ واقعی"),
-                    title_font=FONT, content=box, size_hint=(0.9, 0.6))
-
-        def do_trade():
-            pop.dismiss()
-            import threading
-
-            def run():
-                rec = trader.execute(o, paper)
-                self._after_trade(rec)
-            threading.Thread(target=run, daemon=True).start()
-
-        btns.add_widget(fbutton("انصراف", CARD, pop.dismiss, fg_black=False))
-        btns.add_widget(fbutton("تأیید", GREEN, do_trade))
-        box.add_widget(btns)
-        pop.open()
-
-    @mainthread
-    def _after_trade(self, rec):
-        if rec["status"] == "OK":
-            self.toast("✅ ثبت شد: %s تومان" % fmt(rec["profit"]))
-        else:
-            self.toast("⚠️ " + rec["status"][:120])
-        self.refresh()
-
-    # ---------- برگه: قیمت‌ها ----------
-    def render_prices(self):
-        with MONITOR.lock:
-            books = dict(MONITOR.books)
-        if not books:
-            self.note("داده‌ای موجود نیست — پایش را از برگهٔ «فرصت‌ها» شروع کنید.")
-            return
-        for sym in exchanges.SYMBOLS:
-            lst = books.get(sym)
-            if not lst:
-                continue
-            c = Card()
-            self.row(c, "💰 %s / تومان" % sym, "", FG, FG, bold=True)
-            for b in sorted(lst, key=lambda x: x.best_ask):
-                fa_name = exchanges.by_name(b.exchange).fa_name
-                self.row(c, fa_name,
-                         "خرید: %s | فروش: %s" % (fmt(b.best_ask), fmt(b.best_bid)))
-            self.body.add_widget(c)
-
-    # ---------- برگه: تاریخچه ----------
-    def render_history(self):
-        trades = store.load_trades()
-        total = sum(t["profit"] for t in trades if t["status"] == "OK")
-        self.note("معاملات امروز: %d | مجموع سود ثبت‌شده: %s تومان"
-                  % (store.trades_today(), fmt(total)), YELLOW)
-        if not trades:
-            self.note("هنوز معامله‌ای ثبت نشده.")
-            return
-        for t in trades[:50]:
-            c = Card()
-            ok = t["status"] == "OK"
-            tag = "تمرینی" if t.get("paper") else "واقعی"
-            ts = time.strftime("%m/%d %H:%M", time.localtime(t["t"]))
-            self.row(c, "%s (%s) — %s" % (t["symbol"], tag, ts),
-                     ("+%s ت" % fmt(t["profit"])) if ok else "✖",
-                     FG, GREEN if ok else RED, bold=True)
-            self.row(c, "خرید %s @ %s" % (exchanges.by_name(t["buy_ex"]).fa_name,
-                                          fmt(t["buy_price"])),
-                     "فروش %s @ %s" % (exchanges.by_name(t["sell_ex"]).fa_name,
-                                       fmt(t["sell_price"])), DIM, DIM)
-            if not ok:
-                self.row(c, t["status"][:110], "", RED, RED)
-            self.body.add_widget(c)
-
-    # ---------- برگه: تنظیمات ----------
-    def render_settings(self):
-        self.section("حالت اجرا")
-        self.switch_row("حالت تمرینی (بدون پول واقعی)", store.is_paper(), self._set_paper)
-        self.switch_row("معاملهٔ خودکار (بدون تأیید دستی)", store.is_auto(),
-                        lambda on: store.save_settings(auto=on))
-
-        cfg = store.load_risk()
-        self.section("مدیریت ریسک")
-        self.input_row("بودجهٔ هر معامله (تومان)", str(int(cfg.budget_toman)),
-                       self._save_budget)
-        self.input_row("حداقل سود خالص (٪)", str(cfg.min_net_pct), self._save_min_net)
-        self.input_row("حداکثر معامله در روز", str(cfg.max_trades_per_day),
-                       self._save_max_trades)
-
-        self.section("کلیدهای API")
-        for ex in exchanges.EXCHANGES:
-            if not ex.can_trade:
-                continue
-            has = bool(store.get_api_key(ex.name))
-            label = "%s: %s" % (ex.fa_name, "✅ تنظیم شده — تغییر" if has else "تنظیم کلید API")
-            self.body.add_widget(fbutton(label, CARD,
-                                         lambda ex=ex: self.ask_api_key(ex), fg_black=False))
-
-        self.section("درباره")
-        self.note("نسخه ۵.۰ — پایش نوبیتکس، والکس، بیت‌پین و رمزینکس\n"
-                  "معاملهٔ خودکار: نوبیتکس و والکس\n"
-                  "محاسبه با VWAP عمقی + کارمزد + حاشیهٔ لغزش\n\n"
-                  "⚠️ سلب مسئولیت: آربیتراژ دارای ریسک است؛ اجرای واقعی با مسئولیت کاربر.\n"
-                  "توصیه: دسترسی «برداشت» کلید API را در پنل صرافی غیرفعال کنید.")
-
-    def section(self, t):
-        self.body.add_widget(flabel(t, color=YELLOW, size=14, bold=True, h=30))
-
-    def switch_row(self, label, value, cb):
-        c = Card(orientation="horizontal")
-        c.height = dp(52)
-        sw = Switch(active=value, size_hint_x=None, width=dp(70))
-        sw.bind(active=lambda w, on: cb(on))
-        lb = flabel(label, size=13)
-        lb.size_hint_y = 1
-        c.add_widget(sw)
-        c.add_widget(lb)
-        self.body.add_widget(c)
-
-    def input_row(self, label, value, cb):
-        c = Card()
-        c.add_widget(flabel(label, color=DIM, size=12))
-        ti = TextInput(text=value, font_name=FONT, multiline=False,
-                       input_filter="float", size_hint_y=None, height=dp(40),
-                       background_color=BG, foreground_color=FG,
-                       cursor_color=YELLOW, font_size=dp(14))
-        c.add_widget(ti)
-        c.add_widget(fbutton("ذخیره", CARD,
-                             lambda: (cb(ti.text), self.toast("ذخیره شد")),
-                             fg_black=False, h=36))
-        self.body.add_widget(c)
-
-    def _set_paper(self, on):
-        if not on:
-            box = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
-            box.add_widget(flabel(
-                "با خاموش‌کردن حالت تمرینی، معاملات با پول واقعی انجام می‌شوند.\n"
-                "مسئولیت سود و زیان با شماست. ادامه می‌دهید؟", size=13))
-            btns = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
-            pop = Popup(title=fa("⚠️ هشدار جدی"), title_font=FONT,
-                        content=box, size_hint=(0.9, 0.45))
-
-            def yes():
-                store.save_settings(paper=False)
-                pop.dismiss()
-                self.refresh()
-
-            def no():
-                pop.dismiss()
-                self.refresh()
-
-            btns.add_widget(fbutton("خیر", CARD, no, fg_black=False))
-            btns.add_widget(fbutton("بله، حالت واقعی", RED, yes))
-            box.add_widget(btns)
+    def show_json(self, cfg):
+        try:
+            j = core.build_client_json(cfg)
+            pop = Popup(title=fa("JSON"), content=ScrollView(), size_hint=(0.95, 0.85))
+            ti = TextInput(text=j, readonly=True, font_name="Roboto", font_size=dp(10))
+            pop.content.add_widget(ti)
             pop.open()
-        else:
-            store.save_settings(paper=True)
-            self.refresh()
+        except Exception as e:
+            toast(str(e))
 
-    def _save_budget(self, v):
+    def check_link(self, link):
+        cfgs = store.load_configs()
+        idx = None
+        for i, c in enumerate(cfgs):
+            if c.get("link") == link:
+                idx = i
+                break
+        if idx is None:
+            return
+        item = cfgs[idx]
         try:
-            x = float(v)
-            if 1_000_000 <= x <= 10_000_000_000:
-                cfg = store.load_risk()
-                cfg.budget_toman = x
-                store.save_risk(cfg)
+            cfg = item.get("cfg") or core.parse_link(item["link"])
         except Exception:
-            pass
+            cfg = core.parse_link(item["link"])
+        self.app.status_msg("در حال بررسی...")
 
-    def _save_min_net(self, v):
-        try:
-            x = float(v)
-            if 0.05 <= x <= 20:
-                cfg = store.load_risk()
-                cfg.min_net_pct = x
-                store.save_risk(cfg)
-        except Exception:
-            pass
+        def worker():
+            ok, ms, err = core.check_active(cfg)
+            cfgs2 = store.load_configs()
+            for c in cfgs2:
+                if c.get("link") == link:
+                    c["status"] = "active" if ok else "dead"
+                    c["latency"] = ms
+            store.save_configs(cfgs2)
+            Clock.schedule_once(lambda dt: self.refresh(), 0)
 
-    def _save_max_trades(self, v):
-        try:
-            x = int(float(v))
-            if 1 <= x <= 100:
-                cfg = store.load_risk()
-                cfg.max_trades_per_day = x
-                store.save_risk(cfg)
-        except Exception:
-            pass
+        threading.Thread(target=worker, daemon=True).start()
 
-    def ask_api_key(self, ex):
-        box = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
-        box.add_widget(flabel(
-            "کلید فقط روی همین گوشی ذخیره می‌شود.\n"
-            "برای امنیت، دسترسی برداشت را در پنل صرافی غیرفعال کنید.", size=12, color=DIM))
-        ti = TextInput(password=True, multiline=False, font_name=FONT,
-                       size_hint_y=None, height=dp(40),
-                       background_color=BG, foreground_color=FG, cursor_color=YELLOW)
-        box.add_widget(ti)
-        btns = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
-        pop = Popup(title=fa("کلید API " + ex.fa_name), title_font=FONT,
-                    content=box, size_hint=(0.9, 0.5))
+    def check_one(self, idx):
+        pass
 
-        def save():
-            store.save_api_key(ex.name, ti.text.strip())
-            pop.dismiss()
-            self.toast("ذخیره شد")
-            self.refresh()
+    def check_all(self, *a):
+        self.app.status_msg("در حال بررسی همه...")
 
-        def delete():
-            store.save_api_key(ex.name, "")
-            pop.dismiss()
-            self.toast("حذف شد")
-            self.refresh()
+        def worker():
+            cfgs = store.load_configs()
+            for i, item in enumerate(cfgs):
+                try:
+                    cfg = item.get("cfg") or core.parse_link(item["link"])
+                    ok, ms, err = core.check_active(cfg)
+                    cfgs[i]["status"] = "active" if ok else "dead"
+                    cfgs[i]["latency"] = ms
+                except Exception:
+                    cfgs[i]["status"] = "dead"
+            store.save_configs(cfgs)
+            Clock.schedule_once(lambda dt: self.refresh(), 0)
 
-        btns.add_widget(fbutton("حذف کلید", RED, delete))
-        btns.add_widget(fbutton("ذخیره", GREEN, save))
-        box.add_widget(btns)
-        pop.open()
+        threading.Thread(target=worker, daemon=True).start()
 
-    # ---------- ابزار ----------
-    @mainthread
-    def toast(self, msg):
-        try:
-            from kivy.uix.label import Label as L
-            p = Popup(title="", separator_height=0, content=L(
-                text=fa(msg), font_name=FONT, font_size=dp(13)),
-                size_hint=(0.85, 0.18), auto_dismiss=True)
-            p.open()
-            Clock.schedule_once(lambda dt: p.dismiss(), 2.2)
-        except Exception:
-            pass
-
-    def _notify_opportunity(self, opp):
-        # نوتیفیکیشن اندروید (در دسکتاپ نادیده گرفته می‌شود)
-        try:
-            from jnius import autoclass
-            PythonActivity = autoclass("org.kivy.android.PythonActivity")
-            Context = autoclass("android.content.Context")
-            NotificationBuilder = autoclass("android.app.Notification$Builder")
-            NotificationChannel = autoclass("android.app.NotificationChannel")
-            NotificationManager = autoclass("android.app.NotificationManager")
-            activity = PythonActivity.mActivity
-            nm = activity.getSystemService(Context.NOTIFICATION_SERVICE)
-            ch = NotificationChannel("arb", "Arbitrage",
-                                     NotificationManager.IMPORTANCE_HIGH)
-            nm.createNotificationChannel(ch)
-            b = NotificationBuilder(activity, "arb")
-            b.setContentTitle("فرصت آربیتراژ: %s (%.2f٪)" % (opp.symbol, opp.net_pct))
-            b.setContentText("سود ≈ %s تومان" % fmt(opp.net_profit))
-            b.setSmallIcon(activity.getApplicationInfo().icon)
-            nm.notify(2, b.build())
-        except Exception:
-            pass
-
-    def on_pause(self):
-        return True  # پایش در پس‌زمینه ادامه می‌یابد
-
-    def on_resume(self):
+    def delete_link(self, link):
+        cfgs = [c for c in store.load_configs() if c.get("link") != link]
+        store.save_configs(cfgs)
         self.refresh()
+        toast("حذف شد")
+
+    def delete(self, idx):
+        pass
+
+    def edit(self, cfg, link):
+        try:
+            self.app.load_into_generator(cfg, link)
+            self.app.switch("gen")
+            toast("برای ویرایش باز شد")
+        except Exception as e:
+            toast(str(e))
+
+    def clear_all(self, *a):
+        store.save_configs([])
+        self.refresh()
+        toast("پاک شد")
+
+
+# ---------- Settings Screen ----------
+class SettingsScreen(BaseScreen):
+    def __init__(self, app, **kw):
+        super().__init__(app, **kw)
+        self.build_ui()
+
+    def build_ui(self):
+        self.clear_widgets()
+        scroll = ScrollView()
+        box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(8), padding=dp(8))
+        box.bind(minimum_height=box.setter("height"))
+        box.add_widget(flabel("تنظیمات", color=FG, size=18, bold=True))
+
+        s = store.load_settings()
+
+        def add_field(key, label, val):
+            r = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+            r.add_widget(flabel(label, size=12, h=dp(44)))
+            ti = TextInput(text=str(val), multiline=False, font_name=FONT, size_hint=(0.65, None), height=dp(40))
+            r.add_widget(ti)
+            self.fields[key] = ti
+            box.add_widget(r)
+
+        self.fields = {}
+        add_field("channels", "کانال‌های تلگرام (با کاما)", s.get("channels", ""))
+        add_field("timeout", "تایم‌اوت بررسی (ثانیه)", s.get("timeout", 5))
+
+        brow = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+        bsave = Btn(text="ذخیره", background_color=GREEN)
+        bsave.bind(on_press=self.save)
+        brow.add_widget(bsave)
+        box.add_widget(brow)
+
+        box.add_widget(flabel("راهنما:", size=13, bold=True, color=YELLOW))
+        box.add_widget(flabel("• کانفیگ‌ها از کانال‌های عمومی تلگرام و وب جمع‌آوری می‌شوند.", size=11, color=DIM))
+        box.add_widget(flabel("• بررسی فعال بودن فقط تست TCP است.", size=11, color=DIM))
+        box.add_widget(flabel("• از این ابزار به‌صورت قانونی استفاده کنید.", size=11, color=DIM))
+
+        scroll.add_widget(box)
+        self.add_widget(scroll)
+
+    def save(self, *a):
+        s = store.load_settings()
+        s["channels"] = self.fields["channels"].text.strip()
+        try:
+            s["timeout"] = int(self.fields["timeout"].text.strip())
+        except Exception:
+            s["timeout"] = 5
+        store.save_settings(s)
+        toast("ذخیره شد")
+
+
+# ---------- App ----------
+class V2RayApp(App):
+    def build(self):
+        self.title = "V2Ray Config Finder"
+        root = BoxLayout(orientation="vertical")
+        # top bar
+        self.topbar = BoxLayout(size_hint_y=None, height=dp(48), padding=[dp(8), 0])
+        from kivy.graphics import Color, Rectangle
+        with self.topbar.canvas.before:
+            Color(rgba=CARD)
+            self._tb = Rectangle()
+        self.topbar.bind(pos=lambda s, p: setattr(self._tb, "pos", p), size=lambda s, sz: setattr(self._tb, "size", sz))
+        self.title_lbl = flabel("V2Ray Config Finder", size=16, bold=True, color=FG)
+        self.topbar.add_widget(self.title_lbl)
+        root.add_widget(self.topbar)
+
+        # screens
+        self.screens = {}
+        self.content = BoxLayout()
+        root.add_widget(self.content)
+
+        self.generator = GeneratorScreen(self)
+        self.search = SearchScreen(self)
+        self.saved = SavedScreen(self)
+        self.settings = SettingsScreen(self)
+
+        self.screens = {
+            "gen": self.generator,
+            "search": self.search,
+            "saved": self.saved,
+            "settings": self.settings,
+        }
+        self.current = "search"
+        self.content.add_widget(self.search)
+
+        # bottom nav
+        nav = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(2), padding=dp(4))
+        with nav.canvas.before:
+            Color(rgba=CARD)
+            self._nb = Rectangle()
+        nav.bind(pos=lambda s, p: setattr(self._nb, "pos", p), size=lambda s, sz: setattr(self._nb, "size", sz))
+        items = [("جستجو", "search"), ("تولید", "gen"), ("ذخیره", "saved"), ("تنظیمات", "settings")]
+        self.nav_buttons = {}
+        for label, key in items:
+            b = Btn(text=label, size_hint=(0.25, None), height=dp(48), background_color=CARD2)
+            b.bind(on_press=lambda x, k=key: self.switch(k))
+            self.nav_buttons[key] = b
+            nav.add_widget(b)
+        self._update_nav(self.current)
+        root.add_widget(nav)
+
+        # toast container
+        self._toast = None
+        return root
+
+    def switch(self, key):
+        if key == self.current:
+            return
+        self.content.clear_widgets()
+        self.content.add_widget(self.screens[key])
+        self.current = key
+        self._update_nav(key)
+        if key == "saved":
+            self.saved.refresh()
+
+    def load_into_generator(self, cfg, link):
+        g = self.generator
+        if cfg.get("protocol"):
+            g.proto.text = cfg["protocol"]
+        for k, v in cfg.items():
+            if k in g.fields:
+                g.fields[k].text = str(v) if v is not None else ""
+        g.result.text = link or ""
+        Clock.schedule_once(lambda dt: g._toggle_fields(g.proto.text), 0)
+
+    def _update_nav(self, key):
+        for k, b in getattr(self, "nav_buttons", {}).items():
+            b.background_color = ACCENT if k == key else CARD2
+
+    def refresh_saved(self):
+        try:
+            self.saved.refresh()
+        except Exception:
+            pass
+
+    def status_msg(self, msg):
+        try:
+            self.search.status.text = fa(msg)
+        except Exception:
+            pass
+
+    def show_toast(self, msg):
+        Clock.schedule_once(lambda dt: ToastPopup(msg).open(), 0)
 
 
 if __name__ == "__main__":
-    ArbitrageApp().run()
+    V2RayApp().run()
