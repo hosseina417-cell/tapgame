@@ -13,7 +13,7 @@ version = 1.0.0
 
 # ====== نیازمندی‌ها ======
 # urllib + certifi به‌جای requests تا زنجیرهٔ وابستگی کوتاه و بیلد پایدار بماند
-requirements = python3,kivy==2.3.0,certifi,arabic_reshaper==3.0.0,python-bidi==0.4.2,six
+requirements = python3,kivy==2.3.0,certifi,arabic_reshaper==3.0.0,python-bidi==0.4.2,six,cython==3.0.11
 
 orientation = portrait
 fullscreen = 0
