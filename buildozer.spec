@@ -1,15 +1,15 @@
 [app]
 
 # ====== مشخصات برنامه ======
-title = آربیتراژ پرو
-package.name = arbitragepro
-package.domain = ir.arbitrage
+title = V2Ray Config Finder
+package.name = v2rayfinder
+package.domain = ir.v2rayfinder
 
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf,txt
 source.exclude_dirs = docs, bin, p4a-recipes, .github
 
-version = 5.0.0
+version = 1.0.0
 
 # ====== نیازمندی‌ها ======
 # urllib + certifi به‌جای requests تا زنجیرهٔ وابستگی کوتاه و بیلد پایدار بماند
@@ -19,7 +19,7 @@ orientation = portrait
 fullscreen = 0
 
 # ====== اندروید ======
-android.permissions = INTERNET,POST_NOTIFICATIONS
+android.permissions = INTERNET,ACCESS_NETWORK_STATE
 android.api = 33
 android.minapi = 21
 android.archs = arm64-v8a, armeabi-v7a
